@@ -10,9 +10,10 @@ const ACCESS: Record<DocKind, Permission[]> = {
   invoice: ['CREATE_TAX_INVOICE', 'VIEW_ORDERS', 'RECORD_PAYMENTS'],
   proforma: ['CREATE_PROFORMA', 'VIEW_ORDERS'],
   'credit-note': ['CREATE_TAX_INVOICE', 'RECORD_PAYMENTS'],
+  'purchase-order': ['CREATE_PURCHASE_ORDERS'], // shows purchase rates
 };
 
-/** PDF of a tax invoice / proforma / credit note. ?copies=ORIGINAL,DUPLICATE  ?download=1 */
+/** PDF of a tax invoice / proforma / credit note / purchase order. ?copies=ORIGINAL,DUPLICATE  ?download=1 */
 export async function GET(req: Request, { params }: { params: Promise<{ kind: string; id: string }> }) {
   const { kind, id } = await params;
   if (!(kind in ACCESS)) return new Response('Not found', { status: 404 });

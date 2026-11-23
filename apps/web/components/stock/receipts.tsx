@@ -51,7 +51,7 @@ export function ReceiptDetail({ id, isNew }: { id: string; isNew: boolean }) {
   return (
     <div className="flex flex-col gap-5">
       <Link href="/app/stock/receipts" className="flex w-fit items-center gap-1 text-sm text-teal-700 hover:underline"><ArrowLeft className="size-4" aria-hidden /> All receipts</Link>
-      <PageHeader title={g.number} description={<>{g.isOpening ? 'Opening stock' : `From ${g.supplier?.name}`} · {formatDate(g.date)} · by {g.by}{g.supplierInvoiceNo ? ` · supplier invoice ${g.supplierInvoiceNo}${g.supplierInvoiceDate ? ` dt. ${formatDate(g.supplierInvoiceDate)}` : ''}` : ''}</>}
+      <PageHeader title={g.number} description={<>{g.isOpening ? 'Opening stock' : `From ${g.supplier?.name}`} · {formatDate(g.date)} · by {g.by}{g.supplierInvoiceNo ? ` · supplier invoice ${g.supplierInvoiceNo}${g.supplierInvoiceDate ? ` dt. ${formatDate(g.supplierInvoiceDate)}` : ''}` : ''}{g.po && <> · against <Link className="font-mono text-teal-700 hover:underline" href={`/app/purchase-orders/${g.po.id}`}>{g.po.number}</Link></>}</>}
       />
       {isNew && <Alert tone="ok">Saved. Stock is updated.</Alert>}
       {g.lines.some((l) => !l.hasBarcode) && (

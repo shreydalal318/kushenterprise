@@ -20,6 +20,7 @@ export const receiptLineInput = z.object({
 
 export const grnCreateInput = z.object({
   supplierId: z.string().min(1, 'Choose the supplier'),
+  poId: z.string().min(1).nullable().optional(),
   date: isoDate,
   supplierInvoiceNo: optText(60),
   supplierInvoiceDate: optDate,

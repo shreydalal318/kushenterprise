@@ -1,7 +1,8 @@
 /**
- * Demo sales for development and UAT (never run in production): orders in every status,
+ * Demo sales and purchasing for development and UAT (never run in production): orders in every status,
  * tax invoices (intra- and inter-state, back-dated so ageing has something to show), one
- * cancelled invoice, a proforma, payments (full, part, on account) and a credit note.
+ * cancelled invoice, a proforma, payments (full, part, on account), a credit note, and purchase
+ * orders (sent & partly received, received, draft from reorder suggestions, cancelled).
  * Runs through the real API procedures, so every figure is computed exactly as in the app.
  * Safe to re-run: finished steps are skipped. Needs `pnpm db:seed:demo` (masters + opening stock) first.
  */
@@ -25,7 +26,14 @@ const fyStart = `${financialYear(today).slice(0, 4)}-04-01`;
 /** n days ago, but never before 1 April of this financial year. */
 const ago = (n: number) => { const d = addDays(today, -n); return d < fyStart ? fyStart : d; };
 
-async function main() {
+async function ownerApi() {
+  const owner = await prisma.user.findFirst({ where: { role: 'OWNER', isActive: true }, orderBy: { createdAt: 'asc' } });
+  if (!owner) throw new Error('No owner account; run pnpm db:seed first.');
+  const { token } = await createSession(prisma, owner.id, { client: 'web' });
+  return createCaller(await createContext({ headers: new Headers({ cookie: `ke_session=${token}`, 'user-agent': 'seed-demo' }) }));
+}
+
+async function seedSales() {
   // Every step is keyed (clientRequestId / reference), so a re-run resumes instead of duplicating.
   // Real (non-demo) invoices mean this is not a demo database: leave it alone.
   if (await prisma.proforma.count({ where: { terms: { contains: '[demo]' } } })) { console.log('Demo sales already loaded.'); return; }
@@ -136,6 +144,53 @@ async function main() {
 
   const counts = await Promise.all([prisma.invoice.count(), prisma.salesOrder.count(), prisma.payment.count(), prisma.creditNote.count()]);
   console.log(`Demo sales ready: ${counts[0]} invoices (1 cancelled), ${counts[1]} orders, ${counts[2]} payments, ${counts[3]} credit note, 1 proforma. Unpaid: ${[i2, i3, i4, i6].map((i) => i.number).join(', ')}.`);
+}
+
+/** Demo purchase orders: sent and partly received, received in full, a draft from reorder suggestions, a cancelled one. */
+async function seedPurchasing() {
+  if (await prisma.purchaseOrder.count({ where: { note: { contains: '[demo]' } } })) { console.log('Demo purchase orders already loaded.'); return; }
+  if (await prisma.purchaseOrder.count()) { console.log('Demo purchase orders skipped: the database already has purchase orders.'); return; }
+  const sup = async (prefix: string) => (await prisma.supplier.findFirst({ where: { name: { startsWith: prefix } } }))?.id;
+  const [vis, clr, prc] = [await sup('Visiona'), await sup('ClearSight'), await sup('Precisa')];
+  if (!vis || !clr || !prc) { console.log('Demo purchase orders skipped: run pnpm db:seed:demo first.'); return; }
+  const api = await ownerApi();
+  const variant = async (code: string, nth = 0) => (await prisma.productVariant.findMany({ where: { product: { code }, isActive: true }, orderBy: [{ powerSph: 'asc' }, { cylinder: 'asc' }], skip: nth, take: 1 }))[0]!.id;
+  const today = istDateString();
+
+  // 1. Lenses and gel from Visiona: sent 9 days ago, the first delivery came in short.
+  const lensA = await variant('LV-HA600', 16); // +18.0 D
+  const lensB = await variant('LV-HA600', 18); // +19.0 D
+  const gel = await variant('VG-SH14');
+  const po1 = await api.purchaseOrders.create({ supplierId: vis, date: ago(9), expectedDate: addDays(today, 2), note: 'Monthly IOL top-up [demo]', lines: [{ variantId: lensA, qty: 6, discPct: 0 }, { variantId: lensB, qty: 6, discPct: 0 }, { variantId: gel, qty: 30, discPct: 5 }] });
+  await api.purchaseOrders.markSent({ id: po1.id });
+  await api.inventory.createGrn({ supplierId: vis, poId: po1.id, date: ago(2), supplierInvoiceNo: 'VMD/26-27/3318', supplierInvoiceDate: ago(3), lines: [
+    { variantId: lensA, batchNo: 'HA6E2611A', expiryDate: addDays(today, 900), serialNos: Array.from({ length: 6 }, (_, i) => `HA6E2611A${String(201 + i).padStart(5, '0')}`), qty: 6 },
+    { variantId: gel, batchNo: 'VGSH2609', expiryDate: addDays(today, 540), qty: 20 },
+  ] });
+
+  // 2. Instruments from Precisa: received in full.
+  const knife = await variant('PE-CK22');
+  const keratome = await variant('PE-KR28');
+  const po2 = await api.purchaseOrders.create({ supplierId: prc, date: ago(20), expectedDate: ago(12), note: 'Knives for OT season [demo]', lines: [{ variantId: knife, qty: 50, discPct: 0 }, { variantId: keratome, qty: 50, discPct: 0 }] });
+  await api.purchaseOrders.markSent({ id: po2.id });
+  await api.inventory.createGrn({ supplierId: prc, poId: po2.id, date: ago(13), supplierInvoiceNo: 'PSI/1187', supplierInvoiceDate: ago(14), lines: [
+    { variantId: knife, batchNo: 'CK2226B', expiryDate: addDays(today, 1000), qty: 50 },
+    { variantId: keratome, batchNo: 'KR2826B', expiryDate: addDays(today, 1000), qty: 50 },
+  ] });
+
+  // 3. A draft to ClearSight built from the reorder suggestions.
+  const sugg = (await api.purchaseOrders.suggestions({ supplierId: clr })).slice(0, 6);
+  if (sugg.length) await api.purchaseOrders.create({ supplierId: clr, date: today, expectedDate: addDays(today, 10), note: 'From reorder suggestions [demo]', lines: sugg.map((r) => ({ variantId: r.variantId, qty: r.suggestedQty, discPct: 0 })) });
+
+  // 4. Cancelled before it was sent.
+  const po4 = await api.purchaseOrders.create({ supplierId: clr, date: ago(5), note: 'Duplicate of an earlier order [demo]', lines: [{ variantId: await variant('OC-T300', 5), qty: 2, discPct: 0 }] });
+  await api.purchaseOrders.cancel({ id: po4.id, reason: 'Raised twice by mistake' });
+  console.log(`Demo purchase orders ready: ${await prisma.purchaseOrder.count()} (sent & partly received, received, draft, cancelled).`);
+}
+
+async function main() {
+  await seedSales();
+  await seedPurchasing();
 }
 
 main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

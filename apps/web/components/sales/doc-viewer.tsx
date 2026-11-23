@@ -8,7 +8,7 @@ import { cn } from '@/lib/cn';
 const LABEL: Record<InvoiceCopy, string> = { ORIGINAL: 'Original', DUPLICATE: 'Duplicate', TRIPLICATE: 'Triplicate' };
 
 /** Inline PDF preview with copy selection, download and print. */
-export function DocViewer({ kind, id, withCopies = false, defaultCopies = ['ORIGINAL'] }: { kind: 'invoice' | 'proforma' | 'credit-note'; id: string; withCopies?: boolean; defaultCopies?: InvoiceCopy[] }) {
+export function DocViewer({ kind, id, withCopies = false, defaultCopies = ['ORIGINAL'] }: { kind: 'invoice' | 'proforma' | 'credit-note' | 'purchase-order'; id: string; withCopies?: boolean; defaultCopies?: InvoiceCopy[] }) {
   const [copies, setCopies] = useState<InvoiceCopy[]>(defaultCopies);
   const qs = `copies=${copies.join(',')}`;
   const src = `/api/documents/${kind}/${id}?${qs}`;

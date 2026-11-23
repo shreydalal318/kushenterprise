@@ -35,7 +35,7 @@ export const NAV: { section: string; items: NavItem[] }[] = [
       { href: '/app/stock/receive', label: 'Receive goods', icon: PackagePlus, permission: 'MANAGE_STOCK' },
       { href: '/app/products', label: 'Products', icon: Package },
       { href: '/app/suppliers', label: 'Suppliers', icon: Factory, anyOf: ['CREATE_PURCHASE_ORDERS', 'MANAGE_STOCK', 'VIEW_PRICES_MARGINS'] },
-      { href: '/app/purchase-orders', label: 'Purchase orders', icon: Truck, permission: 'CREATE_PURCHASE_ORDERS', phase: 5 },
+      { href: '/app/purchase-orders', label: 'Purchase orders', icon: Truck, anyOf: ['CREATE_PURCHASE_ORDERS', 'MANAGE_STOCK'] },
     ],
   },
   {

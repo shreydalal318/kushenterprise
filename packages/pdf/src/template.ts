@@ -143,8 +143,8 @@ function headerHtml(d: DocModel) {
           <span>PAN</span><span>: ${esc(s.pan)} &nbsp; Drug Lic. No. : ${esc(s.drugLicence)}</span>
         </div>
       </div>
-      ${partyBlock('Consignee (Ship to)', d.consignee)}
-      ${partyBlock('Buyer (Bill to)', d.buyer, `<span>Place of Supply</span><span>: ${esc(d.placeOfSupply.stateName)} (${esc(d.placeOfSupply.stateCode)})</span>`)}
+      ${partyBlock(d.labels.consignee, d.consignee)}
+      ${partyBlock(d.labels.buyer, d.buyer, `<span>Place of Supply</span><span>: ${esc(d.placeOfSupply.stateName)} (${esc(d.placeOfSupply.stateCode)})</span>`)}
     </div>
     <div class="refs">
       ${cells.map(([l, v]) => ref(l as string, v as string)).join('')}
@@ -215,7 +215,7 @@ function footerHtml(d: DocModel) {
         ${d.upiQrDataUri ? `<div class="upi"><img src="${d.upiQrDataUri}" alt="UPI QR">Scan to pay</div>` : ''}
       </div>` : '<div></div>';
   return `<div class="foot">
-    <div class="words"><span class="lbl">Amount Chargeable (in words)</span><span style="font-style:italic">E. &amp; O.E</span></div>
+    <div class="words"><span class="lbl">${esc(d.labels.amountWords)}</span><span style="font-style:italic">E. &amp; O.E</span></div>
     <div class="words-v">${esc(d.totalInWords)}</div>
     <table class="hsn"><colgroup>${cols}</colgroup><thead>${hsnHead}</thead><tbody>${hsnRows}</tbody><tfoot>${hsnFoot}</tfoot></table>
     <div class="taxwords">Tax Amount (in words) : <span class="b">${esc(d.taxInWords)}</span></div>
@@ -225,7 +225,7 @@ function footerHtml(d: DocModel) {
         <div><div class="decl-h">Declaration</div><div class="decl">${esc(s.declaration)}</div></div>
       </div>
       ${bank}
-      <div class="custsign">Customer's Seal and Signature</div>
+      <div class="custsign">${esc(d.labels.counterSign)}</div>
       <div class="sign">
         <div class="b">for ${esc(s.name)}</div>
         ${d.signatureDataUri ? `<img class="sig" src="${d.signatureDataUri}" alt="Signature">` : '<div style="height:11mm"></div>'}

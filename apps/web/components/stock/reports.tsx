@@ -6,6 +6,8 @@ import { Badge, Card, CardHeader, PageHeader } from '@/components/ui/card';
 import { EmptyRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
 import { rupees } from '@/lib/format';
 import { trpc } from '@/lib/trpc';
+import { useMe } from '@/lib/use-me';
+import { LinkButton } from '@/components/ui/link-button';
 import { StockTabs } from './stock-tabs';
 
 export function ExpiringReport() {
@@ -54,6 +56,8 @@ export function ExpiringReport() {
 }
 
 export function LowStockReport() {
+  const { can } = useMe();
+  const buyer = can('CREATE_PURCHASE_ORDERS');
   const [all, setAll] = useState(false);
   const q = trpc.inventory.lowStock.useQuery({ includeNeverStocked: all });
   return (
@@ -62,7 +66,8 @@ export function LowStockReport() {
       <StockTabs />
       <label className="mb-4 flex items-center gap-2 text-sm text-muted"><input type="checkbox" className="accent-teal-700" checked={all} onChange={(e) => setAll(e.target.checked)} /> Include lens powers that have never been stocked</label>
       <Card className="overflow-hidden">
-        <CardHeader title={`${q.data?.length ?? 0} item(s) at or below reorder level`} description="Purchase orders with these pre-filled arrive in Phase 5." />
+        <CardHeader title={`${q.data?.length ?? 0} item(s) at or below reorder level`} description="Create a purchase order with these pre-filled (quantities already on order are taken off)."
+          actions={buyer && <LinkButton href="/app/purchase-orders/new?suggest=1">Create purchase order</LinkButton>} />
         <Table minWidth={720}>
           <THead><tr><Th>Item</Th><Th className="text-right">On hand</Th><Th className="text-right">Reorder at</Th><Th className="text-right">Suggested order</Th><Th>Usual supplier</Th></tr></THead>
           <tbody>
@@ -73,7 +78,8 @@ export function LowStockReport() {
                 <Td className={`num font-semibold ${r.qty === 0 ? 'text-danger' : 'text-warn'}`}>{r.qty}</Td>
                 <Td className="num text-muted">{r.reorderLevel}</Td>
                 <Td className="num">{r.suggestedOrder}</Td>
-                <Td className="text-sm">{r.supplier ? <Link className="text-teal-700 hover:underline" href={`/app/suppliers/${r.supplier.id}`}>{r.supplier.name}</Link> : <span className="text-muted">—</span>}</Td>
+                <Td className="text-sm">{r.supplier ? <Link className="text-teal-700 hover:underline" href={`/app/suppliers/${r.supplier.id}`}>{r.supplier.name}</Link> : <span className="text-muted">—</span>}
+                  {r.supplier && buyer && <div><Link className="text-xs text-teal-700 hover:underline" href={`/app/purchase-orders/new?supplier=${r.supplier.id}&suggest=1`}>PO to this supplier</Link></div>}</Td>
               </Tr>
             ))}
           </tbody>

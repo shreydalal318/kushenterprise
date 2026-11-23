@@ -6,7 +6,7 @@ import { loadFile } from '../../storage';
 import { isoDay, num } from '../num';
 import { getSettings } from '../settings';
 
-export type DocKind = 'invoice' | 'proforma' | 'credit-note';
+export type DocKind = 'invoice' | 'proforma' | 'credit-note' | 'purchase-order';
 
 const d = (x: Date | null | undefined) => (x ? formatDate(isoDay(x)) : '');
 
@@ -62,6 +62,32 @@ export async function documentSource(db: Db, kind: DocKind, id: string, copies: 
         lines: p.lines.map((l) => ({ description: l.description, hsn: l.hsnCode, qty: l.qty, unit: l.unit, rate: num(l.rate), discPct: num(l.discPct), amount: num(l.amount), gstRate: num(l.gstRate) })),
         stored: { taxable: num(p.taxableTotal), totalTax: num(p.taxTotal), roundOff: num(p.roundOff), total: num(p.grandTotal) },
         showBank: true, watermark: p.status === 'CANCELLED' ? 'CANCELLED' : null, signatureDataUri: await signature(db), upiAmount: num(p.grandTotal),
+      },
+    };
+  }
+  if (kind === 'purchase-order') {
+    const po = await db.purchaseOrder.findUnique({ where: { id }, include: { lines: { orderBy: { sl: 'asc' } }, supplier: { select: { paymentTermsDays: true } } } });
+    if (!po) throw new TRPCError({ code: 'NOT_FOUND' });
+    const company = po.companySnapshot as unknown as DocSupplier;
+    const vendor = po.supplierSnapshot as unknown as DocParty;
+    const deliverTo: DocParty = { name: company.name, addressLines: company.addressLines, gstin: company.gstin, stateName: company.stateName, stateCode: company.stateCode, drugLicence: company.drugLicence };
+    return {
+      customerId: '', // never a customer's document
+      filename: `${po.number.replace(/\//g, '-')}.pdf`,
+      src: {
+        title: 'PURCHASE ORDER', numberLabel: 'PO No.', number: po.number, date: isoDay(po.date)!, copies: [''],
+        labels: { consignee: 'Deliver to', buyer: 'Supplier (Vendor)', amountWords: 'Total Order Value (in words)', counterSign: "Supplier's Acceptance" },
+        supplier: { ...company, declaration: 'Please quote our PO number on your invoice and delivery challan. Supply only items with at least 18 months of shelf life unless agreed. Batch number, expiry and serial numbers must be printed on each pack.' },
+        consignee: deliverTo, buyer: vendor, placeOfSupplyCode: company.stateCode, gstStateCode: vendor.stateCode,
+        refs: [
+          ['Expected Delivery', d(po.expectedDate)], ['Mode/Terms of Payment', `${po.supplier.paymentTermsDays} days credit`],
+          ['Status', po.status.replace('_', ' ')], ['Other References', po.note],
+          ['', ''], ['', ''], ['', ''], ['', ''], ['', ''], ['', ''],
+        ],
+        termsLabel: 'Terms & Conditions', terms: po.terms,
+        lines: po.lines.map((l) => ({ description: l.description, hsn: l.hsnCode, qty: l.qtyOrdered, unit: l.unit, rate: num(l.rate), discPct: num(l.discPct), amount: num(l.amount), gstRate: num(l.gstRate) })),
+        stored: { taxable: num(po.taxableTotal), totalTax: num(po.taxTotal), roundOff: num(po.roundOff), total: num(po.grandTotal) },
+        showBank: false, watermark: po.status === 'CANCELLED' ? 'CANCELLED' : po.status === 'DRAFT' ? 'DRAFT' : null, signatureDataUri: po.status === 'DRAFT' ? null : await signature(db),
       },
     };
   }

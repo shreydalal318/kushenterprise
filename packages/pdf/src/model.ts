@@ -1,6 +1,6 @@
 import QRCode from 'qrcode';
 import { amountInWords, computeGst, round2, stateByCode } from '@kush/core';
-import type { DocHsnRow, DocModel, DocParty, DocSupplier } from './types';
+import { DEFAULT_LABELS, type DocHsnRow, type DocLabels, type DocModel, type DocParty, type DocSupplier } from './types';
 
 /** What a stored document (invoice / proforma / credit note) provides to build the printable model. */
 export interface DocSource {
@@ -13,6 +13,9 @@ export interface DocSource {
   consignee: DocParty;
   buyer: DocParty;
   placeOfSupplyCode: string;
+  /** State compared with the place of supply for CGST+SGST vs IGST. Defaults to the issuer's state; a PO uses the vendor's. */
+  gstStateCode?: string;
+  labels?: Partial<DocLabels>;
   refs: [string, string | null | undefined][];
   termsLabel: string;
   terms?: string | null;
@@ -44,7 +47,7 @@ export interface DocSource {
  * a PDF can never disagree with the saved invoice.
  */
 export async function buildDocModel(src: DocSource): Promise<DocModel> {
-  const g = computeGst(src.supplier.stateCode, src.placeOfSupplyCode, src.lines.map((l) => ({ qty: l.qty, rate: l.rate, discPct: l.discPct, hsn: l.hsn, gstRate: l.gstRate })));
+  const g = computeGst(src.gstStateCode ?? src.supplier.stateCode, src.placeOfSupplyCode, src.lines.map((l) => ({ qty: l.qty, rate: l.rate, discPct: l.discPct, hsn: l.hsn, gstRate: l.gstRate })));
   if (Math.abs(g.taxable - src.stored.taxable) > 0.01 || Math.abs(g.totalTax - src.stored.totalTax) > 0.01 || Math.abs(g.total - src.stored.total) > 0.01) {
     throw new Error(`Stored totals for ${src.number} do not match its lines (taxable ${g.taxable} vs ${src.stored.taxable}, tax ${g.totalTax} vs ${src.stored.totalTax})`);
   }
@@ -54,7 +57,7 @@ export async function buildDocModel(src: DocSource): Promise<DocModel> {
     : null;
   const units = [...new Set(src.lines.map((l) => l.unit))];
   return {
-    title: src.title, numberLabel: src.numberLabel, number: src.number, date: src.date, copies: src.copies,
+    title: src.title, labels: { ...DEFAULT_LABELS, ...src.labels }, numberLabel: src.numberLabel, number: src.number, date: src.date, copies: src.copies,
     supplier: src.supplier, consignee: src.consignee, buyer: src.buyer,
     placeOfSupply: { stateName: pos?.name ?? src.placeOfSupplyCode, stateCode: src.placeOfSupplyCode },
     refs: src.refs, termsLabel: src.termsLabel, terms: src.terms,

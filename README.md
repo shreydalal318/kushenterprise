@@ -16,9 +16,30 @@ Brief: [`docs/00-original-brief.md`](docs/00-original-brief.md) · Stack: [`docs
 | 1 | Foundation: schema, auth, roles & permissions, settings, branding | ✅ done |
 | 2 | Masters: products & lens powers, suppliers, customers, price lists, customer prices | ✅ done |
 | 3 | Inventory + barcodes: stock ledger, USB & camera scanning, GRN | ✅ done |
-| **4** | **Sales: orders, proforma, Tally-style tax invoice, scan-to-invoice, payments** | ✅ **done** (see below) |
-| 5 | Purchase orders | next |
-| 6–8 | Portal & mobile → Analytics → Website | planned |
+| 4 | Sales: orders, proforma, Tally-style tax invoice, scan-to-invoice, payments | ✅ done |
+| **5** | **Purchase orders: reorder suggestions, PO PDF, receiving against a PO** | ✅ **done** (see below) |
+| 6 | Customer portal + mobile app | next |
+| 7–8 | Analytics & reports → Website | planned |
+
+### What Phase 5 delivers
+
+- **Purchase orders** with status Draft → Sent → Partly received → Received, plus Closed (short-closed) and Cancelled. PO numbers run per financial year (`KE/PO/2026-27/0001`).
+- **PO editor**: choose the supplier, then add items by scanning a box, searching, or from **items below reorder level**.
+  - Suggested quantity brings stock back to twice the reorder level, less anything already on an open PO.
+  - Rates start at the **last price paid to that supplier** (otherwise the cost price) and can be changed.
+  - GST is worked out the same way as on invoices: CGST + SGST if the supplier is in the company's state, otherwise IGST.
+  - A draft can be edited until it is marked as sent.
+- **PO PDF** in the same approved layout: our company at the top, "Deliver to" us, the supplier as vendor, terms, HSN summary, and a space for the supplier's acceptance. Drafts carry a DRAFT watermark.
+- **Receiving against a PO**: on Receive goods, pick one of the supplier's open POs (or open it from the PO page).
+  - The screen lists what is still due and refuses boxes that are not on the PO. "Add everything still due" fills the lines in one click.
+  - Received quantities are booked to the PO lines; receiving more than is due is refused. **Any shortfall stays open on the PO.**
+  - Each goods receipt shows which PO it was against, and each PO lists its receipts.
+- **Short-close** a partly received PO (with a reason) when the rest won't come; **cancel** a PO that nothing was received against.
+- **Shortcuts**: "Create purchase order" on the low-stock report, and "New purchase order" on each supplier.
+- **Who sees what**: staff with the purchase-order permission see and set purchase rates on POs. Store staff (stock permission only) can receive against a PO but never see its rates or PDF.
+- **Demo data**: a PO sent and partly received, one received in full, a draft built from reorder suggestions, and a cancelled one.
+
+Not in this phase: emailing / WhatsApp-ing the PO to the supplier (needs the notification provider accounts, Phase 6/9). Download the PDF and send it for now.
 
 ### What Phase 4 delivers
 
@@ -195,7 +216,7 @@ Open **http://localhost:3000** (or the Codespaces preview) and sign in:
 | Store staff (stock, scanning, products) | `sunita.store@demo.local` | `DemoStaff2026` |
 | Customer (Mobile OTP tab) | `90000 10001` | The 6-digit code is printed in the terminal running `pnpm dev` |
 
-`pnpm setup:demo` creates the database tables and loads the demo data: 3 suppliers, 30 products with 223 lens powers, 10 customers, 2 price lists, special prices, 638 units of opening stock, and demo sales (orders, invoices, payments, a credit note). Running it again does no harm.
+`pnpm setup:demo` creates the database tables and loads the demo data: 3 suppliers, 30 products with 223 lens powers, 10 customers, 2 price lists, special prices, 638 units of opening stock, demo sales (orders, invoices, payments, a credit note) and demo purchase orders. Running it again does no harm.
 
 The demo sets the company state to Gujarat so GST can be worked out. Enter the real company profile in **Settings → Company**.
 

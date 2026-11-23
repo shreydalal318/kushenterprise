@@ -1,4 +1,15 @@
-/** Data model for a Tally-style GST document (tax invoice, proforma, credit note). */
+/** Data model for a Tally-style GST document (tax invoice, proforma, credit note, purchase order). */
+
+/** Captions that differ between document types (defaults are the tax-invoice wording). */
+export interface DocLabels {
+  consignee: string; // "Consignee (Ship to)"
+  buyer: string; // "Buyer (Bill to)"
+  amountWords: string; // "Amount Chargeable (in words)"
+  counterSign: string; // "Customer's Seal and Signature"
+}
+export const DEFAULT_LABELS: DocLabels = {
+  consignee: 'Consignee (Ship to)', buyer: 'Buyer (Bill to)', amountWords: 'Amount Chargeable (in words)', counterSign: "Customer's Seal and Signature",
+};
 
 export interface DocParty {
   name: string;
@@ -51,7 +62,8 @@ export interface DocHsnRow {
 }
 
 export interface DocModel {
-  title: string; // "TAX INVOICE" | "PROFORMA INVOICE" | "CREDIT NOTE"
+  title: string; // "TAX INVOICE" | "PROFORMA INVOICE" | "CREDIT NOTE" | "PURCHASE ORDER"
+  labels: DocLabels;
   numberLabel: string; // "Invoice No." …
   number: string;
   date: string; // YYYY-MM-DD

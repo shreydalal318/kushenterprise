@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Trash2 } from 'lucide-react';
@@ -18,6 +18,7 @@ import { useMe } from '@/lib/use-me';
 import { VariantPicker, type VariantChoice } from './variant-picker';
 
 interface Line extends VariantChoice { key: string; batchNo: string; expiryDate: string; serials: string; qty: string; rate: string }
+type OpenPo = { id: string; number: string; lines: { variantId: string; productId: string; productName: string; label: string | null; sku: string; trackBatch: boolean; trackExpiry: boolean; trackSerial: boolean; pending: number; rate: number | null }[] };
 
 const serialList = (s: string) => s.split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
 let keySeq = 0;
@@ -45,6 +46,15 @@ export function ReceiveForm() {
   const [unknown, setUnknown] = useState<string | null>(null);
   const scan = useRef<ScanFieldHandle>(null);
 
+  // Receiving against a purchase order: ?po=<id> preselects it; otherwise pick from the supplier's open POs.
+  const [poId, setPoId] = useState(params.get('po') ?? '');
+  const linked = trpc.purchaseOrders.get.useQuery({ id: params.get('po') ?? '' }, { enabled: !opening && !!params.get('po') && can('MANAGE_STOCK') });
+  useEffect(() => { if (linked.data) setHead((h) => (h.supplierId ? h : { ...h, supplierId: linked.data!.supplier.id })); }, [linked.data]);
+  const openPos = trpc.purchaseOrders.open.useQuery({ supplierId: head.supplierId }, { enabled: !opening && !!head.supplierId });
+  const po: OpenPo | undefined = openPos.data?.find((p) => p.id === poId);
+  const poRef = useRef<OpenPo | undefined>(undefined);
+  poRef.current = po;
+
   const grn = trpc.inventory.createGrn.useMutation();
   const open = trpc.inventory.createOpening.useMutation();
   const m = opening ? open : grn;
@@ -66,13 +76,15 @@ export function ReceiveForm() {
     const expiryDate = r.parsed?.expiry ?? '';
     const serial = r.parsed?.serial?.toUpperCase() ?? '';
     if (expiryDate && expiryDate < istDateString()) { scanError(); setMsg({ tone: 'danger', text: `${r.product.name} batch ${batchNo} expired on ${formatDate(expiryDate)}. Do not accept.` }); return; }
+    const onPo = poRef.current?.lines.find((l) => l.variantId === r.variant.id);
+    if (poRef.current && !onPo) { scanError(); setMsg({ tone: 'danger', text: `${r.product.name} ${r.variant.label ?? ''} is not on ${poRef.current.number}. Set it aside or receive it without the PO.` }); return; }
     const existing = linesRef.current.find((l) => l.variantId === r.variant.id && (l.batchNo === batchNo || (!batchNo && !l.batchNo)));
     if (existing) {
       const ss = serialList(existing.serials);
       if (serial && ss.includes(serial)) { scanWarn(); setMsg({ tone: 'warn', text: `Serial ${serial} already scanned` }); return; }
       update(existing.key, { qty: String(Number(existing.qty || 0) + 1), serials: serial ? [...ss, serial].join('\n') : existing.serials });
     } else {
-      addLine({ variantId: r.variant.id, productId: r.product.id, productName: r.product.name, label: r.variant.label, sku: r.variant.sku, trackSerial: r.product.trackSerial, trackBatch: r.product.trackBatch, trackExpiry: r.product.trackExpiry }, { batchNo, expiryDate, serials: serial });
+      addLine({ variantId: r.variant.id, productId: r.product.id, productName: r.product.name, label: r.variant.label, sku: r.variant.sku, trackSerial: r.product.trackSerial, trackBatch: r.product.trackBatch, trackExpiry: r.product.trackExpiry }, { batchNo, expiryDate, serials: serial, rate: onPo?.rate != null ? String(onPo.rate) : '' });
     }
     scanOk();
     setMsg({ tone: 'ok', text: `${r.product.name} ${r.variant.label ?? ''}${batchNo ? ` · batch ${batchNo}` : ''}${serial ? ` · ${serial}` : ''}` });
@@ -83,7 +95,7 @@ export function ReceiveForm() {
     const common = { date: head.date, locationId: head.locationId || undefined, note: head.note };
     const done = (r: { id: string }) => { void utils.inventory.invalidate(); router.push(`/app/stock/receipts/${r.id}?new=1`); };
     if (opening) open.mutate({ ...common, lines: payload as never }, { onSuccess: done });
-    else grn.mutate({ ...common, supplierId: head.supplierId, supplierInvoiceNo: head.supplierInvoiceNo, supplierInvoiceDate: head.supplierInvoiceDate, lines: payload as never }, { onSuccess: done });
+    else grn.mutate({ ...common, supplierId: head.supplierId, poId: po?.id ?? null, supplierInvoiceNo: head.supplierInvoiceNo, supplierInvoiceDate: head.supplierInvoiceDate, lines: payload as never }, { onSuccess: done });
   }
 
   const totalUnits = lines.reduce((t, l) => t + (Number(l.qty) || 0), 0);
@@ -96,9 +108,15 @@ export function ReceiveForm() {
       <Card>
         <CardBody className="grid gap-4 sm:grid-cols-3">
           {!opening && (
-            <SelectField label="Supplier" value={head.supplierId} onChange={(e) => setHead({ ...head, supplierId: e.target.value })} error={fe.supplierId}>
+            <SelectField label="Supplier" value={head.supplierId} onChange={(e) => { setHead({ ...head, supplierId: e.target.value }); setPoId(''); }} error={fe.supplierId}>
               <option value="">Choose…</option>
               {suppliers.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </SelectField>
+          )}
+          {!opening && head.supplierId && (
+            <SelectField label="Against purchase order" value={poId} onChange={(e) => setPoId(e.target.value)} hint={openPos.data?.length ? 'Received quantities are booked to the PO; any shortfall stays open.' : 'No open purchase orders for this supplier.'}>
+              <option value="">No PO</option>
+              {openPos.data?.map((p) => <option key={p.id} value={p.id}>{p.number} · {p.lines.reduce((t, l) => t + l.pending, 0)} units due</option>)}
             </SelectField>
           )}
           <TextField label={opening ? 'As on date' : 'Received on'} type="date" value={head.date} onChange={(e) => setHead({ ...head, date: e.target.value })} error={fe.date} />
@@ -110,6 +128,29 @@ export function ReceiveForm() {
           <TextField label="Note (optional)" value={head.note} onChange={(e) => setHead({ ...head, note: e.target.value })} wrapperClassName={opening ? 'sm:col-span-1' : ''} />
         </CardBody>
       </Card>
+
+      {po && (
+        <Card>
+          <CardHeader title={`Due on ${po.number}`} description="Scan the boxes; items not on this PO are refused."
+            actions={<Button size="sm" variant="secondary" onClick={() => {
+              for (const l of po.lines) {
+                const have = linesRef.current.filter((x) => x.variantId === l.variantId).reduce((t, x) => t + (Number(x.qty) || 0), 0);
+                if (l.pending - have > 0) addLine({ variantId: l.variantId, productId: l.productId, productName: l.productName, label: l.label, sku: l.sku, trackSerial: l.trackSerial, trackBatch: l.trackBatch, trackExpiry: l.trackExpiry }, { qty: String(l.pending - have), rate: l.rate != null ? String(l.rate) : '' });
+              }
+            }}>Add everything still due</Button>} />
+          <ul className="divide-y divide-line border-t border-line text-sm">
+            {po.lines.map((l) => {
+              const have = lines.filter((x) => x.variantId === l.variantId).reduce((t, x) => t + (Number(x.qty) || 0), 0);
+              return (
+                <li key={l.variantId} className="flex items-center justify-between px-5 py-2">
+                  <span>{l.productName} <span className="text-muted">{l.label ?? l.sku}</span></span>
+                  <span className={cn('font-semibold', have > l.pending ? 'text-danger' : have === l.pending ? 'text-ok' : 'text-muted')}>{have} / {l.pending} due</span>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
 
       <Card>
         <CardHeader title="Items" description={`${lines.length} line(s), ${totalUnits} unit(s)`} />

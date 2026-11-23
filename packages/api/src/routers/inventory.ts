@@ -12,29 +12,11 @@ import { nextDocNumber } from '../services/numbering';
 import { dayToDate, isoDay, num } from '../services/num';
 import { createReceipt } from '../services/receipts';
 import { getSettings } from '../services/settings';
-import { costOf, defaultLocationId, ensureBatch, fefoPick, loadVariant, postMovement, reorderLevelOf } from '../services/stock';
+import { costOf, defaultLocationId, ensureBatch, fefoPick, loadVariant, postMovement, reorderLevelOf, variantStock } from '../services/stock';
 import { ownerProcedure, permissionProcedure, router, staffProcedure } from '../trpc';
 
 const manage = permissionProcedure('MANAGE_STOCK');
 const seeCost = (u: Parameters<typeof can>[0]) => can(u, 'VIEW_PRICES_MARGINS');
-
-/** Per-variant quantity, nearest expiry of stock on hand, and value at cost. */
-async function variantStock(db: Prisma.TransactionClient, variantIds: string[]) {
-  const balances = await db.stockBalance.findMany({
-    where: { variantId: { in: variantIds }, qty: { gt: 0 } },
-    include: { batch: { select: { expiryDate: true, unitCost: true } }, variant: { select: { purchaseCost: true, product: { select: { purchaseCost: true } } } } },
-  });
-  const out = new Map<string, { qty: number; nearestExpiry: string | null; value: number; expiringQty: number }>();
-  for (const b of balances) {
-    const cur = out.get(b.variantId) ?? { qty: 0, nearestExpiry: null, value: 0, expiringQty: 0 };
-    cur.qty += b.qty;
-    cur.value += b.qty * costOf(b.batch, b.variant);
-    const e = isoDay(b.batch.expiryDate);
-    if (e && (!cur.nearestExpiry || e < cur.nearestExpiry)) cur.nearestExpiry = e;
-    out.set(b.variantId, cur);
-  }
-  return out;
-}
 
 export const inventoryRouter = router({
   // ---------------- views ----------------
@@ -231,7 +213,7 @@ export const inventoryRouter = router({
   receipt: staffProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
     const g = await ctx.db.grn.findUnique({
       where: { id: input.id },
-      include: { supplier: true, lines: { include: { variant: { include: { product: { select: { id: true, name: true, code: true } }, _count: { select: { aliases: true } } } } } } },
+      include: { supplier: true, po: { select: { id: true, number: true, status: true } }, lines: { include: { variant: { include: { product: { select: { id: true, name: true, code: true } }, _count: { select: { aliases: true } } } } } } },
     });
     if (!g) throw new TRPCError({ code: 'NOT_FOUND' });
     const showCost = seeCost(ctx.user) || can(ctx.user, 'CREATE_PURCHASE_ORDERS');

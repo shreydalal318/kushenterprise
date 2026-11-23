@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ArrowLeft, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Alert, Badge, Card, CardHeader, PageHeader } from '@/components/ui/card';
+import { LinkButton } from '@/components/ui/link-button';
 import { EmptyRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
 import { errorMessage } from '@/lib/errors';
 import { trpc } from '@/lib/trpc';
@@ -36,10 +37,14 @@ export function SupplierDetail({ id }: { id: string }) {
     <div className="flex flex-col gap-6">
       <Link href="/app/suppliers" className="flex w-fit items-center gap-1 text-sm text-teal-700 hover:underline"><ArrowLeft className="size-4" aria-hidden /> All suppliers</Link>
       <PageHeader title={s.name} description={<>{s.code}{!s.isActive && <Badge tone="danger" className="ml-2">Inactive</Badge>}</>}
-        actions={editable && <Button variant={s.isActive ? 'danger' : 'secondary'} loading={active.isPending} onClick={() => active.mutate({ id, isActive: !s.isActive })}>{s.isActive ? 'Deactivate' : 'Activate'}</Button>} />
+        actions={editable && <div className="flex gap-2">
+          {s.isActive && <LinkButton href={`/app/purchase-orders/new?supplier=${id}`}>New purchase order</LinkButton>}
+          <LinkButton variant="secondary" href={`/app/purchase-orders?supplier=${id}`}>Purchase orders</LinkButton>
+          <Button variant={s.isActive ? 'danger' : 'secondary'} loading={active.isPending} onClick={() => active.mutate({ id, isActive: !s.isActive })}>{s.isActive ? 'Deactivate' : 'Activate'}</Button>
+        </div>} />
       <SupplierForm key={s.updatedAt.toString()} supplier={s} editable={editable} />
       <Card className="overflow-hidden">
-        <CardHeader title="Products supplied" description="Used to suggest suppliers when creating purchase orders (Phase 5)." actions={editable && (
+        <CardHeader title="Products supplied" description="Used to suggest suppliers and last purchase rates on purchase orders." actions={editable && (
           <div className="flex gap-2">
             <select aria-label="Add a product" value={pick} onChange={(e) => setPick(e.target.value)} className="h-9 max-w-64 rounded-lg border border-line bg-white px-2 text-sm">
               <option value="">Add a product…</option>

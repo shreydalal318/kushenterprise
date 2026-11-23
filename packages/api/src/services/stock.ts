@@ -192,3 +192,22 @@ export const reorderLevelOf = (v: { reorderLevel: number | null; product: { reor
 /** Unit cost for valuation: batch landed cost → variant override → product cost. */
 export const costOf = (b: { unitCost: Prisma.Decimal | null } | null, v: { purchaseCost: Prisma.Decimal | null; product: { purchaseCost: Prisma.Decimal } }) =>
   num(b?.unitCost ?? v.purchaseCost ?? v.product.purchaseCost);
+
+/** Per-variant quantity, nearest expiry of stock on hand, and value at cost. */
+export async function variantStock(db: Db, variantIds: string[]) {
+  const balances = await db.stockBalance.findMany({
+    where: { variantId: { in: variantIds }, qty: { gt: 0 } },
+    include: { batch: { select: { expiryDate: true, unitCost: true } }, variant: { select: { purchaseCost: true, product: { select: { purchaseCost: true } } } } },
+  });
+  const out = new Map<string, { qty: number; nearestExpiry: string | null; value: number; expiringQty: number }>();
+  for (const b of balances) {
+    const cur = out.get(b.variantId) ?? { qty: 0, nearestExpiry: null, value: 0, expiringQty: 0 };
+    cur.qty += b.qty;
+    cur.value += b.qty * costOf(b.batch, b.variant);
+    const e = isoDay(b.batch.expiryDate);
+    if (e && (!cur.nearestExpiry || e < cur.nearestExpiry)) cur.nearestExpiry = e;
+    out.set(b.variantId, cur);
+  }
+  return out;
+}
+

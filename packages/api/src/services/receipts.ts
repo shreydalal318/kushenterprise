@@ -3,6 +3,7 @@ import type { Tx } from '@kush/db';
 import { logActivity } from './activity';
 import { nextDocNumber } from './numbering';
 import { dayToDate, num } from './num';
+import { receiveAgainstPo } from './purchasing';
 import { defaultLocationId, ensureBatch, loadVariant, postMovement } from './stock';
 
 export interface ReceiptLine {
@@ -25,6 +26,8 @@ export async function createReceipt(
   args: {
     kind: 'GRN' | 'OPENING';
     supplierId: string | null;
+    /** Receive against this purchase order (quantities are booked to its open lines). */
+    poId?: string | null;
     date: string;
     supplierInvoiceNo?: string | null;
     supplierInvoiceDate?: string | null;
@@ -43,10 +46,11 @@ export async function createReceipt(
   const locationId = args.locationId ?? (await defaultLocationId(tx));
   if (!(await tx.location.findUnique({ where: { id: locationId } }))) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Location not found' });
 
+  const po = args.kind === 'GRN' && args.poId ? await receiveAgainstPo(tx, args.poId, args.supplierId!, args.lines.map((l) => ({ variantId: l.variantId, qty: l.qty }))) : null;
   const number = await nextDocNumber(tx, 'GRN', args.date);
   const grn = await tx.grn.create({
     data: {
-      number, date: dayToDate(args.date)!, supplierId: args.supplierId, isOpening: args.kind === 'OPENING', note: args.note ?? null,
+      number, date: dayToDate(args.date)!, supplierId: args.supplierId, poId: po ? args.poId : null, isOpening: args.kind === 'OPENING', note: args.note ?? null,
       supplierInvoiceNo: args.supplierInvoiceNo ?? null, supplierInvoiceDate: dayToDate(args.supplierInvoiceDate ?? null), createdById: args.actorId,
     },
   });
@@ -58,7 +62,7 @@ export async function createReceipt(
     const rate = args.canSetCost && l.rate != null ? l.rate : num(v.purchaseCost ?? v.product.purchaseCost);
     const batch = await ensureBatch(tx, v, { batchNo: l.batchNo, expiryDate: l.expiryDate, mfgDate: l.mfgDate, unitCost: rate });
     await tx.grnLine.create({
-      data: { grnId: grn.id, variantId: v.id, batchId: batch.id, batchNo: batch.batchNo, expiryDate: batch.expiryDate, serialNos: l.serialNos.map((s) => s.trim().toUpperCase()), qty: l.qty, rate, locationId },
+      data: { grnId: grn.id, poLineId: po?.booked[i]?.[0]?.poLineId ?? null, variantId: v.id, batchId: batch.id, batchNo: batch.batchNo, expiryDate: batch.expiryDate, serialNos: l.serialNos.map((s) => s.trim().toUpperCase()), qty: l.qty, rate, locationId },
     });
     await postMovement(tx, {
       type: args.kind, variant: v, batchId: batch.id, locationId, qty: l.qty, serialNos: l.serialNos, unitCost: rate,
@@ -75,7 +79,7 @@ export async function createReceipt(
   }
   await logActivity(tx, {
     actorId: args.actorId, action: args.kind === 'GRN' ? 'stock.grn' : 'stock.opening', entityType: 'Grn', entityId: grn.id, ip: args.ip,
-    summary: `${args.kind === 'GRN' ? 'Goods received' : 'Opening stock'} ${number}: ${args.lines.length} line(s), ${units} unit(s)`,
+    summary: `${args.kind === 'GRN' ? 'Goods received' : 'Opening stock'} ${number}${po ? ` against ${po.number}` : ''}: ${args.lines.length} line(s), ${units} unit(s)`,
   });
-  return { id: grn.id, number, units };
+  return { id: grn.id, number, units, po: po ? { number: po.number, complete: po.complete } : null };
 }
