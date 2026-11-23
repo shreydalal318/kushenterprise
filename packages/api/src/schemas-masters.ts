@@ -157,7 +157,7 @@ const customerFields = {
   notes: optText(2000),
 };
 
-export const customerCreateInput = z.object({ ...customerFields, billingAddress: addressInput }).superRefine((v, ctx) => taxIdRules(v, ctx));
+export const customerCreateInput = z.object({ ...customerFields, billingAddress: addressInput, fromLeadId: z.string().optional() }).superRefine((v, ctx) => taxIdRules(v, ctx));
 export const customerUpdateInput = z.object({ id: z.string().min(1), ...customerFields }).superRefine((v, ctx) => taxIdRules(v, ctx));
 export const customerListInput = z.object({
   q: z.string().trim().max(100).optional(),

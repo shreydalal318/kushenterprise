@@ -12,19 +12,21 @@ import { TYPE_LABEL, type CustomerType } from './labels';
 
 type Customer = RouterOutputs['customers']['get'];
 
-export function CustomerForm({ customer, presetParentId, presetType }: { customer?: Customer; presetParentId?: string; presetType?: string }) {
+export interface LeadPreset { id: string; name: string; organisation: string | null; type: CustomerType | null; mobile: string; email: string | null; city: string | null; notes: string | null }
+
+export function CustomerForm({ customer, presetParentId, presetType, lead }: { customer?: Customer; presetParentId?: string; presetType?: string; lead?: LeadPreset | null }) {
   const router = useRouter();
   const utils = trpc.useUtils();
   const staff = trpc.customers.staffOptions.useQuery();
   const parents = trpc.customers.options.useQuery({ types: ['HOSPITAL', 'CLINIC'] });
   const [v, setV] = useState({
-    type: (customer?.type ?? (presetType as CustomerType | undefined) ?? (presetParentId ? 'DOCTOR' : 'HOSPITAL')) as CustomerType,
-    name: customer?.name ?? '', contactPerson: customer?.contactPerson ?? '', mobile: customer?.mobile ?? '', email: customer?.email ?? '',
+    type: (customer?.type ?? lead?.type ?? (presetType as CustomerType | undefined) ?? (presetParentId ? 'DOCTOR' : 'HOSPITAL')) as CustomerType,
+    name: customer?.name ?? (lead ? lead.organisation || lead.name : ''), contactPerson: customer?.contactPerson ?? (lead?.organisation ? lead.name : ''), mobile: customer?.mobile ?? lead?.mobile ?? '', email: customer?.email ?? lead?.email ?? '',
     stateCode: customer?.stateCode ?? '', gstin: customer?.gstin ?? '', pan: customer?.pan ?? '', drugLicenceNo: customer?.drugLicenceNo ?? '',
     creditLimit: customer?.creditLimit == null ? '' : String(customer.creditLimit), paymentTermsDays: String(customer?.paymentTermsDays ?? 30),
-    assignedEmployeeId: customer?.assignedEmployeeId ?? '', parentId: customer?.parentId ?? presetParentId ?? '', notes: customer?.notes ?? '',
+    assignedEmployeeId: customer?.assignedEmployeeId ?? '', parentId: customer?.parentId ?? presetParentId ?? '', notes: customer?.notes ?? (lead ? `From website enquiry: ${lead.notes ? `${lead.notes}. ` : ''}` : ''),
   });
-  const [billing, setBilling] = useState<AddressValue>(emptyAddress());
+  const [billing, setBilling] = useState<AddressValue>({ ...emptyAddress(), ...(lead?.city ? { city: lead.city } : {}) });
   const create = trpc.customers.create.useMutation({ onSuccess: (c) => { void utils.customers.list.invalidate(); router.push(`/app/customers/${c.id}`); } });
   const update = trpc.customers.update.useMutation({ onSuccess: () => Promise.all([utils.customers.get.invalidate({ id: customer!.id }), utils.customers.list.invalidate()]) });
   const m = customer ? update : create;
@@ -37,7 +39,7 @@ export function CustomerForm({ customer, presetParentId, presetType }: { custome
       assignedEmployeeId: v.assignedEmployeeId || null, parentId: v.type === 'DOCTOR' ? v.parentId || null : null,
     };
     if (customer) update.mutate({ id: customer.id, ...base });
-    else create.mutate({ ...base, billingAddress: { ...billing, stateCode: billing.stateCode || v.stateCode } });
+    else create.mutate({ ...base, billingAddress: { ...billing, stateCode: billing.stateCode || v.stateCode }, fromLeadId: lead?.id });
   }
 
   return (

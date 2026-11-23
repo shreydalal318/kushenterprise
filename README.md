@@ -19,8 +19,24 @@ Brief: [`docs/00-original-brief.md`](docs/00-original-brief.md) · Stack: [`docs
 | 4 | Sales: orders, proforma, Tally-style tax invoice, scan-to-invoice, payments | ✅ done |
 | 5 | Purchase orders: reorder suggestions, PO PDF, receiving against a PO | ✅ done |
 | 6 | Customer portal, notifications, mobile app (customer + staff) | ✅ done |
-| **7** | **Owner dashboard, sales & margin analytics, GST reports, Excel exports** | ✅ **done** (see below) |
-| 8 | Public website | next |
+| 7 | Owner dashboard, sales & margin analytics, GST reports, Excel exports | ✅ done |
+| **8** | **Public website, enquiries → leads** | ✅ **done** (see below) |
+| 9 | Phase 2 extras: Tally XML, e-invoice, e-way bill, WhatsApp automation | needs provider accounts |
+
+### What Phase 8 delivers
+
+- **Public website** (same deployment, server-rendered for search engines):
+  - **Home**: what we supply, why order from us, brands, how ordering works, enquiry call-to-action.
+  - **Products**: search and filter by category, brand, lens type and **power**. **No prices**: every product shows "Login to see your price".
+  - **Product pages**: lens details (type, material, A-constant, optic size, overall length, preloaded), available powers written as ranges (e.g. "+10.00 to +30.00 D in 0.50 D steps"), cylinder and add options, and "Enquire" / "Login to order" buttons.
+  - **About**: profile and registrations (GSTIN and drug licence appear once entered in Settings; placeholders are never shown).
+  - **Contact**: the enquiry form, phone, WhatsApp and a maps link when those are set.
+- **SEO**: page titles and descriptions, product structured data (schema.org), `sitemap.xml` (every public product) and `robots.txt` (the app, portal and API are excluded). Set `SITE_URL` to the real domain.
+- Products appear on the website only when "Show on website" is ticked. **The website never shows prices, costs or stock.**
+- **Enquiries become leads.**
+  - Each enquiry is saved with the product it came from, and the owner plus staff who manage customers get a notification.
+  - A hidden honeypot field silently drops bots, and each address is limited to 5 enquiries an hour.
+- **Leads screen** (customer-management permission): New / Contacted / Customers / Closed. Call, WhatsApp or email the enquirer in one tap, keep internal notes, and **convert to customer**: the new-customer form opens pre-filled, and saving marks the lead as converted.
 
 ### What Phase 7 delivers
 

@@ -96,9 +96,9 @@ const SENDERS: Partial<Record<NotificationChannel, Sender>> = {
 };
 
 /** Send queued external notifications. Safe to call repeatedly (each row is claimed once). */
-export async function deliverQueued(db: Db = prisma, limit = 100) {
+export async function deliverQueued(db: Db = prisma, limit = 100, only?: { userId?: string }) {
   const rows = await db.notification.findMany({
-    where: { status: 'queued' }, take: limit, orderBy: { createdAt: 'asc' },
+    where: { status: 'queued', ...(only?.userId ? { userId: only.userId } : {}) }, take: limit, orderBy: { createdAt: 'asc' },
     include: { user: { select: { mobile: true, email: true, devices: { select: { pushToken: true } } } } },
   });
   let sent = 0;

@@ -1182,7 +1182,17 @@ model Lead {
   productIds          String[]
   status              LeadStatus    @default(NEW)
   convertedCustomerId String?
+  /// Staff follow-up notes.
+  notes               String?
+  handledById         String?
+  /// Website page the enquiry came from (product page, contact page).
+  sourcePath          String?
+  ip                  String?
   createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @default(now()) @updatedAt
+
+  @@index([status, createdAt])
+  @@index([ip, createdAt])
 }
 
 // =====================================================================

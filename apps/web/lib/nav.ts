@@ -43,7 +43,7 @@ export const NAV: { section: string; items: NavItem[] }[] = [
     items: [
       { href: '/app/customers', label: 'Customers', icon: Users, permission: 'MANAGE_CUSTOMERS' },
       { href: '/app/pricing', label: 'Pricing', icon: Tags, permission: 'VIEW_PRICES_MARGINS' },
-      { href: '/app/leads', label: 'Leads', icon: ClipboardList, permission: 'MANAGE_CUSTOMERS', phase: 8 },
+      { href: '/app/leads', label: 'Leads', icon: ClipboardList, permission: 'MANAGE_CUSTOMERS' },
     ],
   },
   { section: 'Insights', items: [{ href: '/app/analytics', label: 'Analytics & reports', icon: BarChart3, permission: 'VIEW_ANALYTICS' }] },

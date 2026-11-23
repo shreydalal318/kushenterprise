@@ -13,6 +13,7 @@ import { priceListsRouter, pricingRouter } from './routers/pricing';
 import { brandsRouter, productsRouter } from './routers/products';
 import { settingsRouter } from './routers/settings';
 import { suppliersRouter } from './routers/suppliers';
+import { leadsRouter, websiteRouter } from './routers/website';
 import { createCallerFactory, router } from './trpc';
 
 export const appRouter = router({
@@ -39,6 +40,8 @@ export const appRouter = router({
   portal: portalRouter,
   notifications: notificationsRouter,
   analytics: analyticsRouter,
+  website: websiteRouter,
+  leads: leadsRouter,
 });
 
 export type AppRouter = typeof appRouter;

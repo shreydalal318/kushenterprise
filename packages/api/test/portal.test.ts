@@ -101,7 +101,7 @@ describe('customer portal', () => {
     const title = `Order ${o.number}: Confirmed`;
     expect(await prisma.notification.count({ where: { userId: customerUser.id, title, channel: 'IN_APP' } })).toBe(1);
     expect(await prisma.notification.count({ where: { userId: customerUser.id, title, channel: 'SMS' } })).toBe(1);
-    await deliverQueued(prisma, 100_000); // the shared test database also holds queued rows from earlier runs
+    await deliverQueued(prisma, 100, { userId: customerUser.id });
     await new Promise((r) => setTimeout(r, 500));
     expect((await prisma.notification.findFirstOrThrow({ where: { userId: customerUser.id, title, channel: 'SMS' } })).status).toBe('sent');
     expect(deliveryLog.some((d) => d.title === title) || (await import('../src/notify/sms')).outbox.some((m) => m.message.startsWith(title))).toBe(true);

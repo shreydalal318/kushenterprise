@@ -97,7 +97,7 @@ export const customersRouter = router({
     ctx.db.$transaction(async (tx) => {
       await checkParent(tx, input.type, input.parentId);
       await checkAssignee(tx, input.assignedEmployeeId);
-      const { billingAddress, ...data } = input;
+      const { billingAddress, fromLeadId, ...data } = input;
       const c = await tx.customer.create({
         data: {
           ...data,
@@ -106,7 +106,9 @@ export const customersRouter = router({
           addresses: { create: [{ kind: 'BILLING', isDefault: true, ...billingAddress }] },
         },
       });
-      await logActivity(tx, { actorId: ctx.user.id, action: 'customer.create', entityType: 'Customer', entityId: c.id, summary: `Added ${c.type.toLowerCase()} ${c.code} ${c.name}`, ip: ctx.ip });
+      await logActivity(tx, { actorId: ctx.user.id, action: 'customer.create', entityType: 'Customer', entityId: c.id, summary: `Added ${c.type.toLowerCase()} ${c.code} ${c.name}${fromLeadId ? ' (from a website enquiry)' : ''}`, ip: ctx.ip });
+      // A website enquiry turned into a customer.
+      if (fromLeadId) await tx.lead.updateMany({ where: { id: fromLeadId }, data: { status: 'CONVERTED', convertedCustomerId: c.id, handledById: ctx.user.id } });
       return { id: c.id, code: c.code };
     })),
 
