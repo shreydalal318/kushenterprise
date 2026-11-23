@@ -254,6 +254,9 @@ model Customer {
   isActive         Boolean      @default(true)
 
   /// Linked doctors under a hospital (Dr. X at Hospital Y).
+  /// How the customer wants order updates (in-app is always on). External channels need the provider accounts.
+  notifyChannels NotificationChannel[] @default([IN_APP, PUSH])
+
   parentId String?
   parent   Customer?  @relation("HospitalDoctors", fields: [parentId], references: [id])
   doctors  Customer[] @relation("HospitalDoctors")

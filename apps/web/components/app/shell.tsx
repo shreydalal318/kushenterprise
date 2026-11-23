@@ -7,6 +7,7 @@ import { cn } from '@/lib/cn';
 import { NAV, navFor, type NavItem } from '@/lib/nav';
 import type { Principal } from '@kush/core';
 import { SignOutButton } from './sign-out-button';
+import { StaffBell } from './staff-bell';
 
 interface ShellUser extends Principal { name: string; email: string | null }
 
@@ -71,7 +72,8 @@ export function AppShell({ user, children }: { user: ShellUser; children: ReactN
             <p className="truncate text-sm font-medium">{user.name}</p>
             <p className="truncate text-xs text-white/60">{user.role === 'OWNER' ? 'Owner' : 'Employee'}{user.email ? ` · ${user.email}` : ''}</p>
           </Link>
-          <SignOutButton className="mt-2 px-2 text-white/80 hover:text-white" />
+          <StaffBell label className="mt-1 rounded-lg px-2 py-1.5 text-white/80 hover:bg-white/8 hover:text-white" />
+          <SignOutButton className="mt-1 px-2 text-white/80 hover:text-white" />
         </div>
       </aside>
       {open && <button aria-label="Close menu" className="fixed inset-0 z-30 bg-ink/40 lg:hidden" onClick={() => setOpen(false)} />}
@@ -81,6 +83,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: ReactN
           <button onClick={() => setOpen(true)} aria-label="Open menu" className="rounded-md p-1.5 hover:bg-aqua-50"><Menu className="size-5" /></button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand/logo-primary.png" alt="Kush Enterprise" className="h-6 w-auto" />
+          <StaffBell className="ml-auto rounded-md p-1.5 text-muted hover:bg-aqua-50" />
         </header>
         <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</main>
       </div>

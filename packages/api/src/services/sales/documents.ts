@@ -1,7 +1,10 @@
 import { TRPCError } from '@trpc/server';
 import { formatDate, INVOICE_COPY_LABEL, type InvoiceCopy } from '@kush/core';
 import type { Db } from '@kush/db';
-import { buildDocModel, renderDocumentPdf, type DocParty, type DocSource, type DocSupplier } from '@kush/pdf';
+import { buildDocModel, buildStatementHtml, renderDocumentPdf, renderHtmlPdf, type DocParty, type DocSource, type DocSupplier } from '@kush/pdf';
+import { istDateString, stateByCode } from '@kush/core';
+import { customerLedger } from './ledger';
+import { supplierSnapshot } from './common';
 import { loadFile } from '../../storage';
 import { isoDay, num } from '../num';
 import { getSettings } from '../settings';
@@ -113,4 +116,26 @@ export async function renderDocument(db: Db, kind: DocKind, id: string, copies?:
   const { src, filename, customerId } = await documentSource(db, kind, id, copies);
   const pdf = await renderDocumentPdf(await buildDocModel(src));
   return { pdf, filename, customerId };
+}
+
+const ROW_TYPE: Record<string, string> = { INVOICE: 'Invoice', PAYMENT: 'Receipt', CREDIT_NOTE: 'Credit note', CANCELLED_INVOICE: 'Invoice (cancelled)' };
+
+/** Statement of account PDF for one customer and period. */
+export async function renderStatement(db: Db, customerId: string, opts: { from?: string; to?: string } = {}) {
+  const [ledger, settings, c] = await Promise.all([
+    customerLedger(db, customerId, opts),
+    getSettings(db),
+    db.customer.findUnique({ where: { id: customerId }, include: { addresses: { where: { kind: 'BILLING' }, orderBy: { isDefault: 'desc' }, take: 1 } } }),
+  ]);
+  if (!c) throw new TRPCError({ code: 'NOT_FOUND' });
+  const co = supplierSnapshot(settings);
+  const a = c.addresses[0];
+  const html = buildStatementHtml({
+    company: { name: co.name, addressLines: co.addressLines, gstin: co.gstin, phone: co.phone, email: co.email },
+    customer: { name: c.name, code: c.code, gstin: c.gstin, addressLines: a ? [a.line1, a.line2, `${a.city} - ${a.pincode}`, stateByCode(a.stateCode)?.name].filter(Boolean) as string[] : [] },
+    from: opts.from ?? null, to: opts.to ?? istDateString(), opening: ledger.opening, closing: ledger.closing,
+    rows: ledger.rows.map((r) => ({ date: r.date, type: ROW_TYPE[r.type] ?? r.type, number: r.number, narration: r.narration, debit: r.debit, credit: r.credit, balance: r.balance })),
+    ageing: ledger.ageing, overdue: ledger.overdue, onAccount: ledger.onAccount,
+  });
+  return { pdf: await renderHtmlPdf(html), filename: `Statement-${c.code}-${opts.to ?? istDateString()}.pdf` };
 }

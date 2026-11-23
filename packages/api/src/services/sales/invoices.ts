@@ -8,6 +8,7 @@ import { resolveCustomerPrices } from '../pricing';
 
 import { postMovement, loadVariant } from '../stock';
 import { allocateLine, customerForDocument, requireCompanyState, supplierSnapshot } from './common';
+import { notifyCustomer } from '../../notify';
 
 export interface InvoiceLineInput {
   variantId: string;
@@ -116,6 +117,7 @@ export async function createInvoice(tx: Tx, input: InvoiceInput, actor: { id: st
     actorId: actor.id, action: 'invoice.create', entityType: 'Invoice', entityId: invoice.id, ip: opts.ip,
     summary: `Tax invoice ${number} for ${doc.customer.name}: ₹${gst.total} (${gst.taxType === 'INTRA_STATE' ? 'CGST+SGST' : 'IGST'})`,
   });
+  await notifyCustomer(tx, doc.customer.id, { title: `Invoice ${number}`, body: `₹${gst.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}, due ${dueDateFor(input.date, doc.customer.paymentTermsDays)}. Download it from your account.`, link: `/portal/invoices` });
   return { id: invoice.id, number, total: gst.total, duplicate: false };
 }
 

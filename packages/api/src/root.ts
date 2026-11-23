@@ -3,6 +3,8 @@ import { authRouter } from './routers/auth';
 import { customersRouter } from './routers/customers';
 import { employeesRouter } from './routers/employees';
 import { inventoryRouter } from './routers/inventory';
+import { notificationsRouter } from './routers/notifications';
+import { portalRouter } from './routers/portal';
 import { purchaseOrdersRouter } from './routers/purchasing';
 import { scanRouter } from './routers/scan';
 import { creditNotesRouter, invoicesRouter, ledgerRouter, ordersRouter, paymentsRouter, proformasRouter, salesLookupRouter } from './routers/sales';
@@ -33,6 +35,8 @@ export const appRouter = router({
   payments: paymentsRouter,
   ledger: ledgerRouter,
   purchaseOrders: purchaseOrdersRouter,
+  portal: portalRouter,
+  notifications: notificationsRouter,
 });
 
 export type AppRouter = typeof appRouter;

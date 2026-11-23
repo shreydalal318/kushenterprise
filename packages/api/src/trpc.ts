@@ -22,6 +22,8 @@ export interface Context {
   userAgent: string | null;
   /** Response headers (fetch adapter) so auth procedures can set cookies. */
   resHeaders: Headers | null;
+  /** The mobile app authenticates with a Bearer token; browsers with the session cookie. */
+  client: 'web' | 'mobile';
 }
 
 export async function createContext(opts: { headers: Headers; resHeaders?: Headers | null }): Promise<Context> {
@@ -34,6 +36,7 @@ export async function createContext(opts: { headers: Headers; resHeaders?: Heade
     ip: xff ? xff.split(',')[0]!.trim() : opts.headers.get('x-real-ip'),
     userAgent: opts.headers.get('user-agent'),
     resHeaders: opts.resHeaders ?? null,
+    client: /^Bearer\s/i.test(opts.headers.get('authorization') ?? '') ? 'mobile' : 'web',
   };
 }
 

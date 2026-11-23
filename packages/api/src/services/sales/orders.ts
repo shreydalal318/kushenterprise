@@ -7,6 +7,8 @@ import { nextDocNumber } from '../numbering';
 import { resolveCustomerPrices } from '../pricing';
 import { loadVariant } from '../stock';
 import { customerForDocument } from './common';
+import { notify, notifyCustomer, staffForCustomer } from '../../notify';
+import { getSettings, settingsView } from '../settings';
 
 export interface OrderInput {
   customerId: string;
@@ -46,6 +48,11 @@ export async function createOrder(tx: Tx, input: OrderInput, actor: { id: string
     },
   });
   await logActivity(tx, { actorId: actor.id, action: 'order.create', entityType: 'SalesOrder', entityId: o.id, ip, summary: `Order ${number} for ${doc.customer.name}${doc.doctor ? ` (for ${doc.doctor.name})` : ''}: ${input.lines.length} line(s)` });
+  if (input.source !== 'STAFF') {
+    const units = input.lines.reduce((t, l) => t + l.qty, 0);
+    await notify(tx, { userIds: [...(await staffForCustomer(tx, doc.customer.id)), ...(assignedToId ? [assignedToId] : [])], title: `New order ${number}`, body: `${doc.customer.name}${doc.doctor ? ` for ${doc.doctor.name}` : ''}: ${units} unit(s)${input.surgeryDate ? `, surgery ${input.surgeryDate}` : ''}`, link: `/app/orders/${o.id}`, channels: ['PUSH'] });
+    await notifyCustomer(tx, doc.customer.id, { title: `Order ${number} received`, body: `We have your order for ${units} unit(s) and will confirm it shortly.`, link: `/portal/orders/${o.id}` });
+  }
   return { id: o.id, number, duplicate: false };
 }
 
@@ -73,6 +80,14 @@ export async function changeOrderStatus(tx: Tx, input: StatusInput, actor: { id:
     await tx.invoice.update({ where: { id: invoiceId }, data: { dispatchedThrough: [input.dispatch.courier, input.dispatch.vehicleNo].filter(Boolean).join(', ') || undefined, dispatchDocNo: input.dispatch.docketNo ?? undefined } });
   }
   await tx.salesOrder.update({ where: { id: o.id }, data: { status: input.status } });
+  if (settingsView(await getSettings(tx)).notificationConfig.orderStatusToCustomer) {
+    const d = input.dispatch;
+    const body = input.status === 'DISPATCHED' && d ? `Sent${d.courier ? ` via ${d.courier}` : ''}${d.docketNo ? `, docket ${d.docketNo}` : ''}.`
+      : input.status === 'CANCELLED' ? `Your order was cancelled${input.note ? `: ${input.note}` : '.'}`
+        : input.status === 'ON_HOLD' ? `Your order is on hold${input.note ? `: ${input.note}` : '.'}`
+          : `Your order is now ${ORDER_STATUS_LABEL[input.status].toLowerCase()}.`;
+    await notifyCustomer(tx, o.customerId, { title: `Order ${o.number}: ${ORDER_STATUS_LABEL[input.status]}`, body, link: `/portal/orders/${o.id}` });
+  }
   await tx.orderStatusEvent.create({ data: { orderId: o.id, status: input.status, note: input.note ?? null, byUserId: actor.id } });
   await logActivity(tx, { actorId: actor.id, action: 'order.status', entityType: 'SalesOrder', entityId: o.id, ip, summary: `${o.number}: ${ORDER_STATUS_LABEL[o.status]} → ${ORDER_STATUS_LABEL[input.status]}${input.note ? ` (${input.note})` : ''}` });
   return { ok: true };

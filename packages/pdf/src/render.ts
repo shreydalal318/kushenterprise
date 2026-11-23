@@ -39,6 +39,19 @@ export async function renderDocumentPdf(doc: DocModel): Promise<Buffer> {
   }
 }
 
+/** Render any self-contained HTML page (no pagination script) to an A4 PDF. */
+export async function renderHtmlPdf(html: string): Promise<Buffer> {
+  const b = await getBrowser();
+  const page = await b.newPage();
+  try {
+    await page.setContent(html, { waitUntil: 'load' });
+    await page.evaluate('document.fonts.ready');
+    return await page.pdf({ format: 'A4', printBackground: true, preferCSSPageSize: true });
+  } finally {
+    await page.close();
+  }
+}
+
 export async function closePdfBrowser() {
   if (browser) await (await browser).close().catch(() => {});
   browser = null;

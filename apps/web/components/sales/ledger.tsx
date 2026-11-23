@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { ArrowLeft, FileDown, Plus } from 'lucide-react';
 import { AGEING_BUCKETS, formatDate } from '@kush/core';
 import { Button } from '@/components/ui/button';
 import { Alert, Card, CardHeader, PageHeader } from '@/components/ui/card';
@@ -30,7 +30,10 @@ export function CustomerLedger({ customerId }: { customerId: string }) {
     <div className="flex flex-col gap-5">
       <Link href={`/app/customers/${d.customer.id}`} className="flex w-fit items-center gap-1 text-sm text-teal-700 hover:underline"><ArrowLeft className="size-4" aria-hidden /> {d.customer.name}</Link>
       <PageHeader title="Account statement" description={`${d.customer.name} (${d.customer.code}) · terms ${d.customer.paymentTermsDays} days${d.customer.creditLimit ? ` · credit limit ${rupees(d.customer.creditLimit)}` : ''}`}
-        actions={can('RECORD_PAYMENTS') && <Button onClick={() => setPay(true)}><Plus className="size-4" aria-hidden /> Record payment</Button>} />
+        actions={<div className="flex gap-2">
+          <a href={`/api/statement/${d.customer.id}?download=1${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}`} className="inline-flex h-10 items-center gap-2 rounded-lg border border-line bg-white px-4 text-sm font-semibold hover:bg-aqua-50"><FileDown className="size-4" aria-hidden /> Statement PDF</a>
+          {can('RECORD_PAYMENTS') && <Button onClick={() => setPay(true)}><Plus className="size-4" aria-hidden /> Record payment</Button>}
+        </div>} />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
         <Card className="col-span-2 px-4 py-3"><p className="text-xs text-muted">Outstanding</p><p className={cn('text-2xl font-semibold', d.outstanding > 0 ? 'text-navy' : 'text-ok')}>{rupees(Math.abs(d.outstanding))}{d.outstanding < 0 && <span className="ml-1 text-sm font-normal">advance</span>}</p>{d.overdue > 0 && <p className="text-xs text-danger">{rupees(d.overdue)} overdue</p>}{d.onAccount > 0 && <p className="text-xs text-muted">{rupees(d.onAccount)} on account</p>}</Card>
         {AGEING_BUCKETS.map((b) => <Card key={b} className="px-4 py-3"><p className="text-xs text-muted">{b} days</p><p className="text-lg font-semibold">{rupees(d.ageing[b])}</p></Card>)}

@@ -1,4 +1,5 @@
 import { TRPCError } from '@trpc/server';
+import { notifyCustomer } from '../../notify';
 import { round2 } from '@kush/core';
 import type { Tx } from '@kush/db';
 import { logActivity } from '../activity';
@@ -64,6 +65,7 @@ export async function recordPayment(tx: Tx, input: PaymentInput, actor: { id: st
   const p = await tx.payment.create({ data: { number, customerId: c.id, date: dayToDate(input.date)!, amount: input.amount, mode: input.mode, reference: input.reference ?? null, note: input.note ?? null, createdById: actor.id } });
   for (const a of allocations) await applyAllocation(tx, p.id, c.id, a);
   await logActivity(tx, { actorId: actor.id, action: 'payment.record', entityType: 'Payment', entityId: p.id, ip, summary: `${number}: ₹${input.amount} from ${c.name} by ${input.mode}${allocated < input.amount ? ` (₹${round2(input.amount - allocated)} on account)` : ''}` });
+  await notifyCustomer(tx, c.id, { title: `Payment received: ₹${input.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, body: `Thank you. Receipt ${number}${input.reference ? ` (${input.reference})` : ''}.`, link: '/portal/account' });
   return { id: p.id, number, allocated, onAccount: round2(input.amount - allocated) };
 }
 
