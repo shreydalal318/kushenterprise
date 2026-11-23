@@ -17,7 +17,7 @@
     "db:studio": "pnpm --filter @kush/db studio",
     "db:seed:demo": "pnpm --filter @kush/db seed:demo && pnpm --filter @kush/api seed:demo-activity",
     "setup:demo": "node scripts/ensure-env.mjs && pnpm --filter @kush/db db:generate && pnpm db:deploy && pnpm db:seed && pnpm db:seed:demo",
-    "preview": "node scripts/ensure-env.mjs && pnpm --filter @kush/web build && pnpm --filter @kush/web start"
+    "preview": "pnpm install --frozen-lockfile && pnpm setup:demo && node scripts/ensure-chromium.mjs && pnpm --filter @kush/web build && pnpm --filter @kush/web start"
   },
   "devDependencies": {
     "turbo": "^2.11.13",
