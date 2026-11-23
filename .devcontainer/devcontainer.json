@@ -7,7 +7,7 @@
   "portsAttributes": {
     "3000": { "label": "Kush Enterprise", "onAutoForward": "openPreview" }
   },
-  "postCreateCommand": "sudo corepack enable && pnpm install && (cp -n .env.example .env || true) && pnpm setup:demo",
+  "postCreateCommand": "sudo corepack enable && pnpm install && pnpm --filter @kush/web exec playwright install --with-deps chromium && (cp -n .env.example .env || true) && pnpm setup:demo",
   "postAttachCommand": "pnpm preview",
   "customizations": {
     "codespaces": { "openFiles": ["README.md"] },

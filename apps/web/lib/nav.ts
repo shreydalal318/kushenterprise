@@ -21,10 +21,10 @@ export const NAV: { section: string; items: NavItem[] }[] = [
   {
     section: 'Sales',
     items: [
-      { href: '/app/orders', label: 'Orders', icon: ShoppingCart, permission: 'VIEW_ORDERS', phase: 4 },
-      { href: '/app/invoices', label: 'Tax invoices', icon: Receipt, permission: 'CREATE_TAX_INVOICE', phase: 4 },
-      { href: '/app/proforma', label: 'Proforma', icon: FileText, permission: 'CREATE_PROFORMA', phase: 4 },
-      { href: '/app/payments', label: 'Payments', icon: Wallet, permission: 'RECORD_PAYMENTS', phase: 4 },
+      { href: '/app/orders', label: 'Orders', icon: ShoppingCart, permission: 'VIEW_ORDERS' },
+      { href: '/app/invoices', label: 'Tax invoices', icon: Receipt, anyOf: ['CREATE_TAX_INVOICE', 'VIEW_ORDERS', 'RECORD_PAYMENTS'] },
+      { href: '/app/proforma', label: 'Proforma', icon: FileText, permission: 'CREATE_PROFORMA' },
+      { href: '/app/payments', label: 'Payments', icon: Wallet, permission: 'RECORD_PAYMENTS' },
     ],
   },
   {

@@ -92,7 +92,7 @@ test.describe.serial('Phase 1 foundation', () => {
     expect(res?.status()).toBe(404);
 
     await page.goto('/app/orders');
-    await expect(page.getByText('Coming in Phase 4')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Orders', level: 1 })).toBeVisible();
   });
 
   test('the API itself refuses an employee, not just the menu', async ({ page }) => {

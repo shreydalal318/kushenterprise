@@ -1,0 +1,24 @@
+import { describe, expect, it } from 'vitest';
+import { ageingBucket, canMoveTo, dueDateFor, paymentStatus } from '../src/sales';
+
+describe('sales rules', () => {
+  it('follows the order flow with hold and cancel as side states', () => {
+    expect(canMoveTo('PLACED', 'CONFIRMED')).toBe(true);
+    expect(canMoveTo('PLACED', 'DISPATCHED')).toBe(false);
+    expect(canMoveTo('ON_HOLD', 'PACKED')).toBe(true);
+    expect(canMoveTo('DISPATCHED', 'CANCELLED')).toBe(false);
+    expect(canMoveTo('DELIVERED', 'PLACED')).toBe(false);
+  });
+  it('computes due dates, payment status and ageing', () => {
+    expect(dueDateFor('2026-11-23', 30)).toBe('2026-12-23');
+    const today = '2026-12-31';
+    expect(paymentStatus({ total: 100, settled: 100, dueDate: '2026-12-01' }, today)).toBe('PAID');
+    expect(paymentStatus({ total: 100, settled: 40, dueDate: '2026-12-01' }, today)).toBe('OVERDUE');
+    expect(paymentStatus({ total: 100, settled: 40, dueDate: '2027-01-30' }, today)).toBe('PARTLY_PAID');
+    expect(paymentStatus({ total: 100, settled: 0, dueDate: '2027-01-30', cancelled: true }, today)).toBe('CANCELLED');
+    expect(ageingBucket('2026-12-01', today)).toBe('0–30');
+    expect(ageingBucket('2026-11-01', today)).toBe('31–60');
+    expect(ageingBucket('2026-10-02', today)).toBe('61–90');
+    expect(ageingBucket('2026-09-01', today)).toBe('90+');
+  });
+});

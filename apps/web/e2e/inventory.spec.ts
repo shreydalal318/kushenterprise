@@ -1,26 +1,9 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { login, selectByText, snap } from './helpers';
+import { expect, test, type Page } from '@playwright/test';
+import { login, randomGtin, selectByText, snap, trpc } from './helpers';
 import { run } from './run';
 
 const T = run.tag.toUpperCase();
 
-/** Call a tRPC procedure as the signed-in user (superjson wire format). */
-async function trpc<T = unknown>(req: APIRequestContext, path: string, input: unknown, method: 'GET' | 'POST' = 'POST'): Promise<T> {
-  const res = method === 'POST'
-    ? await req.post(`/api/trpc/${path}`, { data: { json: input }, headers: { 'content-type': 'application/json' } })
-    : await req.get(`/api/trpc/${path}?input=${encodeURIComponent(JSON.stringify({ json: input }))}`);
-  const body = await res.json();
-  if (!res.ok()) throw new Error(`${path}: ${JSON.stringify(body).slice(0, 300)}`);
-  return body.result.data.json as T;
-}
-
-/** A valid random GTIN-14 so re-runs never collide. */
-function randomGtin() {
-  const body = `0${Math.floor(1e11 + Math.random() * 9e11)}`.padEnd(13, '7').slice(0, 13);
-  let sum = 0;
-  for (let i = 0; i < 13; i++) sum += Number(body[12 - i]) * (i % 2 === 0 ? 3 : 1);
-  return body + ((10 - (sum % 10)) % 10);
-}
 const yymmdd = (iso: string) => iso.slice(2, 4) + iso.slice(5, 7) + iso.slice(8, 10);
 const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
 

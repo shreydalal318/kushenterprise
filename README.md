@@ -15,9 +15,39 @@ Brief: [`docs/00-original-brief.md`](docs/00-original-brief.md) · Stack: [`docs
 | 0 | Design approval: schema, screens, invoice mock-up | ✅ approved |
 | 1 | Foundation: schema, auth, roles & permissions, settings, branding | ✅ done |
 | 2 | Masters: products & lens powers, suppliers, customers, price lists, customer prices | ✅ done |
-| **3** | **Inventory + barcodes: stock ledger, USB & camera scanning, GRN** | ✅ **done** (see below) |
-| 4 | Sales: orders, proforma, Tally-style tax invoice, scan-to-invoice, payments | next |
-| 5–8 | POs → Portal & mobile → Analytics → Website | planned |
+| 3 | Inventory + barcodes: stock ledger, USB & camera scanning, GRN | ✅ done |
+| **4** | **Sales: orders, proforma, Tally-style tax invoice, scan-to-invoice, payments** | ✅ **done** (see below) |
+| 5 | Purchase orders | next |
+| 6–8 | Portal & mobile → Analytics → Website | planned |
+
+### What Phase 4 delivers
+
+- **Scan-to-invoice (counter screen)**: choose the customer, then scan each box.
+  - Every item is added at **that customer's own price** (special price → price list → default). Only the owner can change a rate, and never above MRP.
+  - Scanning a lens box's 2D code adds that exact serial; scanning the same item again adds one more. A duplicate serial, an unknown code, an expired batch or an item with no stock is refused with an error tone.
+  - Stock comes from the scanned batch, or the earliest-expiring batch first (split across batches when needed). Serial-tracked lenses can also be ticked from the list of serials in stock.
+  - Running totals show CGST + SGST or IGST as you scan. Saving twice by accident (or a retry on a weak network) never creates a second invoice.
+- **Tax invoice PDF**: the approved Phase 0 layout, generated on the server.
+  - Tax per HSN and rate (as Tally does), round-off, amount in words in lakh/crore, HSN summary, bank details and a UPI QR code for the amount due.
+  - **CGST + SGST if the goods are delivered in the company's state, otherwise IGST.** The ship-to state decides, so a Gujarat hospital's branch in Karnataka is billed IGST.
+  - Original / Duplicate / Triplicate copies in one PDF; download or print from the invoice screen.
+  - The PDF is checked against the saved totals before it is produced.
+- **Orders**: placed by staff (and by customers from Phase 6). Pending orders are listed first.
+  - Flow: Placed → Confirmed → Packed → Dispatched → Delivered, plus On hold and Cancelled. Each step is recorded with who did it and when.
+  - Rates are locked when the order is placed. Back-ordered quantities stay open until invoiced.
+  - **Pack & verify**: scan every box into the parcel; wrong items and extra units are flagged.
+  - Dispatch needs an invoice and the courier/docket details, which are also printed on the invoice.
+- **Proforma invoices**: from scratch or from an order, same layout, no stock taken. Validity comes from Settings. **One click converts a proforma to a tax invoice** at the quoted rates.
+- **Payments and the customer ledger**
+  - Record a receipt (NEFT/RTGS, UPI, cheque, cash…) with the UTR or cheque number. Apply it to the oldest invoices automatically or to chosen invoices; anything left stays on the customer's account.
+  - Paid / Part paid / Unpaid / **Overdue** status on every invoice (due date = invoice date + the customer's payment terms).
+  - Outstanding list with ageing (0–30, 31–60, 61–90, 90+ days) and credit-limit warnings.
+  - Account statement per customer: opening balance, invoices, receipts, credit notes, running balance.
+- **Credit notes (sales returns)** against an invoice, at the original rates and GST, with the returned serials checked. Goods go back into stock, or are written off.
+- **Cancelling an invoice** is owner-only and needs a reason. The invoice is kept (with a CANCELLED watermark), and stock and serials go back. An invoice with payments or credit notes can't be cancelled.
+- **Demo sales data**: 9 invoices (one cancelled, two inter-state, back-dated so ageing shows), orders in every status, a proforma, 4 receipts (full, part, advance) and a credit note.
+
+Not in this phase: sending documents and payment reminders by WhatsApp/email/SMS (needs the notification provider accounts, Phase 6/9), and the customer's own statement PDF (portal, Phase 6).
 
 ### What Phase 3 delivers
 
@@ -165,7 +195,11 @@ Open **http://localhost:3000** (or the Codespaces preview) and sign in:
 | Store staff (stock, scanning, products) | `sunita.store@demo.local` | `DemoStaff2026` |
 | Customer (Mobile OTP tab) | `90000 10001` | The 6-digit code is printed in the terminal running `pnpm dev` |
 
-`pnpm setup:demo` creates the database tables and loads the demo data: 3 suppliers, 30 products with 223 lens powers, 10 customers, 2 price lists, special prices, and 638 units of opening stock. Running it again does no harm.
+`pnpm setup:demo` creates the database tables and loads the demo data: 3 suppliers, 30 products with 223 lens powers, 10 customers, 2 price lists, special prices, 638 units of opening stock, and demo sales (orders, invoices, payments, a credit note). Running it again does no harm.
+
+The demo sets the company state to Gujarat so GST can be worked out. Enter the real company profile in **Settings → Company**.
+
+**Invoice PDFs** are produced with Chromium. Codespaces installs it for you. Elsewhere, install it once with `pnpm --filter @kush/web exec playwright install chromium`, or point `CHROMIUM_PATH` at an installed Chrome/Chromium.
 
 - **No Docker?** Install PostgreSQL 16, create a user `kush` (password `kush`) and a database `kush`, or edit `DATABASE_URL` in `.env`.
 - **Windows:** use `copy .env.example .env` instead of `cp`.
@@ -195,7 +229,8 @@ apps/web            Next.js 16: public site, staff app (/app), customer portal (
 packages/api        tRPC routers, auth (password, OTP, sessions), permission middleware, services
 packages/core       Pure TypeScript: money/words (lakh-crore), dates & financial year, GST, permissions, validators
 packages/db         Prisma schema, migrations, seed
-design/             Phase 0 invoice mock-up generator (becomes the PDF package in Phase 4)
+packages/pdf        Invoice / proforma / credit-note PDF (HTML template from the Phase 0 mock-up → Chromium)
+design/             Phase 0 invoice mock-up generator (the approved layout used by packages/pdf)
 brand/              Logo files supplied with the brief (source/) + whitespace-trimmed copies
 docs/               Brief, architecture, schema/ER, screens per role
 ```

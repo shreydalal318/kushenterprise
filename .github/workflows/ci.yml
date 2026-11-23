@@ -39,7 +39,8 @@ jobs:
       - run: pnpm --filter @kush/db db:generate
       - run: pnpm --filter @kush/db migrate:deploy
       - run: pnpm typecheck
+      # Chromium is needed by the API tests too (invoice PDFs are rendered with it).
+      - run: pnpm --filter @kush/web exec playwright install --with-deps chromium
       - run: pnpm test
       - run: pnpm --filter @kush/web build
-      - run: pnpm --filter @kush/web exec playwright install --with-deps chromium
       - run: pnpm test:e2e

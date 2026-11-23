@@ -4,6 +4,7 @@ import { customersRouter } from './routers/customers';
 import { employeesRouter } from './routers/employees';
 import { inventoryRouter } from './routers/inventory';
 import { scanRouter } from './routers/scan';
+import { creditNotesRouter, invoicesRouter, ledgerRouter, ordersRouter, paymentsRouter, proformasRouter, salesLookupRouter } from './routers/sales';
 import { priceListsRouter, pricingRouter } from './routers/pricing';
 import { brandsRouter, productsRouter } from './routers/products';
 import { settingsRouter } from './routers/settings';
@@ -23,6 +24,13 @@ export const appRouter = router({
   priceLists: priceListsRouter,
   inventory: inventoryRouter,
   scan: scanRouter,
+  sales: salesLookupRouter,
+  orders: ordersRouter,
+  proformas: proformasRouter,
+  invoices: invoicesRouter,
+  creditNotes: creditNotesRouter,
+  payments: paymentsRouter,
+  ledger: ledgerRouter,
 });
 
 export type AppRouter = typeof appRouter;

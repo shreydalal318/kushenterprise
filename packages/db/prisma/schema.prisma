@@ -763,6 +763,8 @@ model Proforma {
   customer          Customer       @relation(fields: [customerId], references: [id])
   orderId           String?
   order             SalesOrder?    @relation(fields: [orderId], references: [id])
+  supplierSnapshot  Json           @default("{}")
+  taxType           TaxType        @default(INTRA_STATE)
   buyerSnapshot     Json
   consigneeSnapshot Json
   placeOfSupply     String // state code
@@ -839,6 +841,7 @@ model Invoice {
   dispatchedThrough String?
   destination       String?
   termsOfDelivery   String?
+  terms             String? // terms & declaration printed on the invoice (snapshot)
 
   taxableTotal Decimal @db.Decimal(14, 2)
   cgstTotal    Decimal @default(0) @db.Decimal(14, 2)
@@ -906,37 +909,57 @@ model InvoiceLine {
 }
 
 model CreditNote {
-  id            String           @id @default(cuid())
-  number        String           @unique // KE/CN/2026-27/0001
-  financialYear String
-  date          DateTime         @db.Date
-  customerId    String
-  customer      Customer         @relation(fields: [customerId], references: [id])
-  invoiceId     String?
-  invoice       Invoice?         @relation(fields: [invoiceId], references: [id])
-  reason        String
-  restock       Boolean          @default(true) // sales return puts goods back into stock
-  taxableTotal  Decimal          @db.Decimal(14, 2)
-  taxTotal      Decimal          @db.Decimal(14, 2)
-  grandTotal    Decimal          @db.Decimal(14, 2)
-  pdfFileId     String?
-  lines         CreditNoteLine[]
-  createdById   String
-  createdAt     DateTime         @default(now())
+  id               String           @id @default(cuid())
+  number           String           @unique // KE/CN/2026-27/0001
+  financialYear    String
+  date             DateTime         @db.Date
+  customerId       String
+  customer         Customer         @relation(fields: [customerId], references: [id])
+  invoiceId        String?
+  invoice          Invoice?         @relation(fields: [invoiceId], references: [id])
+  reason           String
+  restock          Boolean          @default(true) // sales return puts goods back into stock
+  taxType          TaxType          @default(INTRA_STATE)
+  placeOfSupply    String           @default("")
+  supplierSnapshot Json             @default("{}")
+  buyerSnapshot    Json             @default("{}")
+  taxableTotal     Decimal          @db.Decimal(14, 2)
+  cgstTotal        Decimal          @default(0) @db.Decimal(14, 2)
+  sgstTotal        Decimal          @default(0) @db.Decimal(14, 2)
+  igstTotal        Decimal          @default(0) @db.Decimal(14, 2)
+  taxTotal         Decimal          @db.Decimal(14, 2)
+  roundOff         Decimal          @default(0) @db.Decimal(6, 2)
+  grandTotal       Decimal          @db.Decimal(14, 2)
+  pdfFileId        String?
+  lines            CreditNoteLine[]
+  createdById      String
+  createdAt        DateTime         @default(now())
 }
 
 model CreditNoteLine {
-  id           String         @id @default(cuid())
-  creditNoteId String
-  creditNote   CreditNote     @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
-  variantId    String
-  variant      ProductVariant @relation(fields: [variantId], references: [id])
-  batchId      String?
-  serialNos    String[]
-  qty          Int
-  rate         Decimal        @db.Decimal(14, 2)
-  amount       Decimal        @db.Decimal(14, 2)
-  gstRate      Decimal        @db.Decimal(5, 2)
+  id            String         @id @default(cuid())
+  creditNoteId  String
+  creditNote    CreditNote     @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
+  variantId     String
+  variant       ProductVariant @relation(fields: [variantId], references: [id])
+  invoiceLineId String?
+  sl            Int            @default(1)
+  description   String         @default("")
+  hsnCode       String         @default("")
+  unit          String         @default("pcs")
+  batchId       String?
+  batchNo       String?
+  expiryDate    DateTime?      @db.Date
+  powerLabel    String?
+  serialNos     String[]
+  qty           Int
+  rate          Decimal        @db.Decimal(14, 2)
+  discPct       Decimal        @default(0) @db.Decimal(5, 2)
+  amount        Decimal        @db.Decimal(14, 2)
+  gstRate       Decimal        @db.Decimal(5, 2)
+  cgstAmount    Decimal        @default(0) @db.Decimal(14, 2)
+  sgstAmount    Decimal        @default(0) @db.Decimal(14, 2)
+  igstAmount    Decimal        @default(0) @db.Decimal(14, 2)
 }
 
 enum PaymentMode {

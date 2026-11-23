@@ -9,3 +9,4 @@ export { getSettings, settingsView } from './services/settings';
 export { nextDocNumber } from './services/numbering';
 export { exportPriceSheet, previewPriceImport, type SheetTarget } from './services/price-sheets';
 export { resolveCustomerPrices } from './services/pricing';
+export { renderDocument, documentSource, type DocKind } from './services/sales/documents';

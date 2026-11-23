@@ -15,7 +15,7 @@
     "db:deploy": "pnpm --filter @kush/db migrate:deploy",
     "db:seed": "pnpm --filter @kush/db seed",
     "db:studio": "pnpm --filter @kush/db studio",
-    "db:seed:demo": "pnpm --filter @kush/db seed:demo",
+    "db:seed:demo": "pnpm --filter @kush/db seed:demo && pnpm --filter @kush/api seed:demo-sales",
     "setup:demo": "pnpm --filter @kush/db db:generate && pnpm db:deploy && pnpm db:seed && pnpm db:seed:demo",
     "preview": "pnpm --filter @kush/web build && pnpm --filter @kush/web start"
   },

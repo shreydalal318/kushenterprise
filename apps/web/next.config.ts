@@ -13,8 +13,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  transpilePackages: ['@kush/api', '@kush/core', '@kush/db'],
-  serverExternalPackages: ['@node-rs/argon2', '@prisma/client', '.prisma/client'],
+  transpilePackages: ['@kush/api', '@kush/core', '@kush/db', '@kush/pdf'],
+  serverExternalPackages: ['@node-rs/argon2', '@prisma/client', '.prisma/client', 'playwright-core', 'qrcode'],
   poweredByHeader: false,
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];

@@ -111,6 +111,7 @@ function PricingCard({ c }: { c: Customer }) {
         )}
         <p className="text-muted">{c._count.customPrices} special price(s) set for this customer.</p>
         {can('VIEW_PRICES_MARGINS') && <LinkButton variant="secondary" href={`/app/pricing?customer=${c.id}`}>Open in pricing workbench</LinkButton>}
+        <LinkButton variant="secondary" href={`/app/ledger/${c.id}`}>Account statement (ledger)</LinkButton>
         {assign.error && <p className="text-danger">{errorMessage(assign.error)}</p>}
       </CardBody>
     </Card>
