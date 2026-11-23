@@ -332,7 +332,7 @@ Open **http://localhost:3000** (or the Codespaces preview) and sign in:
 | Store staff (stock, scanning, products) | `sunita.store@demo.local` | `DemoStaff2026` |
 | Customer (Mobile OTP tab) | `90000 10001` | The 6-digit code is printed in the terminal running `pnpm dev` |
 
-`pnpm setup:demo` creates the database tables and loads the demo data: 3 suppliers, 30 products with 223 lens powers, 10 customers, 2 price lists, special prices, 638 units of opening stock, demo sales (orders, invoices, payments, a credit note) and demo purchase orders. Running it again does no harm.
+`pnpm setup:demo` creates `.env` if it is missing (with a random `AUTH_SECRET`), creates the database tables and loads the demo data: 3 suppliers, 30 products with 223 lens powers, 10 customers, 2 price lists, special prices, 638 units of opening stock, demo sales (orders, invoices, payments, a credit note) and demo purchase orders. Running it again does no harm.
 
 The demo sets the company state to Gujarat so GST can be worked out. Enter the real company profile in **Settings → Company**.
 
