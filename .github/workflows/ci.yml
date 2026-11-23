@@ -43,4 +43,5 @@ jobs:
       - run: pnpm --filter @kush/web exec playwright install --with-deps chromium
       - run: pnpm test
       - run: pnpm --filter @kush/web build
+      - run: pnpm --filter @kush/mobile export:web   # bundles every app screen
       - run: pnpm test:e2e

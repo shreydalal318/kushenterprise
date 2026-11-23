@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Kush Enterprise",
+    "slug": "kush-enterprise",
+    "scheme": "kushenterprise",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": { "image": "./assets/splash.png", "resizeMode": "contain", "backgroundColor": "#ffffff" },
+    "ios": {
+      "bundleIdentifier": "com.kushenterprise.app",
+      "supportsTablet": true,
+      "infoPlist": { "NSCameraUsageDescription": "The camera scans barcodes on lens boxes and products." }
+    },
+    "android": {
+      "package": "com.kushenterprise.app",
+      "adaptiveIcon": { "foregroundImage": "./assets/icon.png", "backgroundColor": "#ffffff" },
+      "permissions": ["android.permission.CAMERA"]
+    },
+    "web": { "bundler": "metro", "output": "single", "favicon": "./assets/icon.png" },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      ["expo-camera", { "cameraPermission": "The camera scans barcodes on lens boxes and products." }],
+      ["expo-notifications", { "color": "#147c79" }]
+    ],
+    "experiments": { "typedRoutes": false },
+    "extra": { "apiUrl": "http://localhost:3000" }
+  }
+}

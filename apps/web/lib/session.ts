@@ -8,7 +8,9 @@ import { isOwner, isStaff } from '@kush/core';
 
 /** The signed-in user for this request (deduplicated per render). */
 export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
-  const token = (await cookies()).get(AUTH.sessionCookie)?.value;
+  // Browsers send the session cookie; the mobile app sends its token as a Bearer header (PDF downloads).
+  const bearer = (await headers()).get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
+  const token = (await cookies()).get(AUTH.sessionCookie)?.value ?? bearer;
   return (await validateSessionToken(prisma, token))?.user ?? null;
 });
 

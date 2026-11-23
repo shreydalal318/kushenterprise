@@ -17,9 +17,43 @@ Brief: [`docs/00-original-brief.md`](docs/00-original-brief.md) · Stack: [`docs
 | 2 | Masters: products & lens powers, suppliers, customers, price lists, customer prices | ✅ done |
 | 3 | Inventory + barcodes: stock ledger, USB & camera scanning, GRN | ✅ done |
 | 4 | Sales: orders, proforma, Tally-style tax invoice, scan-to-invoice, payments | ✅ done |
-| **5** | **Purchase orders: reorder suggestions, PO PDF, receiving against a PO** | ✅ **done** (see below) |
-| 6 | Customer portal + mobile app | next |
-| 7–8 | Analytics & reports → Website | planned |
+| 5 | Purchase orders: reorder suggestions, PO PDF, receiving against a PO | ✅ done |
+| **6** | **Customer portal, notifications, mobile app (customer + staff)** | ✅ **done** (see below) |
+| 7 | Analytics, reports, Excel exports | next |
+| 8 | Public website | planned |
+
+### What Phase 6 delivers
+
+**Customer portal** (`/portal`, for doctors, hospitals and clinics; sign in with mobile OTP):
+- **Catalogue at their own price only** (special price → price list → default; never cost or other customers' rates). Filters: category, brand, lens type and **power**. Stock shows only as *Available*, *Limited* or *On request*, never quantities.
+- **Product page with a power grid**: set a quantity against each power and add them all at once.
+- **Cart and checkout**: delivery address, "for Dr. X" (hospital accounts), patient name, surgery date, note. Double-clicks and retries never create a second order.
+- **My orders**: status timeline (Placed → Confirmed → Packed → Dispatched → Delivered), courier and docket number, items still to be sent, linked invoices, and "Order the same again".
+- **Invoices**: tax invoices, proformas and credit notes to view or download as PDF.
+- **Account**: outstanding, overdue, ageing (0–30 / 31–60 / 61–90 / 90+), statement, and a **statement PDF** for any period.
+- **Profile**: registration details and addresses (kept by Kush Enterprise; the customer sends a change request, which reaches the owner and the assigned employee), and how they want to be kept informed.
+
+**Notifications**
+- In-app inbox for customers and staff (bell icon on both).
+- Events: an order placed from the portal or app reaches the owner and the assigned employee. Customers are told when their order is received, confirmed, packed, dispatched (with courier and docket), delivered, put on hold or cancelled, and when an invoice is raised or a payment is received.
+- External channels follow the customer's choice (phone push, SMS, WhatsApp, email) **and** the company switches in Settings → Notifications. Push uses the Expo push service. SMS uses the configured SMS provider. WhatsApp and email are logged until their provider accounts are set up (Phase 9).
+- Messages go out right after the event. A job endpoint (`POST /api/jobs/notifications` with `JOB_SECRET`) can also be called by a scheduler every few minutes as a safety net.
+
+**Mobile app** (`apps/mobile`, Expo for Android and iOS; one app, the mode depends on who signs in). See [`apps/mobile/README.md`](apps/mobile/README.md).
+- **Customer mode**: home, catalogue with power search, power grid, cart and checkout, order tracking, invoice and statement PDFs to share (WhatsApp, email, print), account and profile, notifications.
+- **Staff mode** (tabs follow the owner's permission ticks):
+  - **Scan to look up** (product, power, batch, expiry, stock by batch, FEFO pick).
+  - **Orders**: pending first, status steps, **pack & verify by scanning**, dispatch details.
+  - **Scan-to-invoice** at the customer's price with live GST.
+  - **Receive goods** by scanning GS1 codes, optionally against an open PO.
+  - **Stock check**.
+- **Camera scanning**: Code 128, QR, EAN/UPC and GS1 DataMatrix. A Bluetooth scanner works in the same field.
+- **Weak signal**: the catalogue and account are cached on the phone for a week. Customer orders and staff invoices made offline are queued and sent automatically when the signal returns, without duplicates.
+- **Security**: the session token is kept in the phone's secure keychain. The app sees exactly what the same login sees on the web (same server checks).
+
+**Not in this phase**
+- **Store builds and push notifications.** Publishing the Android/iOS store builds and turning on push both need your Expo (EAS) account, plus Google Play / Apple developer accounts. The steps are in `apps/mobile/README.md`.
+- **SMS / WhatsApp / email.** Real delivery needs the provider accounts and DLT templates (Phase 9).
 
 ### What Phase 5 delivers
 
@@ -250,7 +284,8 @@ apps/web            Next.js 16: public site, staff app (/app), customer portal (
 packages/api        tRPC routers, auth (password, OTP, sessions), permission middleware, services
 packages/core       Pure TypeScript: money/words (lakh-crore), dates & financial year, GST, permissions, validators
 packages/db         Prisma schema, migrations, seed
-packages/pdf        Invoice / proforma / credit-note PDF (HTML template from the Phase 0 mock-up → Chromium)
+apps/mobile         Expo app (Android + iOS): customer mode and staff mode
+packages/pdf        Invoice / proforma / credit-note / PO / statement PDFs (HTML templates from the Phase 0 mock-up → Chromium)
 design/             Phase 0 invoice mock-up generator (the approved layout used by packages/pdf)
 brand/              Logo files supplied with the brief (source/) + whitespace-trimmed copies
 docs/               Brief, architecture, schema/ER, screens per role
