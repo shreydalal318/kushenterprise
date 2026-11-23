@@ -1,0 +1,21 @@
+# GitHub Codespaces / VS Code dev container: the app and PostgreSQL side by side.
+# The app shares the database container's network, so DATABASE_URL in .env.example
+# (localhost:5432) works unchanged.
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm
+    volumes:
+      - ../..:/workspaces:cached
+    command: sleep infinity
+    network_mode: service:db
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kush
+      POSTGRES_PASSWORD: kush
+      POSTGRES_DB: kush
+    volumes:
+      - kush-pgdata:/var/lib/postgresql/data
+volumes:
+  kush-pgdata:

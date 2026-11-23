@@ -108,9 +108,21 @@ Brief: [`docs/00-original-brief.md`](docs/00-original-brief.md) · Stack: [`docs
 - **Branding**: theme in the logo colours, Inter font, favicon/app icons generated from `logo-icon.png` (clear at 16 px), stacked logo on the sign-in page, PWA manifest. Brand teal `#1A9E9A` is used for accents. Button and link text uses a slightly darker teal `#147C79`, because the brand teal on white is below the WCAG AA contrast minimum (3.3:1 against 4.5:1).
 - **Placeholder screens** for later phases. They appear in the menu with a "P2–P8" tag and follow the same permission rules.
 
+## Preview in your browser (nothing to install)
+
+Use **GitHub Codespaces**: the app and its database run on GitHub, and you use them in your web browser.
+
+1. Open the repository on GitHub and switch the branch selector to **`claude/awesome-ritchie-5gn9wa`**.
+2. Click **Code → Codespaces → Create codespace on claude/awesome-ritchie-5gn9wa**.
+3. Wait about 3–5 minutes the first time. It installs everything, creates the database and loads the demo data on its own.
+4. The app builds and starts in the terminal (`pnpm preview`). When it's ready, a **Kush Enterprise** preview opens. If it doesn't, open the **Ports** tab and click the globe icon next to port 3000.
+5. Sign in with the demo logins below.
+
+When you're done, stop the codespace (**Code → Codespaces → … → Stop**) so it doesn't use your free hours. Your data is kept until you delete the codespace.
+
 ## Running locally (with demo data)
 
-You need **Node.js 22+**, **Docker Desktop** (for the database) and **Git**.
+On your own computer you need **Node.js 22+**, **Docker Desktop** (for the database) and **Git**.
 
 ```bash
 git clone https://github.com/shreydalal318/kushenterprise.git
@@ -144,7 +156,7 @@ pnpm setup:demo
 pnpm dev
 ```
 
-Open **http://localhost:3000** and sign in:
+Open **http://localhost:3000** (or the Codespaces preview) and sign in:
 
 | Who | Login | Password |
 |---|---|---|

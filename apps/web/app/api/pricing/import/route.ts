@@ -1,6 +1,7 @@
 import { isOwner } from '@kush/core';
 import { prisma } from '@kush/db';
 import { previewPriceImport } from '@kush/api/server';
+import { isCrossSite } from '@/lib/same-origin';
 import { getSessionUser } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
@@ -13,8 +14,7 @@ const MAX_BYTES = 5 * 1024 * 1024;
 export async function POST(req: Request) {
   const user = await getSessionUser();
   if (!user || user.mustChangePassword || !isOwner(user)) return Response.json({ error: 'Only the owner can import prices' }, { status: 403 });
-  const origin = req.headers.get('origin');
-  if (origin && new URL(origin).host !== req.headers.get('host')) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  if (isCrossSite(req)) return Response.json({ error: 'Forbidden' }, { status: 403 });
   const url = new URL(req.url);
   const customerId = url.searchParams.get('customerId');
   const priceListId = url.searchParams.get('priceListId');

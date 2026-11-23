@@ -1,6 +1,7 @@
 import { isOwner } from '@kush/core';
 import { prisma } from '@kush/db';
 import { getSettings, logActivity, saveFile, sniffImageType } from '@kush/api/server';
+import { isCrossSite } from '@/lib/same-origin';
 import { getSessionUser } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
@@ -10,8 +11,7 @@ const MAX_BYTES = 1024 * 1024; // 1 MB is plenty for a signature/stamp
 export async function POST(req: Request) {
   const user = await getSessionUser();
   if (!user || !isOwner(user) || user.mustChangePassword) return Response.json({ error: 'Owner only' }, { status: 403 });
-  const origin = req.headers.get('origin');
-  if (origin && new URL(origin).host !== req.headers.get('host')) return Response.json({ error: 'Forbidden' }, { status: 403 });
+  if (isCrossSite(req)) return Response.json({ error: 'Forbidden' }, { status: 403 });
 
   const form = await req.formData().catch(() => null);
   const file = form?.get('file');

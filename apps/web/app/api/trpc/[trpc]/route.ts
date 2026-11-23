@@ -1,22 +1,11 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 import { appRouter, createContext } from '@kush/api/server';
+import { isCrossSite } from '@/lib/same-origin';
 
 export const dynamic = 'force-dynamic';
 
-/** Reject cross-site requests: cookies are SameSite=Lax, and this blocks the rest. */
-function crossSite(req: Request): boolean {
-  const origin = req.headers.get('origin');
-  if (!origin) return false; // same-origin GETs, server-to-server, native mobile app
-  const host = req.headers.get('x-forwarded-host') ?? req.headers.get('host');
-  try {
-    return new URL(origin).host !== host;
-  } catch {
-    return true;
-  }
-}
-
 const handler = (req: Request) => {
-  if (req.method === 'POST' && crossSite(req)) return new Response('Forbidden', { status: 403 });
+  if (req.method === 'POST' && isCrossSite(req)) return new Response('Forbidden', { status: 403 });
   return fetchRequestHandler({
     endpoint: '/api/trpc',
     req,
