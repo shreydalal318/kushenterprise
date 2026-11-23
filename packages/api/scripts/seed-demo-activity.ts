@@ -2,7 +2,8 @@
  * Demo sales and purchasing for development and UAT (never run in production): orders in every status,
  * tax invoices (intra- and inter-state, back-dated so ageing has something to show), one
  * cancelled invoice, a proforma, payments (full, part, on account), a credit note, and purchase
- * orders (sent & partly received, received, draft from reorder suggestions, cancelled).
+ * orders (sent & partly received, received, draft from reorder suggestions, cancelled), and website
+ * enquiries (leads) in different stages.
  * Runs through the real API procedures, so every figure is computed exactly as in the app.
  * Safe to re-run: finished steps are skipped. Needs `pnpm db:seed:demo` (masters + opening stock) first.
  */
@@ -188,9 +189,33 @@ async function seedPurchasing() {
   console.log(`Demo purchase orders ready: ${await prisma.purchaseOrder.count()} (sent & partly received, received, draft, cancelled).`);
 }
 
+/** Demo website enquiries (leads) in different stages, with in-app alerts for the owner. */
+async function seedLeads() {
+  if (await prisma.lead.count({ where: { ip: 'demo' } })) { console.log('Demo leads already loaded.'); return; }
+  const { notify } = await import('../src/notify');
+  const product = async (code: string) => (await prisma.product.findFirst({ where: { code }, select: { id: true } }))?.id;
+  const owners = (await prisma.user.findMany({ where: { role: 'OWNER', isActive: true }, select: { id: true } })).map((u) => u.id);
+  const leads = [
+    { name: 'Dr. Rohan Trivedi', organisation: 'Sight Plus Eye Hospital', type: 'HOSPITAL' as const, mobile: '+919000020001', email: 'purchase@sightplus.example', city: 'Bhavnagar', message: 'We do about 40 cataract surgeries a month. Please share rates for toric and monofocal IOLs and set up an account.', product: 'OC-T300', status: 'NEW' as const, hoursAgo: 3 },
+    { name: 'Dr. Neha Bansal', organisation: null, type: 'DOCTOR' as const, mobile: '+919000020002', email: null, city: 'Jamnagar', message: 'Need trifocal IOL +21.5 D for a surgery next Tuesday. Is it available?', product: 'OC-TV3', status: 'NEW' as const, hoursAgo: 20 },
+    { name: 'Mr. Kiran Shah', organisation: 'Navdrishti Eye Clinic', type: 'CLINIC' as const, mobile: '+919000020003', email: 'navdrishti@example.com', city: 'Anand', message: 'Looking for a monthly supply of viscoelastic and keratomes. Please call.', product: 'VG-SH14', status: 'CONTACTED' as const, hoursAgo: 52, notes: 'Called; sending price list for consumables. Follow up Friday.' },
+    { name: 'Ms. Pooja Iyer', organisation: 'Citycare Multispeciality', type: 'HOSPITAL' as const, mobile: '+919000020004', email: null, city: 'Vadodara', message: 'Enquiry about phaco instrument set.', product: 'TX-SET12', status: 'CLOSED' as const, hoursAgo: 140, notes: 'Already bought locally this quarter. Revisit in April.' },
+  ];
+  for (const l of leads) {
+    const pid = await product(l.product);
+    const created = new Date(Date.now() - l.hoursAgo * 3600_000);
+    await prisma.$transaction(async (tx) => {
+      const lead = await tx.lead.create({ data: { name: l.name, organisation: l.organisation, type: l.type, mobile: l.mobile, email: l.email, city: l.city, message: l.message, productIds: pid ? [pid] : [], status: l.status, notes: l.notes ?? null, sourcePath: pid ? `/products/${l.product}` : '/contact', ip: 'demo', createdAt: created } });
+      if (l.status === 'NEW') await notify(tx, { userIds: owners, title: `Website enquiry: ${l.organisation || l.name}`, body: `${l.name}, ${l.city} · ${l.mobile}: ${l.message.slice(0, 140)}`, link: `/app/leads?open=${lead.id}` });
+    });
+  }
+  console.log(`Demo leads ready: ${leads.length} website enquiries (2 new, 1 contacted, 1 closed).`);
+}
+
 async function main() {
   await seedSales();
   await seedPurchasing();
+  await seedLeads();
 }
 
 main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());
