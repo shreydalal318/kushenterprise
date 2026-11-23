@@ -11,3 +11,4 @@ export { exportPriceSheet, previewPriceImport, type SheetTarget } from './servic
 export { resolveCustomerPrices } from './services/pricing';
 export { renderDocument, renderStatement, documentSource, type DocKind } from './services/sales/documents';
 export { deliverQueued } from './notify';
+export { buildReportWorkbook, type SheetSpec } from './services/report-excel';

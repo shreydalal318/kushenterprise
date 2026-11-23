@@ -88,8 +88,8 @@ test.describe.serial('Phase 1 foundation', () => {
     await expect(page).toHaveURL(/\/app\?denied=1/);
     await expect(page.getByText("You don't have access to that page.", { exact: false })).toBeVisible();
 
-    const res = await page.goto('/app/analytics');
-    expect(res?.status()).toBe(404);
+    await page.goto('/app/analytics');
+    await expect(page).toHaveURL(/\/app\?denied=1/);
 
     await page.goto('/app/orders');
     await expect(page.getByRole('heading', { name: 'Orders', level: 1 })).toBeVisible();

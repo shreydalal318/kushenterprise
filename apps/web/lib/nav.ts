@@ -46,7 +46,7 @@ export const NAV: { section: string; items: NavItem[] }[] = [
       { href: '/app/leads', label: 'Leads', icon: ClipboardList, permission: 'MANAGE_CUSTOMERS', phase: 8 },
     ],
   },
-  { section: 'Insights', items: [{ href: '/app/analytics', label: 'Analytics', icon: BarChart3, permission: 'VIEW_ANALYTICS', phase: 7 }] },
+  { section: 'Insights', items: [{ href: '/app/analytics', label: 'Analytics & reports', icon: BarChart3, permission: 'VIEW_ANALYTICS' }] },
   {
     section: 'Admin',
     items: [

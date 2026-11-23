@@ -18,9 +18,45 @@ Brief: [`docs/00-original-brief.md`](docs/00-original-brief.md) · Stack: [`docs
 | 3 | Inventory + barcodes: stock ledger, USB & camera scanning, GRN | ✅ done |
 | 4 | Sales: orders, proforma, Tally-style tax invoice, scan-to-invoice, payments | ✅ done |
 | 5 | Purchase orders: reorder suggestions, PO PDF, receiving against a PO | ✅ done |
-| **6** | **Customer portal, notifications, mobile app (customer + staff)** | ✅ **done** (see below) |
-| 7 | Analytics, reports, Excel exports | next |
-| 8 | Public website | planned |
+| 6 | Customer portal, notifications, mobile app (customer + staff) | ✅ done |
+| **7** | **Owner dashboard, sales & margin analytics, GST reports, Excel exports** | ✅ **done** (see below) |
+| 8 | Public website | next |
+
+### What Phase 7 delivers
+
+**Sales figures throughout are before GST and net of returns (credit notes). Cancelled invoices never count.**
+
+- **Owner dashboard** (the home screen for anyone with the analytics permission):
+  - Sales today, this week and this month, with the month compared against the same days of last month. Invoices raised, orders and payments received.
+  - Outstanding and overdue.
+  - **30-day sales trend against the previous 30 days.**
+  - Orders waiting at each status.
+  - Stock: value at cost, low and out-of-stock counts, units and value expiring within the alert window, and expired units still on the shelf.
+  - Receivables ageing and the top overdue customers.
+  - Anything that would reveal cost is hidden from users who may not see costs.
+- **Staff home** (everyone else): their assigned orders (surgery dates highlighted), how many orders are waiting to pack or dispatch, and low-stock / expiring counts (counts only, no money).
+- **Sales analytics** for any period (this month, last month, last 30 days, this financial year, or custom dates): top products and customers, sales by category, brand and employee, and a daily / weekly / monthly trend.
+- **Margin analytics** (only for users who may see costs): gross margin by product and by customer. Cost is the purchase cost of the batch that was actually sold.
+- **GST (GSTR-1 shape)**:
+  - B2B invoices to registered buyers, rate-wise.
+  - B2C by place of supply and rate.
+  - Credit notes.
+  - **HSN summary** (HSN, UQC, quantity, taxable value, IGST / CGST / SGST).
+  - Built from the tax stored on each document, so it always matches the invoices.
+- **Reports with Excel export** (formatted sheets with filters and a totals row, ready for the accountant):
+  - Sales register: every invoice and credit note with its tax split. Cancelled invoices are shown at zero with the reason.
+  - GST summary: B2B, B2C, credit notes and HSN sheets.
+  - Sales analytics.
+  - **Stock summary**: per item opening, received, sold, returns, adjustments and closing.
+  - Outstanding and ageing.
+  - Expiry report.
+  - Low stock.
+  - Stock valuation at cost (owner only).
+- **Same rules as the screens**: every export goes through the same permission checks as the matching screen, so cost columns appear only for users who may see costs.
+
+Not in this phase:
+- **Tally XML export, e-invoice (IRN / QR) and e-way bill.** These are Phase 9 and need the GST portal / GSP credentials.
+- **PDF versions of the analytics screens.** Use the browser's print instead.
 
 ### What Phase 6 delivers
 

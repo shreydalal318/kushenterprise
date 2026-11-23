@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, Search } from 'lucide-react';
 import { formatDate, formatDateTime, ORDER_STATUS_LABEL, ORDER_STATUSES, type OrderStatus } from '@kush/core';
@@ -16,7 +17,8 @@ const sel = 'h-10 rounded-lg border border-line bg-white px-3 text-sm';
 export function OrderList() {
   const { can } = useMe();
   const [q, setQ] = useState('');
-  const [status, setStatus] = useState('');
+  const params = useSearchParams();
+  const [status, setStatus] = useState(params.get('status') ?? '');
   const [assignedToId, setAssigned] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
