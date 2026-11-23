@@ -1,0 +1,17 @@
+{
+  "name": "@kush/invoice-mockup",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Tally-style tax invoice mock-up generator (HTML -> A4 PDF) for layout approval",
+  "type": "module",
+  "scripts": {
+    "build": "node generate.mjs"
+  },
+  "dependencies": {
+    "@fontsource/inter": "^5.1.0",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}

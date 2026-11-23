@@ -1,0 +1,1092 @@
+// Kush Enterprise — database schema (PostgreSQL + Prisma)
+// Status: DRAFT FOR APPROVAL (Phase 0). Not yet wired into an app.
+//
+// Conventions
+// - Money: Decimal(14,2) in INR. Rates: Decimal(14,2). GST %: Decimal(5,2).
+// - Quantities: Int (pcs / box). Lens power: Decimal(5,2) dioptres (e.g. +21.50, -2.00).
+// - All timestamps stored in UTC; displayed in Asia/Kolkata.
+// - Catalogue tables carry updatedAt + deletedAt so the mobile app can delta-sync.
+// - Documents (invoice, proforma, PO, credit note) SNAPSHOT party details, descriptions,
+//   rates and tax so a later edit to a master never changes an issued document.
+// - Stock is a ledger (StockMovement); StockBalance is a cached roll-up updated in the
+//   same transaction, so scan-to-invoice reads one indexed row (< 300 ms target).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =====================================================================
+// 1. Identity, roles, permissions, audit
+// =====================================================================
+
+enum Role {
+  OWNER
+  EMPLOYEE
+  CUSTOMER
+}
+
+/// Checkbox permissions the owner grants per employee (OWNER implicitly has all).
+enum Permission {
+  VIEW_ORDERS
+  UPDATE_ORDER_STATUS
+  CREATE_ORDERS
+  CREATE_PROFORMA
+  CREATE_TAX_INVOICE
+  MANAGE_STOCK // stock adjustments, GRN
+  SCAN_DISPATCH
+  CREATE_PURCHASE_ORDERS
+  MANAGE_CUSTOMERS
+  VIEW_PRICES_MARGINS // see purchase cost, margins, price lists
+  VIEW_ANALYTICS
+  RECORD_PAYMENTS
+  MANAGE_PRODUCTS
+}
+
+model User {
+  id           String       @id @default(cuid())
+  role         Role
+  name         String
+  email        String?      @unique
+  mobile       String?      @unique // E.164, used for OTP login
+  passwordHash String? // argon2id; null for OTP-only customer logins
+  permissions  Permission[] // only meaningful for EMPLOYEE
+  isActive     Boolean      @default(true)
+  lastLoginAt  DateTime?
+
+  // A CUSTOMER user belongs to exactly one customer account (a hospital can have many logins).
+  customerId String?
+  customer   Customer? @relation("CustomerLogins", fields: [customerId], references: [id])
+
+  sessions          Session[]
+  otpCodes          OtpCode[]
+  devices           Device[]
+  notifications     Notification[]
+  activityLogs      ActivityLog[]
+  assignedCustomers Customer[]         @relation("AssignedEmployee")
+  assignedOrders    SalesOrder[]       @relation("OrderAssignee")
+  orderStatusEvents OrderStatusEvent[]
+  stockMovements    StockMovement[]
+  invoicesCreated   Invoice[]          @relation("InvoiceCreatedBy")
+  invoicesCancelled Invoice[]          @relation("InvoiceCancelledBy")
+  priceChanges      PriceChangeLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role, isActive])
+}
+
+model Session {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  @@index([userId])
+}
+
+model OtpCode {
+  id        String              @id @default(cuid())
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  channel   NotificationChannel
+  attempts  Int                 @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  @@index([userId, expiresAt])
+}
+
+/// Push-notification tokens for the mobile app.
+model Device {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform  String // ios | android | web
+  pushToken String   @unique
+  lastSeen  DateTime @default(now())
+}
+
+/// Who did what, when. Written for status changes, invoices, stock adjustments, price changes, logins.
+model ActivityLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  action     String // e.g. "invoice.create", "order.status", "stock.adjust", "price.update"
+  entityType String // "Invoice", "SalesOrder", "ProductVariant", ...
+  entityId   String
+  summary    String?
+  before     Json?
+  after      Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@index([createdAt])
+}
+
+// =====================================================================
+// 2. Settings, reference data, numbering
+// =====================================================================
+
+/// Single row (id = "company"). Placeholders until real details are supplied.
+model CompanySettings {
+  id                   String   @id @default("company")
+  legalName            String   @default("Kush Enterprise")
+  addressLine1         String   @default("[Company Address]")
+  addressLine2         String?
+  city                 String   @default("[City]")
+  pincode              String   @default("[PIN]")
+  stateCode            String   @default("XX") // GST state code, e.g. "24"
+  phone                String?
+  email                String?
+  gstin                String   @default("[GSTIN]")
+  pan                  String   @default("[PAN]")
+  drugLicenceNo        String   @default("[Drug Licence No]")
+  bankName             String   @default("[Bank Name]")
+  bankAccountNo        String   @default("[A/c No]")
+  bankIfsc             String   @default("[IFSC]")
+  bankBranch           String   @default("[Branch]")
+  upiId                String?
+  signatureFileId      String?
+  jurisdictionCity     String   @default("[City]")
+  invoiceDeclaration   String   @default("We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.")
+  defaultInvoiceTerms  String?
+  defaultPoTerms       String?
+  proformaValidityDays Int      @default(15)
+  expiryAlertDays      Int[]    @default([30, 60, 90])
+  defaultReorderLevel  Int      @default(5)
+  labelSizes           Json? // e.g. [{ "name": "50x25", "w": 50, "h": 25 }, ...]
+  notificationConfig   Json? // channel toggles; API secrets live in env/secret store, not here
+  updatedAt            DateTime @updatedAt
+}
+
+/// Indian states/UTs with GST state codes; drives CGST+SGST vs IGST.
+model State {
+  code      String     @id // "27"
+  name      String // "Maharashtra"
+  shortCode String // "MH"
+  customers Customer[]
+}
+
+enum DocType {
+  TAX_INVOICE
+  PROFORMA
+  PURCHASE_ORDER
+  CREDIT_NOTE
+  GRN
+  SALES_ORDER
+  PAYMENT_RECEIPT
+  DEBIT_NOTE
+}
+
+/// Per-financial-year numbering, e.g. KE/2026-27/0001. Allocated with SELECT ... FOR UPDATE.
+model NumberSeries {
+  id            String  @id @default(cuid())
+  docType       DocType
+  financialYear String // "2026-27"
+  prefix        String // "KE/" | "KE/PI/" | "KE/PO/"
+  nextNumber    Int     @default(1)
+  padding       Int     @default(4)
+
+  @@unique([docType, financialYear])
+}
+
+model FileAsset {
+  id        String   @id @default(cuid())
+  bucketKey String   @unique // S3 key
+  mimeType  String
+  sizeBytes Int
+  purpose   String // product-image | invoice-pdf | signature | po-pdf | ...
+  createdAt DateTime @default(now())
+}
+
+// =====================================================================
+// 3. Customers (Doctors / Hospitals / Clinics) & suppliers
+// =====================================================================
+
+enum CustomerType {
+  DOCTOR
+  HOSPITAL
+  CLINIC
+}
+
+model Customer {
+  id               String       @id @default(cuid())
+  code             String       @unique // CUST-0001
+  type             CustomerType
+  name             String
+  contactPerson    String?
+  mobile           String?
+  email            String?
+  stateCode        String
+  state            State        @relation(fields: [stateCode], references: [code])
+  gstin            String? // optional for individual doctors
+  pan              String?
+  drugLicenceNo    String?
+  creditLimit      Decimal?     @db.Decimal(14, 2)
+  paymentTermsDays Int          @default(30)
+  notes            String?
+  isActive         Boolean      @default(true)
+
+  /// Linked doctors under a hospital (Dr. X at Hospital Y).
+  parentId String?
+  parent   Customer?  @relation("HospitalDoctors", fields: [parentId], references: [id])
+  doctors  Customer[] @relation("HospitalDoctors")
+
+  assignedEmployeeId String?
+  assignedEmployee   User?   @relation("AssignedEmployee", fields: [assignedEmployeeId], references: [id])
+
+  priceListId String?
+  priceList   PriceList? @relation(fields: [priceListId], references: [id])
+
+  logins         User[]          @relation("CustomerLogins")
+  addresses      Address[]
+  customPrices   CustomerPrice[]
+  orders         SalesOrder[]    @relation("OrderCustomer")
+  ordersAsDoctor SalesOrder[]    @relation("OrderForDoctor")
+  proformas      Proforma[]
+  invoices       Invoice[]
+  creditNotes    CreditNote[]
+  payments       Payment[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([type])
+  @@index([name])
+  @@index([assignedEmployeeId])
+}
+
+enum AddressKind {
+  BILLING
+  SHIPPING
+}
+
+model Address {
+  id         String      @id @default(cuid())
+  customerId String
+  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  kind       AddressKind
+  label      String? // "Main OT", "Pharmacy"
+  line1      String
+  line2      String?
+  city       String
+  pincode    String
+  stateCode  String
+  gstin      String? // a branch can have its own GSTIN
+  isDefault  Boolean     @default(false)
+
+  @@index([customerId, kind])
+}
+
+model Supplier {
+  id               String  @id @default(cuid())
+  name             String
+  addressLine1     String
+  addressLine2     String?
+  city             String
+  pincode          String?
+  stateCode        String
+  gstin            String?
+  contactPerson    String?
+  mobile           String?
+  email            String?
+  paymentTermsDays Int     @default(30)
+  isActive         Boolean @default(true)
+
+  products       SupplierProduct[]
+  purchaseOrders PurchaseOrder[]
+  grns           Grn[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SupplierProduct {
+  supplierId       String
+  supplier         Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  productId        String
+  product          Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  supplierSku      String?
+  lastPurchaseRate Decimal?  @db.Decimal(14, 2)
+  lastPurchasedAt  DateTime?
+
+  @@id([supplierId, productId])
+}
+
+// =====================================================================
+// 4. Products, variants (lens powers), barcodes
+// =====================================================================
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique // IOL / Lens, Surgical Instrument, Consumable, Equipment
+  products  Product[]
+  updatedAt DateTime  @updatedAt
+}
+
+model Brand {
+  id           String    @id @default(cuid())
+  name         String    @unique
+  manufacturer String?
+  products     Product[]
+  updatedAt    DateTime  @updatedAt
+}
+
+enum LensType {
+  MONOFOCAL
+  TORIC
+  MULTIFOCAL
+  EDOF
+}
+
+/// Model-level product (e.g. "LumaVue HA-600"). Pricing lives here; stock lives on variants.
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  brandId     String?
+  brand       Brand?   @relation(fields: [brandId], references: [id])
+  model       String?
+  hsnCode     String
+  gstRate     Decimal  @db.Decimal(5, 2)
+  unit        String   @default("pcs")
+  description String?
+  imageIds    String[]
+
+  purchaseCost Decimal @db.Decimal(14, 2) // owner / VIEW_PRICES_MARGINS only
+  defaultRate  Decimal @db.Decimal(14, 2)
+  mrp          Decimal @db.Decimal(14, 2)
+  reorderLevel Int?
+
+  trackBatch  Boolean @default(true)
+  trackExpiry Boolean @default(true)
+  trackSerial Boolean @default(false) // most IOLs carry a unique serial per lens
+
+  // Lens attributes (null for non-lens products)
+  isLens       Boolean   @default(false)
+  lensType     LensType?
+  material     String? // hydrophobic acrylic, hydrophilic, PMMA...
+  aConstant    Decimal?  @db.Decimal(6, 2)
+  opticSizeMm  Decimal?  @db.Decimal(4, 2)
+  overallLenMm Decimal?  @db.Decimal(4, 2)
+  preloaded    Boolean?
+
+  isActive      Boolean @default(true)
+  showOnWebsite Boolean @default(true)
+
+  variants       ProductVariant[]
+  priceListItems PriceListItem[]
+  customerPrices CustomerPrice[]
+  supplierLinks  SupplierProduct[]
+  priceChanges   PriceChangeLog[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([updatedAt])
+}
+
+/// Stockable SKU. A lens model has one variant per power (and cylinder for torics);
+/// an instrument usually has a single variant.
+model ProductVariant {
+  id           String   @id @default(cuid())
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku          String   @unique
+  powerSph     Decimal? @db.Decimal(5, 2) // dioptres, filterable
+  cylinder     Decimal? @db.Decimal(4, 2) // toric only
+  addPower     Decimal? @db.Decimal(4, 2) // multifocal add
+  label        String? // "+21.50 D", "Size M"
+  barcode      String   @unique // our own Code 128 value
+  gtin         String?  @unique // manufacturer GS1 GTIN-14
+  // Optional per-variant overrides of product pricing (rare)
+  purchaseCost Decimal? @db.Decimal(14, 2)
+  mrp          Decimal? @db.Decimal(14, 2)
+  reorderLevel Int?
+  isActive     Boolean  @default(true)
+
+  aliases         BarcodeAlias[]
+  batches         Batch[]
+  balances        StockBalance[]
+  movements       StockMovement[]
+  orderLines      SalesOrderLine[]
+  proformaLines   ProformaLine[]
+  invoiceLines    InvoiceLine[]
+  poLines         PurchaseOrderLine[]
+  grnLines        GrnLine[]
+  creditNoteLines CreditNoteLine[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([productId, powerSph])
+  @@index([updatedAt])
+}
+
+/// "Map this unknown barcode to a product once" — any scanned code (EAN, vendor code, DataMatrix payload).
+model BarcodeAlias {
+  code        String         @id
+  variantId   String
+  variant     ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  symbology   String? // EAN13, CODE128, DATAMATRIX, QR
+  createdById String?
+  createdAt   DateTime       @default(now())
+}
+
+// =====================================================================
+// 5. Pricing — Customer override → Customer's price list → Default rate
+// =====================================================================
+
+model PriceList {
+  id          String          @id @default(cuid())
+  name        String          @unique // "Govt hospitals", "Private clinics – Tier A"
+  description String?
+  isActive    Boolean         @default(true)
+  items       PriceListItem[]
+  customers   Customer[]
+  updatedAt   DateTime        @updatedAt
+}
+
+model PriceListItem {
+  id          String    @id @default(cuid())
+  priceListId String
+  priceList   PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  rate        Decimal   @db.Decimal(14, 2)
+  validFrom   DateTime?
+  validTo     DateTime?
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([priceListId, productId, validFrom])
+  @@index([productId])
+}
+
+model CustomerPrice {
+  id         String    @id @default(cuid())
+  customerId String
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  rate       Decimal   @db.Decimal(14, 2)
+  validFrom  DateTime?
+  validTo    DateTime?
+  updatedAt  DateTime  @updatedAt
+
+  @@unique([customerId, productId, validFrom])
+  @@index([productId])
+}
+
+/// Append-only history of every rate change (default, price list or customer override).
+model PriceChangeLog {
+  id          String    @id @default(cuid())
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id])
+  scope       String // DEFAULT | MRP | COST | PRICE_LIST | CUSTOMER
+  scopeRefId  String? // priceListId or customerId
+  oldRate     Decimal?  @db.Decimal(14, 2)
+  newRate     Decimal?  @db.Decimal(14, 2)
+  validFrom   DateTime?
+  validTo     DateTime?
+  changedById String
+  changedBy   User      @relation(fields: [changedById], references: [id])
+  source      String? // ui | excel-import
+  createdAt   DateTime  @default(now())
+
+  @@index([productId, createdAt])
+}
+
+// =====================================================================
+// 6. Inventory — batches, serials, ledger, balances
+// =====================================================================
+
+model Location {
+  id        String          @id @default(cuid())
+  name      String          @unique // "Main store", "Rack A-3", "Van 1"
+  isDefault Boolean         @default(false)
+  balances  StockBalance[]
+  movements StockMovement[]
+}
+
+model Batch {
+  id         String          @id @default(cuid())
+  variantId  String
+  variant    ProductVariant  @relation(fields: [variantId], references: [id])
+  batchNo    String
+  expiryDate DateTime?       @db.Date
+  mfgDate    DateTime?       @db.Date
+  unitCost   Decimal?        @db.Decimal(14, 2) // landed cost for valuation
+  serials    SerialUnit[]
+  balances   StockBalance[]
+  movements  StockMovement[]
+  createdAt  DateTime        @default(now())
+
+  @@unique([variantId, batchNo])
+  @@index([expiryDate]) // expiry alerts, FEFO
+}
+
+enum SerialStatus {
+  IN_STOCK
+  RESERVED
+  SOLD
+  RETURNED
+  RETURNED_TO_SUPPLIER
+  WRITTEN_OFF
+}
+
+model SerialUnit {
+  id            String       @id @default(cuid())
+  batchId       String
+  batch         Batch        @relation(fields: [batchId], references: [id])
+  serialNo      String
+  status        SerialStatus @default(IN_STOCK)
+  locationId    String?
+  invoiceLineId String? // where it was sold (traceability / recalls)
+  updatedAt     DateTime     @updatedAt
+
+  @@unique([batchId, serialNo])
+  @@index([serialNo])
+}
+
+/// Cached on-hand quantity per variant + batch + location (updated transactionally with StockMovement).
+model StockBalance {
+  variantId  String
+  variant    ProductVariant @relation(fields: [variantId], references: [id])
+  batchId    String
+  batch      Batch          @relation(fields: [batchId], references: [id])
+  locationId String
+  location   Location       @relation(fields: [locationId], references: [id])
+  qty        Int            @default(0)
+  reserved   Int            @default(0) // allocated to confirmed orders, not yet invoiced
+  updatedAt  DateTime       @updatedAt
+
+  @@id([variantId, batchId, locationId])
+  @@index([variantId])
+}
+
+enum MovementType {
+  OPENING
+  GRN // purchase receipt
+  SALE // tax invoice
+  SALES_RETURN // credit note
+  PURCHASE_RETURN // return to supplier
+  ADJUSTMENT
+  TRANSFER_OUT
+  TRANSFER_IN
+  INVOICE_CANCEL // reversal of a cancelled invoice
+}
+
+enum AdjustmentReason {
+  DAMAGED
+  EXPIRED
+  SAMPLE
+  CORRECTION
+  LOST
+}
+
+/// Immutable stock ledger. Opening/purchases/sales/returns/adjustments → closing balance per item.
+model StockMovement {
+  id          String            @id @default(cuid())
+  type        MovementType
+  variantId   String
+  variant     ProductVariant    @relation(fields: [variantId], references: [id])
+  batchId     String
+  batch       Batch             @relation(fields: [batchId], references: [id])
+  locationId  String
+  location    Location          @relation(fields: [locationId], references: [id])
+  qty         Int // +in / -out
+  serialNos   String[]
+  unitCost    Decimal?          @db.Decimal(14, 2)
+  reason      AdjustmentReason? // required when type = ADJUSTMENT (enforced in service)
+  note        String?
+  refType     String? // Invoice | Grn | CreditNote | PurchaseReturn
+  refId       String?
+  createdById String
+  createdBy   User              @relation(fields: [createdById], references: [id])
+  createdAt   DateTime          @default(now())
+
+  @@index([variantId, createdAt])
+  @@index([batchId])
+  @@index([refType, refId])
+}
+
+// =====================================================================
+// 7. Sales — orders, dispatch, proforma, tax invoice, credit notes, payments
+// =====================================================================
+
+enum OrderStatus {
+  PLACED
+  CONFIRMED
+  PACKED
+  DISPATCHED
+  DELIVERED
+  CANCELLED
+  ON_HOLD
+}
+
+enum OrderSource {
+  PORTAL
+  MOBILE_APP
+  STAFF // phone / WhatsApp order entered by staff
+}
+
+model SalesOrder {
+  id                String      @id @default(cuid())
+  number            String      @unique // SO-2026-00412
+  customerId        String
+  customer          Customer    @relation("OrderCustomer", fields: [customerId], references: [id])
+  forDoctorId       String? // "for Dr. X at Hospital Y"
+  forDoctor         Customer?   @relation("OrderForDoctor", fields: [forDoctorId], references: [id])
+  status            OrderStatus @default(PLACED)
+  source            OrderSource
+  shippingAddressId String?
+  shippingSnapshot  Json? // address as at order time
+  customerNote      String?
+  patientName       String?
+  surgeryDate       DateTime?   @db.Date
+  placedById        String
+  assignedToId      String?
+  assignedTo        User?       @relation("OrderAssignee", fields: [assignedToId], references: [id])
+  clientRequestId   String?     @unique // idempotency key for offline/mobile submits
+
+  lines      SalesOrderLine[]
+  events     OrderStatusEvent[]
+  dispatches Dispatch[]
+  proformas  Proforma[]
+  invoices   Invoice[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([customerId, createdAt])
+  @@index([assignedToId])
+}
+
+model SalesOrderLine {
+  id            String         @id @default(cuid())
+  orderId       String
+  order         SalesOrder     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variantId     String
+  variant       ProductVariant @relation(fields: [variantId], references: [id])
+  qty           Int
+  qtyDispatched Int            @default(0) // qty - qtyDispatched = back-order
+  rate          Decimal        @db.Decimal(14, 2) // resolved customer price at order time
+  discPct       Decimal        @default(0) @db.Decimal(5, 2)
+  note          String?
+}
+
+model OrderStatusEvent {
+  id        String      @id @default(cuid())
+  orderId   String
+  order     SalesOrder  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    OrderStatus
+  note      String?
+  byUserId  String
+  byUser    User        @relation(fields: [byUserId], references: [id])
+  createdAt DateTime    @default(now())
+
+  @@index([orderId, createdAt])
+}
+
+model Dispatch {
+  id           String     @id @default(cuid())
+  orderId      String
+  order        SalesOrder @relation(fields: [orderId], references: [id])
+  invoiceId    String?    @unique
+  invoice      Invoice?   @relation(fields: [invoiceId], references: [id])
+  courier      String?
+  docketNo     String? // docket / LR no.
+  vehicleNo    String?
+  dispatchDate DateTime   @db.Date
+  scanVerified Boolean    @default(false) // packed items matched order by scan
+  createdAt    DateTime   @default(now())
+}
+
+enum ProformaStatus {
+  DRAFT
+  SENT
+  CONVERTED
+  EXPIRED
+  CANCELLED
+}
+
+model Proforma {
+  id                String         @id @default(cuid())
+  number            String         @unique // KE/PI/2026-27/0001
+  financialYear     String
+  date              DateTime       @db.Date
+  validUntil        DateTime       @db.Date
+  status            ProformaStatus @default(DRAFT)
+  customerId        String
+  customer          Customer       @relation(fields: [customerId], references: [id])
+  orderId           String?
+  order             SalesOrder?    @relation(fields: [orderId], references: [id])
+  buyerSnapshot     Json
+  consigneeSnapshot Json
+  placeOfSupply     String // state code
+  terms             String?
+  taxableTotal      Decimal        @db.Decimal(14, 2)
+  taxTotal          Decimal        @db.Decimal(14, 2)
+  roundOff          Decimal        @db.Decimal(6, 2)
+  grandTotal        Decimal        @db.Decimal(14, 2)
+  pdfFileId         String?
+  lines             ProformaLine[]
+  invoice           Invoice?
+  createdById       String
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+}
+
+model ProformaLine {
+  id          String         @id @default(cuid())
+  proformaId  String
+  proforma    Proforma       @relation(fields: [proformaId], references: [id], onDelete: Cascade)
+  sl          Int
+  variantId   String
+  variant     ProductVariant @relation(fields: [variantId], references: [id])
+  description String
+  hsnCode     String
+  qty         Int
+  unit        String
+  rate        Decimal        @db.Decimal(14, 2)
+  discPct     Decimal        @default(0) @db.Decimal(5, 2)
+  amount      Decimal        @db.Decimal(14, 2)
+  gstRate     Decimal        @db.Decimal(5, 2)
+}
+
+enum InvoiceStatus {
+  ISSUED
+  CANCELLED // never deleted
+}
+
+enum TaxType {
+  INTRA_STATE // CGST + SGST
+  INTER_STATE // IGST
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  number        String        @unique // KE/2026-27/0001
+  financialYear String
+  date          DateTime      @db.Date
+  dueDate       DateTime      @db.Date
+  status        InvoiceStatus @default(ISSUED)
+  taxType       TaxType
+  customerId    String
+  customer      Customer      @relation(fields: [customerId], references: [id])
+  orderId       String?
+  order         SalesOrder?   @relation(fields: [orderId], references: [id])
+  proformaId    String?       @unique
+  proforma      Proforma?     @relation(fields: [proformaId], references: [id])
+
+  // Snapshots — the PDF is always reproducible exactly as issued.
+  supplierSnapshot  Json
+  buyerSnapshot     Json
+  consigneeSnapshot Json
+  placeOfSupply     String // state code
+
+  // Tally right-side grid
+  deliveryNote      String?
+  paymentTerms      String?
+  referenceNo       String?
+  otherReferences   String?
+  buyersOrderNo     String?
+  buyersOrderDate   DateTime? @db.Date
+  dispatchDocNo     String?
+  deliveryNoteDate  DateTime? @db.Date
+  dispatchedThrough String?
+  destination       String?
+  termsOfDelivery   String?
+
+  taxableTotal Decimal @db.Decimal(14, 2)
+  cgstTotal    Decimal @default(0) @db.Decimal(14, 2)
+  sgstTotal    Decimal @default(0) @db.Decimal(14, 2)
+  igstTotal    Decimal @default(0) @db.Decimal(14, 2)
+  roundOff     Decimal @default(0) @db.Decimal(6, 2)
+  grandTotal   Decimal @db.Decimal(14, 2)
+  amountPaid   Decimal @default(0) @db.Decimal(14, 2) // maintained from PaymentAllocation
+
+  cancelReason  String?
+  cancelledAt   DateTime?
+  cancelledById String?
+  cancelledBy   User?     @relation("InvoiceCancelledBy", fields: [cancelledById], references: [id])
+
+  // Phase 2: e-invoice / e-way bill readiness
+  irn        String?
+  ackNo      String?
+  ackDate    DateTime?
+  signedQr   String?
+  ewayBillNo String?
+
+  pdfFileId       String?
+  clientRequestId String? @unique // idempotency for offline scan-to-invoice
+  createdById     String
+  createdBy       User    @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
+
+  lines       InvoiceLine[]
+  allocations PaymentAllocation[]
+  creditNotes CreditNote[]
+  dispatch    Dispatch?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([customerId, date])
+  @@index([date])
+  @@index([status])
+}
+
+model InvoiceLine {
+  id          String         @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice        @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  sl          Int
+  variantId   String
+  variant     ProductVariant @relation(fields: [variantId], references: [id])
+  batchId     String?
+  description String // snapshot
+  hsnCode     String
+  qty         Int
+  unit        String
+  rate        Decimal        @db.Decimal(14, 2) // price actually charged (history preserved)
+  discPct     Decimal        @default(0) @db.Decimal(5, 2)
+  amount      Decimal        @db.Decimal(14, 2) // taxable value
+  gstRate     Decimal        @db.Decimal(5, 2)
+  cgstAmount  Decimal        @default(0) @db.Decimal(14, 2)
+  sgstAmount  Decimal        @default(0) @db.Decimal(14, 2)
+  igstAmount  Decimal        @default(0) @db.Decimal(14, 2)
+  costAtSale  Decimal?       @db.Decimal(14, 2) // for margin analytics
+  // Printed under the description
+  batchNo     String?
+  expiryDate  DateTime?      @db.Date
+  powerLabel  String?
+  serialNos   String[]
+}
+
+model CreditNote {
+  id            String           @id @default(cuid())
+  number        String           @unique // KE/CN/2026-27/0001
+  financialYear String
+  date          DateTime         @db.Date
+  customerId    String
+  customer      Customer         @relation(fields: [customerId], references: [id])
+  invoiceId     String?
+  invoice       Invoice?         @relation(fields: [invoiceId], references: [id])
+  reason        String
+  restock       Boolean          @default(true) // sales return puts goods back into stock
+  taxableTotal  Decimal          @db.Decimal(14, 2)
+  taxTotal      Decimal          @db.Decimal(14, 2)
+  grandTotal    Decimal          @db.Decimal(14, 2)
+  pdfFileId     String?
+  lines         CreditNoteLine[]
+  createdById   String
+  createdAt     DateTime         @default(now())
+}
+
+model CreditNoteLine {
+  id           String         @id @default(cuid())
+  creditNoteId String
+  creditNote   CreditNote     @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
+  variantId    String
+  variant      ProductVariant @relation(fields: [variantId], references: [id])
+  batchId      String?
+  serialNos    String[]
+  qty          Int
+  rate         Decimal        @db.Decimal(14, 2)
+  amount       Decimal        @db.Decimal(14, 2)
+  gstRate      Decimal        @db.Decimal(5, 2)
+}
+
+enum PaymentMode {
+  CASH
+  UPI
+  NEFT_RTGS
+  CHEQUE
+  CARD
+  OTHER
+}
+
+model Payment {
+  id          String              @id @default(cuid())
+  number      String              @unique
+  customerId  String
+  customer    Customer            @relation(fields: [customerId], references: [id])
+  date        DateTime            @db.Date
+  amount      Decimal             @db.Decimal(14, 2)
+  mode        PaymentMode
+  reference   String? // UTR / cheque no.
+  note        String?
+  allocations PaymentAllocation[]
+  createdById String
+  createdAt   DateTime            @default(now())
+
+  @@index([customerId, date])
+}
+
+/// Which invoices a payment settles (drives outstanding + ageing 0–30 / 31–60 / 61–90 / 90+).
+model PaymentAllocation {
+  paymentId String
+  payment   Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id])
+  amount    Decimal @db.Decimal(14, 2)
+
+  @@id([paymentId, invoiceId])
+}
+
+// =====================================================================
+// 8. Purchasing — PO, GRN, returns to supplier
+// =====================================================================
+
+enum PoStatus {
+  DRAFT
+  SENT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CLOSED
+  CANCELLED
+}
+
+model PurchaseOrder {
+  id            String              @id @default(cuid())
+  number        String              @unique // KE/PO/2026-27/0001
+  financialYear String
+  date          DateTime            @db.Date
+  supplierId    String
+  supplier      Supplier            @relation(fields: [supplierId], references: [id])
+  status        PoStatus            @default(DRAFT)
+  expectedDate  DateTime?           @db.Date
+  terms         String?
+  taxableTotal  Decimal             @db.Decimal(14, 2)
+  taxTotal      Decimal             @db.Decimal(14, 2)
+  grandTotal    Decimal             @db.Decimal(14, 2)
+  pdfFileId     String?
+  sentAt        DateTime?
+  lines         PurchaseOrderLine[]
+  grns          Grn[]
+  createdById   String
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([status])
+}
+
+model PurchaseOrderLine {
+  id           String         @id @default(cuid())
+  poId         String
+  po           PurchaseOrder  @relation(fields: [poId], references: [id], onDelete: Cascade)
+  sl           Int
+  variantId    String
+  variant      ProductVariant @relation(fields: [variantId], references: [id])
+  description  String
+  hsnCode      String
+  qtyOrdered   Int
+  qtyReceived  Int            @default(0) // shortfall = ordered - received stays open
+  unit         String
+  rate         Decimal        @db.Decimal(14, 2)
+  gstRate      Decimal        @db.Decimal(5, 2)
+  amount       Decimal        @db.Decimal(14, 2)
+  expectedDate DateTime?      @db.Date
+}
+
+model Grn {
+  id                  String         @id @default(cuid())
+  number              String         @unique
+  date                DateTime       @db.Date
+  supplierId          String
+  supplier            Supplier       @relation(fields: [supplierId], references: [id])
+  poId                String?
+  po                  PurchaseOrder? @relation(fields: [poId], references: [id])
+  supplierInvoiceNo   String?
+  supplierInvoiceDate DateTime?      @db.Date
+  lines               GrnLine[]
+  createdById         String
+  createdAt           DateTime       @default(now())
+}
+
+model GrnLine {
+  id         String         @id @default(cuid())
+  grnId      String
+  grn        Grn            @relation(fields: [grnId], references: [id], onDelete: Cascade)
+  poLineId   String?
+  variantId  String
+  variant    ProductVariant @relation(fields: [variantId], references: [id])
+  batchNo    String
+  expiryDate DateTime?      @db.Date
+  serialNos  String[]
+  qty        Int
+  rate       Decimal        @db.Decimal(14, 2)
+  locationId String
+}
+
+// =====================================================================
+// 9. Notifications & website leads
+// =====================================================================
+
+enum NotificationChannel {
+  IN_APP
+  PUSH
+  SMS
+  WHATSAPP
+  EMAIL
+}
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   NotificationChannel
+  title     String
+  body      String
+  link      String? // deep link, e.g. /orders/SO-2026-00412
+  status    String              @default("queued") // queued | sent | failed
+  readAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  @@index([userId, readAt])
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  CONVERTED
+  CLOSED
+}
+
+/// Website enquiry form submissions.
+model Lead {
+  id                  String        @id @default(cuid())
+  name                String
+  organisation        String?
+  type                CustomerType?
+  mobile              String
+  email               String?
+  city                String?
+  message             String
+  productIds          String[]
+  status              LeadStatus    @default(NEW)
+  convertedCustomerId String?
+  createdAt           DateTime      @default(now())
+}
