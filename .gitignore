@@ -7,7 +7,8 @@ node_modules/
 dist/
 .turbo/
 coverage/
-storage/
+/storage/
+apps/web/storage/
 test-results/
 playwright-report/
 next-env.d.ts
