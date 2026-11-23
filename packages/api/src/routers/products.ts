@@ -24,14 +24,16 @@ function conflict(e: unknown, what: string): never {
 const variantSelect = {
   id: true, sku: true, powerSph: true, cylinder: true, addPower: true, label: true, barcode: true, gtin: true,
   purchaseCost: true, mrp: true, reorderLevel: true, isActive: true,
+  aliases: { select: { code: true }, orderBy: { createdAt: 'asc' } },
 } as const;
 
 type VariantRow = Prisma.ProductVariantGetPayload<{ select: typeof variantSelect }>;
-const variantView = (v: VariantRow, showCost: boolean) => ({
+const variantView = ({ aliases: _a, ...v }: VariantRow, showCost: boolean) => ({
   ...v,
   powerSph: numOrNull(v.powerSph), cylinder: numOrNull(v.cylinder), addPower: numOrNull(v.addPower),
   mrp: numOrNull(v.mrp),
   purchaseCost: showCost ? numOrNull(v.purchaseCost) : undefined,
+  linkedCodes: _a.map((a) => a.code),
 });
 
 /** Settings-driven checks that zod can't do (GST rate and unit come from Settings). */

@@ -115,14 +115,6 @@ export const notificationSettingsInput = z.object({
   expiryToOwner: z.boolean(),
 });
 
-export const labelSizeSchema = z.object({
-  name: trimmed(40).min(1),
-  widthMm: z.coerce.number().min(10).max(300),
-  heightMm: z.coerce.number().min(10).max(300),
-  perSheet: z.coerce.number().int().min(1).max(200).default(1),
-});
-export const labelSettingsInput = z.object({ labelSizes: z.array(labelSizeSchema).min(1).max(20) });
-
 export const numberSeriesUpdateInput = z.object({
   docType: z.enum(DOC_TYPES),
   financialYear: z.string().regex(/^\d{4}-\d{2}$/),
@@ -145,3 +137,4 @@ export const activityListInput = z.object({
 });
 
 export * from './schemas-masters';
+export * from './schemas-inventory';

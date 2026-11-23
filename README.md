@@ -14,9 +14,43 @@ Brief: [`docs/00-original-brief.md`](docs/00-original-brief.md) · Stack: [`docs
 |---|---|---|
 | 0 | Design approval: schema, screens, invoice mock-up | ✅ approved |
 | 1 | Foundation: schema, auth, roles & permissions, settings, branding | ✅ done |
-| **2** | **Masters: products & lens powers, suppliers, customers, price lists, customer prices** | ✅ **done** (see below) |
-| 3 | Inventory + barcodes: stock ledger, labels, USB & camera scanning, GRN | next |
-| 4–8 | Sales & invoices → POs → Portal & mobile → Analytics → Website | planned |
+| 2 | Masters: products & lens powers, suppliers, customers, price lists, customer prices | ✅ done |
+| **3** | **Inventory + barcodes: stock ledger, USB & camera scanning, GRN** | ✅ **done** (see below) |
+| 4 | Sales: orders, proforma, Tally-style tax invoice, scan-to-invoice, payments | next |
+| 5–8 | POs → Portal & mobile → Analytics → Website | planned |
+
+### What Phase 3 delivers
+
+- **No barcode stickers.** At the owner's request, items are scanned by the barcode the manufacturer printed on the box, so there is no label printing.
+  - Each item's barcode is linked once. A GS1 or EAN code is stored as the item's GTIN; any other maker's code is saved as a linked code.
+  - Barcodes can be linked from the variant editor, or by scanning an unknown box on the Scan or Receive screen.
+  - Every goods receipt lists any items that still have no barcode linked.
+- **Scanning** works with USB/Bluetooth scanners (the scan field keeps focus) and with the camera on phones and tablets.
+  - The camera uses the browser's built-in detector where available (Chrome on Android), otherwise ZXing.
+  - GS1 DataMatrix / GS1-128 codes are read for GTIN (01), batch (10), expiry (17, where day 00 means end of month) and serial (21), including the `]d2` prefix and different GS separator characters.
+  - Plain EAN/UPC codes, linked maker's codes and serial numbers can also be scanned.
+  - A beep or vibration confirms each scan; a different tone warns of an unknown code, an expired batch, no stock, or a serial that isn't in stock.
+  - Lookups take a few milliseconds (the 300 ms target is checked in the tests).
+- **Goods receipt (GRN) and opening stock**
+  - Scanning a box fills in the batch, expiry and serial. Scanning the same batch again adds a unit and its serial; a duplicate serial is caught.
+  - Expired goods are refused.
+  - Batch, expiry and serial rules follow each product's tracking switches.
+  - Purchase rates are only taken from users who may see costs.
+  - GRN numbers run per financial year.
+- **Stock ledger**: an append-only record of every movement. Each movement updates the stock balance atomically, and **stock can never go negative** (the whole transaction rolls back if it would).
+  - Each serial unit is tracked from receipt to sale or return.
+  - Ledger per item: opening balance, purchases, sales, returns, adjustments, running balance and closing balance, with date filters.
+- **Status badges** (In stock / Low / Out / Expiring soon) on every item, with a reorder level for each variant, product or the settings default.
+  - Lens powers that were never stocked don't raise false "out of stock" alerts.
+- **FEFO**: the earliest-expiring unexpired batch is suggested for picking; expired batches are never suggested.
+- **Reports**
+  - Expiring within 30/60/90 days, plus already expired. Values are shown to cost viewers only.
+  - Low stock, with the usual supplier.
+  - **Stock valuation at cost (owner only)**.
+- **Adjustments** require a reason (damaged, expired, sample, correction, lost). Removing serial-tracked units means choosing which serials.
+- **Returns to supplier** get a debit-note number, and the returned serials are marked accordingly.
+- **Locations**: a default "Main store", with stock tracked by location.
+- **Demo stock**: an opening-stock entry with 76 lines and 638 units, including one batch expiring soon and one already expired.
 
 ### What Phase 2 delivers
 

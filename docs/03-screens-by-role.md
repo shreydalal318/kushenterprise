@@ -69,7 +69,7 @@ The menu shows only what the owner has ticked for that employee.
 | S15 | **Stock adjustment** | MANAGE_STOCK | Quantity ±, **reason required** (damaged / expired / sample / correction / lost) |
 | S16 | **Expiry report** | MANAGE_STOCK | Expiring in 30 / 60 / 90 days, with value shown only if VIEW_PRICES_MARGINS |
 | S17 | **Low-stock list** | MANAGE_STOCK | Items below reorder level, with a "Create PO" shortcut |
-| S18 | **Label printing** | MANAGE_STOCK | Choose variants or batches → Code 128 / QR labels. Templates 50×25 mm, 38×25 mm and A4 sticker sheet. Fields: name, power, batch, expiry, MRP, barcode |
+| S18 | ~~Label printing~~ | n/a | **Dropped at the owner's request (Phase 3):** no stickers are printed. Items are scanned by the manufacturer's barcode, linked to the product once (variant editor or the Scan screen) |
 | S19 | **GRN: receive goods** 📱🖥 | MANAGE_STOCK | Against a PO or standalone. Scanning parses GS1 (GTIN, batch, expiry, serial). Enter batch, expiry and serials. Shortfall stays open on the PO |
 | S20 | **Return to supplier** | MANAGE_STOCK | Choose batches and serials, reason, debit note |
 

@@ -26,11 +26,6 @@ async function main() {
         channels: { inApp: true, push: true, sms: false, whatsapp: false, email: true },
         orderStatusToCustomer: true, lowStockToOwner: true, expiryToOwner: true,
       },
-      labelSizes: [
-        { name: 'Thermal 50×25 mm', widthMm: 50, heightMm: 25, perSheet: 1 },
-        { name: 'Thermal 38×25 mm', widthMm: 38, heightMm: 25, perSheet: 1 },
-        { name: 'A4 sheet 65-up (38.1×21.2 mm)', widthMm: 38.1, heightMm: 21.2, perSheet: 65 },
-      ],
     },
     update: {},
   });

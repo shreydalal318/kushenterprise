@@ -11,7 +11,6 @@ import { MastersSection } from './masters-section';
 import { CategoriesSection } from './categories-section';
 import { InventorySection } from './inventory-section';
 import { NotificationsSection } from './notifications-section';
-import { LabelsSection } from './labels-section';
 
 const TABS = [
   ['company', 'Company'],
@@ -22,7 +21,6 @@ const TABS = [
   ['categories', 'Categories'],
   ['inventory', 'Inventory'],
   ['notifications', 'Notifications'],
-  ['labels', 'Label printing'],
 ] as const;
 type Tab = (typeof TABS)[number][0];
 
@@ -65,7 +63,6 @@ export function SettingsScreen() {
             {tab === 'categories' && <CategoriesSection />}
             {tab === 'inventory' && <InventorySection s={settings.data} />}
             {tab === 'notifications' && <NotificationsSection s={settings.data} />}
-            {tab === 'labels' && <LabelsSection s={settings.data} />}
           </>
         )}
       </div>

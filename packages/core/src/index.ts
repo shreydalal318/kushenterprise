@@ -7,3 +7,5 @@ export * from './states';
 export * from './numbering';
 export * from './pricing';
 export * from './lens';
+export * from './gs1';
+export * from './stock';

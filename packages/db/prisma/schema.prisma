@@ -324,6 +324,7 @@ model Supplier {
   products       SupplierProduct[]
   purchaseOrders PurchaseOrder[]
   grns           Grn[]
+  returns        SupplierReturn[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -438,16 +439,17 @@ model ProductVariant {
   reorderLevel Int?
   isActive     Boolean  @default(true)
 
-  aliases         BarcodeAlias[]
-  batches         Batch[]
-  balances        StockBalance[]
-  movements       StockMovement[]
-  orderLines      SalesOrderLine[]
-  proformaLines   ProformaLine[]
-  invoiceLines    InvoiceLine[]
-  poLines         PurchaseOrderLine[]
-  grnLines        GrnLine[]
-  creditNoteLines CreditNoteLine[]
+  aliases             BarcodeAlias[]
+  batches             Batch[]
+  balances            StockBalance[]
+  movements           StockMovement[]
+  orderLines          SalesOrderLine[]
+  proformaLines       ProformaLine[]
+  invoiceLines        InvoiceLine[]
+  poLines             PurchaseOrderLine[]
+  grnLines            GrnLine[]
+  creditNoteLines     CreditNoteLine[]
+  supplierReturnLines SupplierReturnLine[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -546,17 +548,19 @@ model Location {
 }
 
 model Batch {
-  id         String          @id @default(cuid())
-  variantId  String
-  variant    ProductVariant  @relation(fields: [variantId], references: [id])
-  batchNo    String
-  expiryDate DateTime?       @db.Date
-  mfgDate    DateTime?       @db.Date
-  unitCost   Decimal?        @db.Decimal(14, 2) // landed cost for valuation
-  serials    SerialUnit[]
-  balances   StockBalance[]
-  movements  StockMovement[]
-  createdAt  DateTime        @default(now())
+  id                  String               @id @default(cuid())
+  variantId           String
+  variant             ProductVariant       @relation(fields: [variantId], references: [id])
+  batchNo             String
+  expiryDate          DateTime?            @db.Date
+  mfgDate             DateTime?            @db.Date
+  unitCost            Decimal?             @db.Decimal(14, 2) // landed cost for valuation
+  serials             SerialUnit[]
+  balances            StockBalance[]
+  movements           StockMovement[]
+  grnLines            GrnLine[]
+  supplierReturnLines SupplierReturnLine[]
+  createdAt           DateTime             @default(now())
 
   @@unique([variantId, batchNo])
   @@index([expiryDate]) // expiry alerts, FEFO
@@ -1031,8 +1035,11 @@ model Grn {
   id                  String         @id @default(cuid())
   number              String         @unique
   date                DateTime       @db.Date
-  supplierId          String
-  supplier            Supplier       @relation(fields: [supplierId], references: [id])
+  /// null for an opening-stock entry
+  supplierId          String?
+  supplier            Supplier?      @relation(fields: [supplierId], references: [id])
+  isOpening           Boolean        @default(false)
+  note                String?
   poId                String?
   po                  PurchaseOrder? @relation(fields: [poId], references: [id])
   supplierInvoiceNo   String?
@@ -1049,12 +1056,41 @@ model GrnLine {
   poLineId   String?
   variantId  String
   variant    ProductVariant @relation(fields: [variantId], references: [id])
+  batchId    String?
+  batch      Batch?         @relation(fields: [batchId], references: [id])
   batchNo    String
   expiryDate DateTime?      @db.Date
   serialNos  String[]
   qty        Int
   rate       Decimal        @db.Decimal(14, 2)
   locationId String
+}
+
+/// Goods sent back to a supplier (damaged, near-expiry, wrong item). Posts PURCHASE_RETURN movements.
+model SupplierReturn {
+  id          String               @id @default(cuid())
+  number      String               @unique // KE/DN/2026-27/0001 (debit note series)
+  date        DateTime             @db.Date
+  supplierId  String
+  supplier    Supplier             @relation(fields: [supplierId], references: [id])
+  reason      String
+  note        String?
+  lines       SupplierReturnLine[]
+  createdById String
+  createdAt   DateTime             @default(now())
+}
+
+model SupplierReturnLine {
+  id         String         @id @default(cuid())
+  returnId   String
+  return     SupplierReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  variantId  String
+  variant    ProductVariant @relation(fields: [variantId], references: [id])
+  batchId    String
+  batch      Batch          @relation(fields: [batchId], references: [id])
+  locationId String
+  qty        Int
+  serialNos  String[]
 }
 
 // =====================================================================

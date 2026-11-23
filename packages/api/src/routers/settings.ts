@@ -4,7 +4,7 @@ import { Prisma } from '@kush/db';
 import { z } from 'zod';
 import {
   bankSettingsInput, categoryInput, categoryRenameInput, companySettingsInput, documentSettingsInput,
-  inventorySettingsInput, labelSettingsInput, mastersSettingsInput, notificationSettingsInput, numberSeriesUpdateInput,
+  inventorySettingsInput, mastersSettingsInput, notificationSettingsInput, numberSeriesUpdateInput,
 } from '../schemas';
 import { diff, logActivity } from '../services/activity';
 import { getSettings, settingsView } from '../services/settings';
@@ -52,9 +52,6 @@ export const settingsRouter = router({
 
   updateNotifications: ownerProcedure.input(notificationSettingsInput).mutation(({ ctx, input }) =>
     updateSection(ctx, 'Notifications', { notificationConfig: input }, { notificationConfig: input })),
-
-  updateLabels: ownerProcedure.input(labelSettingsInput).mutation(({ ctx, input }) =>
-    updateSection(ctx, 'Label sizes', { labelSizes: input.labelSizes }, input)),
 
   clearSignature: ownerProcedure.mutation(({ ctx }) =>
     updateSection(ctx, 'Signature', { signatureFileId: null }, { signatureFileId: null })),

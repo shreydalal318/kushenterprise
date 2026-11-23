@@ -228,8 +228,60 @@ async function main() {
     await prisma.user.create({ data: { role: 'CUSTOMER', name: 'Mr. Prakash Joshi', mobile: demoLogin, customerId: customerIds.get('H1') } });
   }
 
+  await seedStock(owner.id);
+
   console.log(`Demo masters ready: ${SUPPLIERS.length} suppliers, ${PRODUCTS.length} products (${variants} new variants), ${CUSTOMERS.length} customers, 2 price lists.`);
   console.log(`Demo staff: ravi.counter@demo.local / sunita.store@demo.local (password: ${process.env.DEMO_STAFF_PASSWORD ? 'DEMO_STAFF_PASSWORD' : 'DemoStaff2026'}). Demo customer OTP login: ${demoLogin}.`);
+}
+
+
+
+/**
+ * Opening stock for the demo: one opening-stock receipt with batches, expiries (incl. one batch
+ * expiring soon and one already expired) and serial numbers for serial-tracked items.
+ * Skipped if any stock movement already exists.
+ */
+async function seedStock(ownerId: string) {
+  if (await prisma.stockMovement.count()) return;
+  const loc = (await prisma.location.findFirst({ where: { isDefault: true } }))!;
+  const today = new Date();
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const plusDays = (n: number) => iso(new Date(today.getTime() + n * 86_400_000));
+  const fy = (() => { const y = today.getUTCMonth() >= 3 ? today.getUTCFullYear() : today.getUTCFullYear() - 1; return `${y}-${String((y + 1) % 100).padStart(2, '0')}`; })();
+  const series = await prisma.$queryRaw<{ prefix: string; nextNumber: number }[]>`
+    UPDATE "NumberSeries" SET "nextNumber" = "nextNumber" + 1 WHERE "docType" = 'GRN'::"DocType" AND "financialYear" = ${fy} RETURNING "prefix", "nextNumber" - 1 AS "nextNumber"`;
+  const number = series[0] ? `${series[0].prefix}${fy}/${String(series[0].nextNumber).padStart(4, '0')}` : `KE/GRN/${fy}/0001`;
+  const grn = await prisma.grn.create({ data: { number, date: new Date(`${iso(today)}T00:00:00Z`), isOpening: true, note: 'Demo opening stock', createdById: ownerId } });
+
+  const products = await prisma.product.findMany({ include: { variants: { orderBy: [{ powerSph: 'asc' }, { cylinder: 'asc' }] } }, orderBy: { code: 'asc' } });
+  let lines = 0, units = 0;
+  let serialSeq = 1000;
+  for (const [pi, p] of products.entries()) {
+    // Lenses: stock the commonly used powers (+18 to +24 D), every other step; others: one batch.
+    const picks = p.isLens
+      ? p.variants.filter((v) => { const ps = Number(v.powerSph); return ps >= 18 && ps <= 24 && Math.round(ps * 2) % 2 === 0 && (v.cylinder == null || Number(v.cylinder) === 2.25); })
+      : p.variants;
+    for (const [vi, v] of picks.entries()) {
+      const qty = p.isLens ? 2 + ((pi + vi) % 5) : p.categoryId && /Equipment/.test(p.name) ? 1 : p.trackExpiry ? 20 + ((pi * 7) % 60) : 2 + (pi % 8);
+      const isExpiringDemo = p.code === 'VG-TB06';
+      const isExpiredDemo = p.code === 'VG-HP2' && vi === 0;
+      const batchNo = p.trackBatch ? `${p.code.replace(/[^A-Z0-9]/g, '').slice(0, 4)}${String(2400 + pi).slice(-4)}${p.isLens ? String.fromCharCode(65 + (vi % 3)) : ''}` : 'NA';
+      const expiry = !p.trackExpiry ? null : isExpiredDemo ? plusDays(-12) : isExpiringDemo ? plusDays(45) : plusDays(p.isLens ? 700 + vi * 10 : 420 + pi * 9);
+      const batch = await prisma.batch.upsert({
+        where: { variantId_batchNo: { variantId: v.id, batchNo } },
+        create: { variantId: v.id, batchNo, expiryDate: expiry ? new Date(`${expiry}T00:00:00Z`) : null, unitCost: p.purchaseCost },
+        update: {},
+      });
+      const serials = p.trackSerial ? Array.from({ length: qty }, () => `${batchNo}${String(serialSeq++).padStart(5, '0')}`) : [];
+      for (const sn of serials) await prisma.serialUnit.create({ data: { batchId: batch.id, serialNo: sn, status: 'IN_STOCK', locationId: loc.id } });
+      await prisma.grnLine.create({ data: { grnId: grn.id, variantId: v.id, batchId: batch.id, batchNo, expiryDate: batch.expiryDate, serialNos: serials, qty, rate: p.purchaseCost, locationId: loc.id } });
+      await prisma.stockMovement.create({ data: { type: 'OPENING', variantId: v.id, batchId: batch.id, locationId: loc.id, qty, serialNos: serials, unitCost: p.purchaseCost, refType: 'Grn', refId: grn.id, note: number, createdById: ownerId } });
+      await prisma.stockBalance.create({ data: { variantId: v.id, batchId: batch.id, locationId: loc.id, qty } });
+      lines++; units += qty;
+    }
+  }
+  await prisma.activityLog.create({ data: { actorId: ownerId, action: 'stock.opening', entityType: 'Grn', entityId: grn.id, summary: `Demo opening stock ${number}: ${lines} line(s), ${units} unit(s)` } });
+  console.log(`Demo opening stock ${number}: ${lines} lines, ${units} units.`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

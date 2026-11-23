@@ -17,7 +17,7 @@ const PHASES = [
   { n: 7, title: 'Analytics & reports', detail: 'Owner dashboard, GST reports, Excel exports' },
   { n: 8, title: 'Public website', detail: 'Home, catalogue, enquiry form' },
 ];
-const CURRENT_PHASE = 2;
+const CURRENT_PHASE = 3;
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
   const user = await requireStaff();

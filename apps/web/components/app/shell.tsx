@@ -14,7 +14,10 @@ export function AppShell({ user, children }: { user: ShellUser; children: ReactN
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const sections = navFor(user);
-  const isActive = (i: NavItem) => (i.href === '/app' ? pathname === '/app' : pathname.startsWith(i.href));
+  const all = sections.flatMap((s) => s.items.map((i) => i.href));
+  // Most specific match wins (so "Receive goods" doesn't also light up "Stock").
+  const isActive = (i: NavItem) =>
+    i.href === '/app' ? pathname === '/app' : pathname.startsWith(i.href) && !all.some((h) => h !== i.href && h.startsWith(i.href) && pathname.startsWith(h));
 
   const nav = (
     <nav aria-label="Main" className="flex flex-col gap-4 px-3 py-3">

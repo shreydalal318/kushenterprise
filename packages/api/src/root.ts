@@ -2,6 +2,8 @@ import { activityRouter } from './routers/activity';
 import { authRouter } from './routers/auth';
 import { customersRouter } from './routers/customers';
 import { employeesRouter } from './routers/employees';
+import { inventoryRouter } from './routers/inventory';
+import { scanRouter } from './routers/scan';
 import { priceListsRouter, pricingRouter } from './routers/pricing';
 import { brandsRouter, productsRouter } from './routers/products';
 import { settingsRouter } from './routers/settings';
@@ -19,6 +21,8 @@ export const appRouter = router({
   customers: customersRouter,
   pricing: pricingRouter,
   priceLists: priceListsRouter,
+  inventory: inventoryRouter,
+  scan: scanRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -1,0 +1,6 @@
+import type { Metadata } from 'next';
+import { requirePermission } from '@/lib/session';
+import { LowStockReport } from '@/components/stock/reports';
+
+export const metadata: Metadata = { title: 'Low stock' };
+export default async function Page() { await requirePermission('MANAGE_STOCK'); return <LowStockReport />; }
