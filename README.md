@@ -108,12 +108,28 @@ Brief: [`docs/00-original-brief.md`](docs/00-original-brief.md) · Stack: [`docs
 - **Branding**: theme in the logo colours, Inter font, favicon/app icons generated from `logo-icon.png` (clear at 16 px), stacked logo on the sign-in page, PWA manifest. Brand teal `#1A9E9A` is used for accents. Button and link text uses a slightly darker teal `#147C79`, because the brand teal on white is below the WCAG AA contrast minimum (3.3:1 against 4.5:1).
 - **Placeholder screens** for later phases. They appear in the menu with a "P2–P8" tag and follow the same permission rules.
 
-## Running locally
+## Running locally (with demo data)
 
-Requirements: Node 22+, pnpm 10, PostgreSQL 16 (`docker compose up -d db` starts one).
+You need **Node.js 22+**, **Docker Desktop** (for the database) and **Git**.
 
 ```bash
-cp .env.example .env        # then set SEED_OWNER_EMAIL / SEED_OWNER_PASSWORD
+git clone https://github.com/shreydalal318/kushenterprise.git
+```
+
+```bash
+cd kushenterprise && git checkout claude/awesome-ritchie-5gn9wa
+```
+
+```bash
+corepack enable
+```
+
+```bash
+docker compose up -d db
+```
+
+```bash
+cp .env.example .env
 ```
 
 ```bash
@@ -121,18 +137,28 @@ pnpm install
 ```
 
 ```bash
-pnpm db:deploy && pnpm db:seed
+pnpm setup:demo
 ```
 
 ```bash
-pnpm db:seed:demo           # optional: demo products, customers, price lists (development only)
+pnpm dev
 ```
 
-```bash
-pnpm dev                    # http://localhost:3000, sign in with the seeded owner
-```
+Open **http://localhost:3000** and sign in:
 
-In development, OTP codes are printed to the server log (`SMS_PROVIDER=console`). Real SMS/WhatsApp providers are connected in Phase 6.
+| Who | Login | Password |
+|---|---|---|
+| Owner (everything) | `owner@example.com` | `ChangeMe!2026` |
+| Counter staff (orders, billing, customers) | `ravi.counter@demo.local` | `DemoStaff2026` |
+| Store staff (stock, scanning, products) | `sunita.store@demo.local` | `DemoStaff2026` |
+| Customer (Mobile OTP tab) | `90000 10001` | The 6-digit code is printed in the terminal running `pnpm dev` |
+
+`pnpm setup:demo` creates the database tables and loads the demo data: 3 suppliers, 30 products with 223 lens powers, 10 customers, 2 price lists, special prices, and 638 units of opening stock. Running it again does no harm.
+
+- **No Docker?** Install PostgreSQL 16, create a user `kush` (password `kush`) and a database `kush`, or edit `DATABASE_URL` in `.env`.
+- **Windows:** use `copy .env.example .env` instead of `cp`.
+- **USB barcode scanner:** plug it in and scan into the Scan or Receive screen.
+- **Camera scanning** needs `https://` or `localhost`.
 
 ### Tests
 
