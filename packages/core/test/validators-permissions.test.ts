@@ -51,3 +51,19 @@ describe('permissions', () => {
     expect([...enumValues].sort()).toEqual([...ALL_PERMISSIONS].sort());
   });
 });
+
+import { isValidHsn, normalizeGtin } from '../src/validators';
+describe('GTIN & HSN', () => {
+  it('validates GS1 check digits and pads to 14', () => {
+    expect(normalizeGtin('4006381333931')).toBe('04006381333931'); // EAN-13
+    expect(normalizeGtin('4006381333932')).toBeNull();
+    expect(normalizeGtin('96385074')).toBe('00000096385074'); // EAN-8
+    expect(normalizeGtin('abc')).toBeNull();
+  });
+  it('accepts 4/6/8-digit HSN', () => {
+    expect(isValidHsn('9021')).toBe(true);
+    expect(isValidHsn('90213900')).toBe(true);
+    expect(isValidHsn('902139')).toBe(true);
+    expect(isValidHsn('90213')).toBe(false);
+  });
+});

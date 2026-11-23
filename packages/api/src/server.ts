@@ -7,3 +7,5 @@ export { saveFile, loadFile, sniffImageType, ALLOWED_IMAGE_TYPES } from './stora
 export { logActivity } from './services/activity';
 export { getSettings, settingsView } from './services/settings';
 export { nextDocNumber } from './services/numbering';
+export { exportPriceSheet, previewPriceImport, type SheetTarget } from './services/price-sheets';
+export { resolveCustomerPrices } from './services/pricing';

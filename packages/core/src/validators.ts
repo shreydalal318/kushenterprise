@@ -48,3 +48,27 @@ export function passwordError(pw: string): string | null {
   if (!/[A-Za-z]/.test(pw) || !/\d/.test(pw)) return 'Use letters and at least one number';
   return null;
 }
+
+/** GS1 mod-10 check digit over all digits except the last. */
+function gs1CheckOk(digits: string): boolean {
+  let sum = 0;
+  const body = digits.slice(0, -1);
+  for (let i = 0; i < body.length; i++) {
+    const d = Number(body[body.length - 1 - i]);
+    sum += i % 2 === 0 ? d * 3 : d;
+  }
+  return (10 - (sum % 10)) % 10 === Number(digits.at(-1));
+}
+
+/**
+ * Validate a GTIN-8/12/13/14 (barcode on manufacturers' boxes) and normalise it to 14 digits,
+ * which is how GS1 DataMatrix / GS1-128 encode it (AI 01). Returns null when invalid.
+ */
+export function normalizeGtin(raw: string): string | null {
+  const d = raw.replace(/\s/g, '');
+  if (!/^(\d{8}|\d{12}|\d{13}|\d{14})$/.test(d) || !gs1CheckOk(d)) return null;
+  return d.padStart(14, '0');
+}
+
+/** HSN codes are 4, 6 or 8 digits (SAC for services: 6). */
+export const isValidHsn = (s: string) => /^(\d{4}|\d{6}|\d{8})$/.test(s.trim());

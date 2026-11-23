@@ -1,6 +1,6 @@
 import { can, isOwner, type Permission, type Principal } from '@kush/core';
 import {
-  Activity, BarChart3, Boxes, ClipboardList, FileText, LayoutDashboard, Package, Receipt, ScanLine, Settings, ShoppingCart,
+  Activity, BarChart3, Boxes, ClipboardList, Factory, FileText, LayoutDashboard, Package, Receipt, ScanLine, Settings, ShoppingCart,
   Tags, Truck, Users, UserCog, Wallet, type LucideIcon,
 } from 'lucide-react';
 
@@ -11,6 +11,8 @@ export interface NavItem {
   /** Phase in which the screen ships; items without a phase are live. */
   phase?: number;
   permission?: Permission;
+  /** Visible when the user has any of these permissions. */
+  anyOf?: Permission[];
   ownerOnly?: boolean;
 }
 
@@ -30,15 +32,16 @@ export const NAV: { section: string; items: NavItem[] }[] = [
     items: [
       { href: '/app/stock', label: 'Stock', icon: Boxes, phase: 3 },
       { href: '/app/scan', label: 'Scan', icon: ScanLine, phase: 3 },
-      { href: '/app/products', label: 'Products', icon: Package, permission: 'MANAGE_PRODUCTS', phase: 2 },
+      { href: '/app/products', label: 'Products', icon: Package },
+      { href: '/app/suppliers', label: 'Suppliers', icon: Factory, anyOf: ['CREATE_PURCHASE_ORDERS', 'MANAGE_STOCK', 'VIEW_PRICES_MARGINS'] },
       { href: '/app/purchase-orders', label: 'Purchase orders', icon: Truck, permission: 'CREATE_PURCHASE_ORDERS', phase: 5 },
     ],
   },
   {
     section: 'Customers',
     items: [
-      { href: '/app/customers', label: 'Customers', icon: Users, permission: 'MANAGE_CUSTOMERS', phase: 2 },
-      { href: '/app/pricing', label: 'Pricing', icon: Tags, permission: 'VIEW_PRICES_MARGINS', phase: 2 },
+      { href: '/app/customers', label: 'Customers', icon: Users, permission: 'MANAGE_CUSTOMERS' },
+      { href: '/app/pricing', label: 'Pricing', icon: Tags, permission: 'VIEW_PRICES_MARGINS' },
       { href: '/app/leads', label: 'Leads', icon: ClipboardList, permission: 'MANAGE_CUSTOMERS', phase: 8 },
     ],
   },
@@ -54,7 +57,7 @@ export const NAV: { section: string; items: NavItem[] }[] = [
 ];
 
 export const allowed = (u: Principal, item: NavItem) =>
-  item.ownerOnly ? isOwner(u) : item.permission ? can(u, item.permission) : true;
+  item.ownerOnly ? isOwner(u) : item.permission ? can(u, item.permission) : item.anyOf ? item.anyOf.some((p) => can(u, p)) : true;
 
 /** Nav filtered to what this user may open (the API enforces the same rules). */
 export function navFor(u: Principal) {

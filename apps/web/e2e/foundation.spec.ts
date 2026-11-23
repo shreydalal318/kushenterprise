@@ -1,18 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { login, snap } from './helpers';
 import { run } from './run';
-
-const shots = process.env.E2E_SCREENSHOTS; // directory for review screenshots (optional)
-const snap = async (page: Page, name: string) => {
-  if (shots) await page.screenshot({ path: `${shots}/${name}.png`, fullPage: true });
-};
-
-async function login(page: Page, identifier: string, password: string, { expectFail = false } = {}) {
-  await page.goto('/login');
-  await page.getByLabel('Email or mobile').fill(identifier);
-  await page.getByLabel('Password').fill(password);
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  if (!expectFail) await page.waitForURL((u) => !u.pathname.startsWith('/login'), { waitUntil: 'commit' });
-}
 
 const employee = {
   name: `Asha Counter ${run.tag}`,
@@ -98,7 +86,7 @@ test.describe.serial('Phase 1 foundation', () => {
 
     await page.goto('/app/settings');
     await expect(page).toHaveURL(/\/app\?denied=1/);
-    await expect(page.getByText('That page is only available to the owner.')).toBeVisible();
+    await expect(page.getByText("You don't have access to that page.", { exact: false })).toBeVisible();
 
     const res = await page.goto('/app/analytics');
     expect(res?.status()).toBe(404);

@@ -20,6 +20,7 @@
     "@kush/db": "workspace:*",
     "@node-rs/argon2": "^2.2.2",
     "@trpc/server": "^11.29.7",
+    "exceljs": "^4.4.0",
     "superjson": "^2.2.5",
     "zod": "^4.1.12"
   },

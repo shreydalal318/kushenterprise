@@ -40,3 +40,11 @@ export async function requireCustomer(): Promise<SessionUser> {
   if (u.role !== 'CUSTOMER') redirect('/app');
   return u;
 }
+
+/** Page guard for a permission-gated screen (owner passes automatically). */
+export async function requirePermission(...anyOf: import('@kush/core').Permission[]): Promise<SessionUser> {
+  const { can } = await import('@kush/core');
+  const u = await requireStaff();
+  if (!anyOf.some((p) => can(u, p))) redirect('/app?denied=1');
+  return u;
+}

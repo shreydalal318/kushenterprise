@@ -17,7 +17,7 @@ const PHASES = [
   { n: 7, title: 'Analytics & reports', detail: 'Owner dashboard, GST reports, Excel exports' },
   { n: 8, title: 'Public website', detail: 'Home, catalogue, enquiry form' },
 ];
-const CURRENT_PHASE = 1;
+const CURRENT_PHASE = 2;
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
   const user = await requireStaff();
@@ -28,7 +28,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   return (
     <>
       <PageHeader title={`Welcome, ${user.name.split(' ')[0]}`} description="Kush Enterprise: inventory, ordering & billing" />
-      {denied && <div className="mb-4"><Alert tone="warn">That page is only available to the owner.</Alert></div>}
+      {denied && <div className="mb-4"><Alert tone="warn">You don&apos;t have access to that page. Ask the owner if you need it.</Alert></div>}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
@@ -39,7 +39,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                 <li key={p.n} className="flex items-start gap-3">
                   {p.n <= CURRENT_PHASE ? <CheckCircle2 className="mt-0.5 size-5 text-teal" aria-hidden /> : <Circle className="mt-0.5 size-5 text-line" aria-hidden />}
                   <div>
-                    <p className="text-sm font-medium">Phase {p.n}: {p.title} {p.n === CURRENT_PHASE && <Badge tone="teal" className="ml-1">Live</Badge>}</p>
+                    <p className="text-sm font-medium">Phase {p.n}: {p.title} {p.n === CURRENT_PHASE && <Badge tone="teal" className="ml-1">New</Badge>}</p>
                     <p className="text-sm text-muted">{p.detail}</p>
                   </div>
                 </li>

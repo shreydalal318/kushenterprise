@@ -11,21 +11,8 @@ const isPlaceholder = (s: string) => /^\[.*\]$/.test(s.trim());
 const trimmed = (max = 200) => z.string().trim().max(max);
 const optionalText = (max = 200) => trimmed(max).optional().transform((v) => (v ? v : null));
 
-export const stateCodeSchema = z.string().refine((c) => INDIAN_STATES.some((s) => s.code === c), 'Choose a state');
-
-export const mobileSchema = z.string().trim().transform((v, ctx) => {
-  const n = normalizeIndianMobile(v);
-  if (!n) {
-    ctx.addIssue({ code: 'custom', message: 'Enter a valid 10-digit Indian mobile number' });
-    return z.NEVER;
-  }
-  return n;
-});
-
-export const passwordSchema = z.string().superRefine((pw, ctx) => {
-  const err = passwordError(pw);
-  if (err) ctx.addIssue({ code: 'custom', message: err });
-});
+export { mobileSchema, passwordSchema, stateCodeSchema } from './schemas-common';
+import { mobileSchema, passwordSchema } from './schemas-common';
 
 // ---------- auth ----------
 export const loginPasswordInput = z.object({
@@ -156,3 +143,5 @@ export const activityListInput = z.object({
   cursor: z.string().optional(),
   limit: z.number().int().min(1).max(100).default(50),
 });
+
+export * from './schemas-masters';

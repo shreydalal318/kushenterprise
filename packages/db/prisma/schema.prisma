@@ -88,17 +88,17 @@ model User {
 }
 
 model Session {
-  id        String    @id @default(cuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash String    @unique
-  userAgent String?
-  ip        String?
-  client    String    @default("web") // web | mobile
-  expiresAt DateTime
-  lastUsedAt DateTime @default(now())
-  createdAt DateTime  @default(now())
-  revokedAt DateTime?
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  userAgent  String?
+  ip         String?
+  client     String    @default("web") // web | mobile
+  expiresAt  DateTime
+  lastUsedAt DateTime  @default(now())
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
 
   @@index([userId])
 }
@@ -152,37 +152,37 @@ model ActivityLog {
 
 /// Single row (id = "company"). Placeholders until real details are supplied.
 model CompanySettings {
-  id                   String   @id @default("company")
-  legalName            String   @default("Kush Enterprise")
-  addressLine1         String   @default("[Company Address]")
+  id                   String    @id @default("company")
+  legalName            String    @default("Kush Enterprise")
+  addressLine1         String    @default("[Company Address]")
   addressLine2         String?
-  city                 String   @default("[City]")
-  pincode              String   @default("[PIN]")
-  stateCode            String   @default("XX") // GST state code, e.g. "24"
+  city                 String    @default("[City]")
+  pincode              String    @default("[PIN]")
+  stateCode            String    @default("XX") // GST state code, e.g. "24"
   phone                String?
   email                String?
-  gstin                String   @default("[GSTIN]")
-  pan                  String   @default("[PAN]")
-  drugLicenceNo        String   @default("[Drug Licence No]")
-  bankName             String   @default("[Bank Name]")
-  bankAccountNo        String   @default("[A/c No]")
-  bankIfsc             String   @default("[IFSC]")
-  bankBranch           String   @default("[Branch]")
+  gstin                String    @default("[GSTIN]")
+  pan                  String    @default("[PAN]")
+  drugLicenceNo        String    @default("[Drug Licence No]")
+  bankName             String    @default("[Bank Name]")
+  bankAccountNo        String    @default("[A/c No]")
+  bankIfsc             String    @default("[IFSC]")
+  bankBranch           String    @default("[Branch]")
   upiId                String?
   signatureFileId      String?
-  jurisdictionCity     String   @default("[City]")
-  invoiceDeclaration   String   @default("We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.")
+  jurisdictionCity     String    @default("[City]")
+  invoiceDeclaration   String    @default("We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.")
   defaultInvoiceTerms  String?
   defaultPoTerms       String?
-  proformaValidityDays Int      @default(15)
-  expiryAlertDays      Int[]    @default([30, 60, 90])
-  defaultReorderLevel  Int      @default(5)
+  proformaValidityDays Int       @default(15)
+  expiryAlertDays      Int[]     @default([30, 60, 90])
+  defaultReorderLevel  Int       @default(5)
   gstRates             Decimal[] @db.Decimal(5, 2) // offered in product master, e.g. 0, 5, 12, 18
   units                String[]  @default(["pcs", "box", "set", "pack"])
   defaultInvoiceCopies String[]  @default(["ORIGINAL"]) // ORIGINAL | DUPLICATE | TRIPLICATE
   labelSizes           Json? // e.g. [{ "name": "50x25", "w": 50, "h": 25 }, ...]
   notificationConfig   Json? // channel toggles; API secrets live in env/secret store, not here
-  updatedAt            DateTime @updatedAt
+  updatedAt            DateTime  @updatedAt
 }
 
 /// Indian states/UTs with GST state codes; drives CGST+SGST vs IGST.
@@ -307,6 +307,7 @@ model Address {
 
 model Supplier {
   id               String  @id @default(cuid())
+  code             String  @unique // SUP-001
   name             String
   addressLine1     String
   addressLine2     String?
@@ -369,6 +370,7 @@ enum LensType {
 /// Model-level product (e.g. "LumaVue HA-600"). Pricing lives here; stock lives on variants.
 model Product {
   id          String   @id @default(cuid())
+  code        String   @unique // base SKU, e.g. "LV-HA600"; variant SKUs extend it
   name        String
   categoryId  String
   category    Category @relation(fields: [categoryId], references: [id])
@@ -486,11 +488,12 @@ model PriceListItem {
   productId   String
   product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
   rate        Decimal   @db.Decimal(14, 2)
-  validFrom   DateTime?
-  validTo     DateTime?
+  validFrom   DateTime? @db.Date // inclusive; null = open-ended
+  validTo     DateTime? @db.Date // inclusive; null = open-ended
   updatedAt   DateTime  @updatedAt
 
-  @@unique([priceListId, productId, validFrom])
+  /// One rate per product per list; history lives in PriceChangeLog.
+  @@unique([priceListId, productId])
   @@index([productId])
 }
 
@@ -501,11 +504,13 @@ model CustomerPrice {
   productId  String
   product    Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
   rate       Decimal   @db.Decimal(14, 2)
-  validFrom  DateTime?
-  validTo    DateTime?
+  validFrom  DateTime? @db.Date // inclusive; null = open-ended
+  validTo    DateTime? @db.Date // inclusive; null = open-ended
+  note       String?
   updatedAt  DateTime  @updatedAt
 
-  @@unique([customerId, productId, validFrom])
+  /// One override per product per customer; history lives in PriceChangeLog.
+  @@unique([customerId, productId])
   @@index([productId])
 }
 
@@ -518,8 +523,8 @@ model PriceChangeLog {
   scopeRefId  String? // priceListId or customerId
   oldRate     Decimal?  @db.Decimal(14, 2)
   newRate     Decimal?  @db.Decimal(14, 2)
-  validFrom   DateTime?
-  validTo     DateTime?
+  validFrom   DateTime? @db.Date
+  validTo     DateTime? @db.Date
   changedById String
   changedBy   User      @relation(fields: [changedById], references: [id])
   source      String? // ui | excel-import
@@ -1100,4 +1105,14 @@ model Lead {
   status              LeadStatus    @default(NEW)
   convertedCustomerId String?
   createdAt           DateTime      @default(now())
+}
+
+// =====================================================================
+// 10. Counters (barcodes, customer codes)
+// =====================================================================
+
+/// Global monotonic counters, allocated atomically with UPDATE ... RETURNING.
+model Counter {
+  key   String @id // "barcode" | "customer" | "supplier"
+  value Int    @default(0)
 }

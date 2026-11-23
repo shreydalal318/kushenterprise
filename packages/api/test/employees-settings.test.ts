@@ -106,7 +106,7 @@ describe('settings (owner)', () => {
     const name = `Test Category ${tag()}`;
     const c = await api.settings.createCategory({ name });
     await expect(api.settings.createCategory({ name })).rejects.toMatchObject({ code: 'CONFLICT' });
-    await prisma.product.create({ data: { name: 'P', categoryId: c.id, hsnCode: '9018', gstRate: 5, purchaseCost: 1, defaultRate: 2, mrp: 3 } });
+    await prisma.product.create({ data: { code: `P-${tag()}`, name: 'P', categoryId: c.id, hsnCode: '9018', gstRate: 5, purchaseCost: 1, defaultRate: 2, mrp: 3 } });
     await expect(api.settings.deleteCategory({ id: c.id })).rejects.toThrow(/1 product/);
   });
 });

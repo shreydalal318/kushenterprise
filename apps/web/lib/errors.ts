@@ -19,3 +19,10 @@ export function errorMessage(err: unknown): string | null {
   }
   return 'Something went wrong. Please try again.';
 }
+
+/** Errors under a nested object, with the prefix stripped: sub(fe, 'billingAddress') → { pincode: … }. */
+export function subErrors(fe: Record<string, string>, prefix: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(fe)) if (k.startsWith(`${prefix}.`)) out[k.slice(prefix.length + 1)] = v;
+  return out;
+}

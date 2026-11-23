@@ -37,6 +37,16 @@ export async function createContext(opts: { headers: Headers; resHeaders?: Heade
   };
 }
 
+function zodSummary(err: ZodError) {
+  const fieldErrors: Record<string, string[]> = {};
+  const formErrors: string[] = [];
+  for (const i of err.issues) {
+    if (!i.path.length) formErrors.push(i.message);
+    else (fieldErrors[i.path.join('.')] ??= []).push(i.message);
+  }
+  return { formErrors, fieldErrors };
+}
+
 const t = initTRPC.context<Context>().create({
   transformer: superjson,
   errorFormatter({ shape, error }) {
@@ -44,7 +54,8 @@ const t = initTRPC.context<Context>().create({
       ...shape,
       data: {
         ...shape.data,
-        zodError: error.cause instanceof ZodError ? error.cause.flatten() : null,
+        // Field errors keyed by full path ("billingAddress.pincode", "rows.3.rate"), first message each.
+        zodError: error.cause instanceof ZodError ? zodSummary(error.cause) : null,
       },
     };
   },
@@ -88,3 +99,12 @@ export const customerProcedure = authedProcedure.use(({ ctx, next }) => {
   }
   return next({ ctx: { ...ctx, customerId: ctx.user.customerId } });
 });
+
+/** Staff procedure allowed when the user holds ANY of the listed permissions. */
+export const anyPermissionProcedure = (...permissions: Permission[]) =>
+  staffProcedure.use(({ ctx, next }) => {
+    if (!permissions.some((p) => can(ctx.user, p))) {
+      throw new TRPCError({ code: 'FORBIDDEN', message: `Missing permission: one of ${permissions.join(', ')}` });
+    }
+    return next();
+  });

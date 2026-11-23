@@ -13,9 +13,43 @@ Brief: [`docs/00-original-brief.md`](docs/00-original-brief.md) · Stack: [`docs
 | Phase | | |
 |---|---|---|
 | 0 | Design approval: schema, screens, invoice mock-up | ✅ approved |
-| **1** | **Foundation: schema, auth, roles & permissions, settings, branding** | ✅ **done** (see below) |
-| 2 | Masters: products & lens powers, suppliers, customers, price lists, customer prices | next |
-| 3–8 | Inventory & barcodes → Sales & invoices → POs → Portal & mobile → Analytics → Website | planned |
+| 1 | Foundation: schema, auth, roles & permissions, settings, branding | ✅ done |
+| **2** | **Masters: products & lens powers, suppliers, customers, price lists, customer prices** | ✅ **done** (see below) |
+| 3 | Inventory + barcodes: stock ledger, labels, USB & camera scanning, GRN | next |
+| 4–8 | Sales & invoices → POs → Portal & mobile → Analytics → Website | planned |
+
+### What Phase 2 delivers
+
+- **Products** (anyone on staff can view; editing needs *Manage products*)
+  - Product master: code/SKU, category, brand/manufacturer, model, HSN, GST rate and unit (both taken from Settings), default rate, MRP, purchase cost, reorder level, description and images.
+  - Lens attributes: lens type (monofocal / toric / multifocal / EDOF), material, A-constant, optic size, overall length, preloaded.
+  - Batch, expiry and serial tracking switches for each product. Batches and serials are recorded at goods receipt in Phase 3.
+  - The selling rate can never be above MRP.
+- **Power variants**
+  - A generator that creates every power in a range (e.g. +10.00 to +30.00 D in 0.50 steps), multiplied by cylinders for torics or by add powers for multifocals. Existing powers are skipped.
+  - Each variant gets its own SKU (`CODE-+21.50`) and its own Code 128 barcode (`KE00000123`).
+  - The manufacturer's GTIN/EAN can be recorded; its check digit is validated and it is stored as 14 digits so box scans match.
+  - The product list filters by power.
+- **Cost is hidden** from anyone without *View prices / margins*. The API leaves it out of every response, not just the screen. Changing a cost needs that permission too.
+- **Suppliers**: codes (`SUP-001`), GSTIN checked against the state, payment terms, and the products each supplier provides with supplier SKU and last purchase rate. Purchase rates are shown only to PO creators and cost viewers.
+- **Customers** (Doctor / Hospital / Clinic; needs *Manage customers*)
+  - Code (`CUST-0001`), GSTIN (optional) checked against the state, with the PAN filled in from it, drug licence, credit limit, payment terms and assigned employee.
+  - Several billing and shipping addresses, each kind with one default.
+  - Doctors linked under a hospital or clinic.
+  - App/portal logins: one-time code to the customer's mobile, a "send sign-in SMS" button, and deactivating the customer disables its logins.
+- **Pricing**: special price → price list → default rate. Viewing needs *View prices / margins*; changing prices is owner-only.
+  - Price lists, each assigned to many customers.
+  - Special prices for each customer, with optional valid-from / valid-to dates. Outside those dates the next level applies.
+  - **Pricing workbench**: pick a customer and see, for every product, the default, list, special and effective rate, the difference and the margin. Prices can be edited in place.
+  - **Bulk edit**: % off default, one fixed rate, or clear.
+  - **Excel export/import** with a review screen before anything is saved.
+  - **Price history**: every change to the default rate, MRP, cost, list or special price, with who made it and when. Invoices will store the rate actually charged, so old invoices never change.
+- **Demo data** for trying the system (`pnpm db:seed:demo`, refused in production). All names are fictional.
+  - 3 suppliers.
+  - 30 products: 8 IOL models with 223 power variants, plus instruments, consumables and equipment.
+  - 10 customers: 3 hospitals, 3 clinics and 4 doctors, 2 of whom are linked to hospitals.
+  - 2 price lists and some special prices, including one that has expired.
+  - 2 demo staff logins and one customer login.
 
 ### What Phase 1 delivers
 
@@ -54,6 +88,10 @@ pnpm install
 
 ```bash
 pnpm db:deploy && pnpm db:seed
+```
+
+```bash
+pnpm db:seed:demo           # optional: demo products, customers, price lists (development only)
 ```
 
 ```bash
