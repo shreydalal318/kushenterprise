@@ -38,7 +38,7 @@ export async function documentSource(db: Db, kind: DocKind, id: string, copies: 
           ['Delivery Note', i.deliveryNote], ['Mode/Terms of Payment', i.paymentTerms],
           ['Reference No. & Date.', i.referenceNo], ['Other References', i.otherReferences ?? (i.order ? i.order.number : null)],
           ["Buyer's Order No.", i.buyersOrderNo], ['Dated', d(i.buyersOrderDate)],
-          ['Dispatch Doc No.', i.dispatchDocNo], ['Delivery Note Date', ''],
+          ['Dispatch Doc No.', i.dispatchDocNo], i.ewayBillNo ? ['e-Way Bill No.', `${i.ewayBillNo}${i.ewayBillDate ? ` dt. ${d(i.ewayBillDate)}` : ''}`] : ['Delivery Note Date', ''],
           ['Dispatched through', i.dispatchedThrough], ['Destination', i.destination],
         ],
         termsLabel: 'Terms of Delivery', terms: i.termsOfDelivery,
@@ -46,6 +46,7 @@ export async function documentSource(db: Db, kind: DocKind, id: string, copies: 
         stored: { taxable: num(i.taxableTotal), totalTax: num(i.cgstTotal) + num(i.sgstTotal) + num(i.igstTotal), roundOff: num(i.roundOff), total: num(i.grandTotal) },
         showBank: true, watermark: i.status === 'CANCELLED' ? 'CANCELLED' : null, signatureDataUri: await signature(db),
         upiAmount: i.status === 'ISSUED' ? Math.max(0, num(i.grandTotal) - num(i.amountPaid)) : null,
+        einvoice: i.irn ? { irn: i.irn, ackNo: i.ackNo, ackDate: isoDay(i.ackDate), signedQr: i.signedQr } : null,
       },
     };
   }
@@ -108,6 +109,7 @@ export async function documentSource(db: Db, kind: DocKind, id: string, copies: 
       lines: c.lines.map((l) => ({ description: l.description, hsn: l.hsnCode, qty: l.qty, unit: l.unit, rate: num(l.rate), discPct: num(l.discPct), amount: num(l.amount), gstRate: num(l.gstRate), batchNo: l.batchNo, expiryDate: isoDay(l.expiryDate), powerLabel: l.powerLabel, serialNos: l.serialNos })),
       stored: { taxable: num(c.taxableTotal), totalTax: num(c.taxTotal), roundOff: num(c.roundOff), total: num(c.grandTotal) },
       showBank: false, signatureDataUri: await signature(db),
+      einvoice: c.irn ? { irn: c.irn, ackNo: c.ackNo, ackDate: isoDay(c.ackDate), signedQr: c.signedQr } : null,
     },
   };
 }

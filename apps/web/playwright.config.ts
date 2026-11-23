@@ -31,6 +31,6 @@ export default defineConfig({
     url: `http://localhost:${PORT}/login`,
     reuseExistingServer: false,
     timeout: 60_000,
-    env: { DATABASE_URL: testDb, SMS_PROVIDER: 'console', COOKIE_SECURE: 'false' },
+    env: { DATABASE_URL: testDb, SMS_PROVIDER: 'console', COOKIE_SECURE: 'false', AUTH_SECRET: process.env.AUTH_SECRET ?? 'e2e-only-auth-secret-not-used-anywhere-else-0123456789' },
   },
 });

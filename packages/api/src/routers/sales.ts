@@ -197,6 +197,7 @@ export const invoicesRouter = router({
       payments: i.allocations.map((a) => ({ id: a.payment.id, number: a.payment.number, date: isoDay(a.payment.date), mode: a.payment.mode, amount: num(a.amount) })),
       creditNotes: i.creditNotes.map((c) => ({ ...c, date: isoDay(c.date), grandTotal: num(c.grandTotal) })),
       dispatch: i.dispatch ? { ...i.dispatch, dispatchDate: isoDay(i.dispatch.dispatchDate) } : null,
+      irn: i.irn, ackNo: i.ackNo, ackDate: isoDay(i.ackDate), ewayBillNo: i.ewayBillNo, ewayBillDate: isoDay(i.ewayBillDate),
     };
   }),
 

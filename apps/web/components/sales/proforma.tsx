@@ -1,4 +1,5 @@
 'use client';
+import { ShareButton } from '@/components/sales/share-button';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -64,6 +65,7 @@ export function ProformaDetail({ id, isNew }: { id: string; isNew: boolean }) {
       <PageHeader title={p.number} description={<span className="flex items-center gap-2">{p.customer.name} · {formatDate(p.date)} · valid until {formatDate(p.validUntil)} <Badge tone={TONE[p.status] ?? 'neutral'}>{p.status.toLowerCase()}</Badge></span>}
         actions={<div className="flex flex-wrap gap-2">
           {!converted && p.status !== 'CANCELLED' && can('CREATE_TAX_INVOICE') && <Button onClick={() => setConvertOpen(true)}><Receipt className="size-4" aria-hidden /> Convert to tax invoice</Button>}
+          {p.status !== 'CANCELLED' && <ShareButton kind="proforma" id={p.id} />}
           {p.status === 'DRAFT' && can('CREATE_PROFORMA') && <Button variant="secondary" loading={markSent.isPending} onClick={() => markSent.mutate({ id })}>Mark as sent</Button>}
           {!converted && p.status !== 'CANCELLED' && can('CREATE_PROFORMA') && <Button variant="danger" loading={cancel.isPending} onClick={() => { if (confirm('Cancel this proforma?')) cancel.mutate({ id }); }}>Cancel</Button>}
         </div>} />

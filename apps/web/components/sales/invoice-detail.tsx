@@ -15,6 +15,8 @@ import { rupees } from '@/lib/format';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
 import { useMe } from '@/lib/use-me';
 import { DocViewer } from './doc-viewer';
+import { GstFiling } from './gst-filing';
+import { ShareButton } from './share-button';
 import { PaymentBadge } from './status';
 
 type Inv = RouterOutputs['invoices']['get'];
@@ -36,6 +38,7 @@ export function InvoiceDetail({ id, isNew }: { id: string; isNew: boolean }) {
         description={<span className="flex flex-wrap items-center gap-2">{i.customer.name} · {formatDate(i.date)} · {i.taxType === 'INTER_STATE' ? 'IGST' : 'CGST + SGST'} <PaymentBadge status={i.paymentStatus} /></span>}
         actions={<div className="flex flex-wrap gap-2">
           {!cancelled && i.due > 0 && can('RECORD_PAYMENTS') && <LinkButton href={`/app/payments?customer=${i.customer.id}&invoice=${i.id}`}><CreditCard className="size-4" aria-hidden /> Record payment</LinkButton>}
+          <ShareButton kind="invoice" id={i.id} />
           {!cancelled && can('CREATE_TAX_INVOICE') && <Button variant="secondary" onClick={() => setCreditOpen(true)}><Undo2 className="size-4" aria-hidden /> Credit note (return)</Button>}
           {!cancelled && isOwner && <Button variant="danger" onClick={() => setCancelOpen(true)}><Ban className="size-4" aria-hidden /> Cancel invoice</Button>}
         </div>} />
@@ -59,6 +62,7 @@ export function InvoiceDetail({ id, isNew }: { id: string; isNew: boolean }) {
               </dl>
             </CardBody>
           </Card>
+          {can('CREATE_TAX_INVOICE') && <GstFiling invoice={{ id: i.id, number: i.number, grandTotal: i.grandTotal, status: i.status, irn: i.irn, ackNo: i.ackNo, ackDate: i.ackDate, ewayBillNo: i.ewayBillNo, ewayBillDate: i.ewayBillDate, buyerGstin: i.buyer.gstin }} />}
           <Card>
             <CardHeader title="Details" />
             <CardBody className="flex flex-col gap-2 text-sm">

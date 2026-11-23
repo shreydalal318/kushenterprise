@@ -107,6 +107,9 @@ table.hsn tfoot td { font-weight: 700; }
 .page { position: relative; }
 .watermark { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 5; }
 .watermark span { transform: rotate(-30deg); font-size: 64pt; font-weight: 700; color: rgba(180, 35, 24, .16); border: 4pt solid rgba(180, 35, 24, .16); padding: 2mm 8mm; letter-spacing: .08em; }
+.einv { display: grid; grid-template-columns: 1fr auto; gap: 2mm; align-items: center; border: var(--line); border-bottom: 0; padding: 1.2mm 1.6mm; font-size: 6.8pt; }
+.einv .kv { grid-template-columns: 16mm 1fr; }
+.einv img { width: 19mm; height: 19mm; }
 .sign img.sig { align-self: center; max-height: 11mm; max-width: 40mm; object-fit: contain; }
 `;
 
@@ -131,7 +134,9 @@ function headerHtml(d: DocModel) {
   const ref = (label: string, value: string | null | undefined) => `<div><div class="lbl">${esc(label)}</div><div class="v">${esc(value || '')}</div></div>`;
   const cells = [[d.numberLabel, d.number], ['Dated', fmtDate(d.date)], ...d.refs].slice(0, 12);
   while (cells.length < 12) cells.push(['', '']);
-  return `<div class="head">
+  const e = d.einvoice;
+  const einv = e ? `<div class="einv"><div class="kv"><span>IRN</span><span>: <span class="b" style="word-break:break-all">${esc(e.irn)}</span></span><span>Ack No.</span><span>: <span class="b">${esc(e.ackNo)}</span></span><span>Ack Date</span><span>: <span class="b">${esc(fmtDate(e.ackDate))}</span></span></div>${e.qrDataUri ? `<img src="${e.qrDataUri}" alt="e-Invoice QR">` : ''}</div>` : '';
+  return `${einv}<div class="head">
     <div class="left">
       <div class="cell seller">
         <div class="name">${esc(s.name)}</div>

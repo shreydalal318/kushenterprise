@@ -20,8 +20,38 @@ Brief: [`docs/00-original-brief.md`](docs/00-original-brief.md) · Stack: [`docs
 | 5 | Purchase orders: reorder suggestions, PO PDF, receiving against a PO | ✅ done |
 | 6 | Customer portal, notifications, mobile app (customer + staff) | ✅ done |
 | 7 | Owner dashboard, sales & margin analytics, GST reports, Excel exports | ✅ done |
-| **8** | **Public website, enquiries → leads** | ✅ **done** (see below) |
-| 9 | Phase 2 extras: Tally XML, e-invoice, e-way bill, WhatsApp automation | needs provider accounts |
+| 8 | Public website, enquiries → leads | ✅ done |
+| **9** | **Tally XML export, e-invoice & e-way bill readiness, WhatsApp / email sharing** | ✅ **done** (see below) |
+
+### What Phase 9 delivers
+
+- **Tally Prime export** (Analytics → Reports & Excel), for any period:
+  - **Vouchers XML**: sales invoices, credit notes (against the original invoice) and receipts (against invoices, the rest on account). Cancelled invoices go across as cancelled vouchers, so the numbering has no gaps.
+  - **Masters XML**: customer ledgers under Sundry Debtors with GSTIN, state, address and credit period, plus the sales and GST duty ledgers used.
+  - Vouchers use Tally's accounting-invoice mode, so they import without creating stock items. The export refuses to produce a voucher that doesn't balance.
+  - Each voucher has a stable ID, so importing the same month again updates it instead of creating a duplicate.
+  - Ledger names (e.g. "Sales @ {rate}%", "Output CGST @ {half}%", bank, cash, round off) and the Tally company name are set in **Settings → Tally & e-filing**.
+- **e-Invoice readiness** (shown on each B2B invoice):
+  - Download the **IRP JSON (schema 1.1)** for one invoice or credit note, or for every B2B document in a period that has no IRN yet.
+  - Anything the portal would reject is listed first: missing or invalid GSTINs, missing PIN codes, HSN format, document numbers over 16 characters.
+  - **Record the IRN, acknowledgement and signed QR**: they print at the top of the invoice PDF, as on a Tally e-invoice.
+- **E-way bill readiness**:
+  - The invoice says when one is needed (the value threshold is in Settings).
+  - **Download the e-way bill JSON** for the portal's bulk upload, with transport mode, distance, transporter and vehicle. Unregistered buyers go as URP.
+  - Record the 12-digit e-way bill number: it prints on the invoice.
+- **Share on WhatsApp or email**:
+  - Invoices, proformas, credit notes, purchase orders and statements get a **signed link valid for 15 days** that opens just that PDF without signing in.
+  - The share box opens WhatsApp on the customer's or supplier's number, or an email, with the message ready. Customers can share their own documents from the portal.
+  - Links can't be altered to open another document, and they expire.
+- **Automatic messages**:
+  - **WhatsApp**: through the **WhatsApp Cloud API** with an approved template (`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEMPLATE`).
+  - **Email**: through any SMTP server (`SMTP_URL`, `EMAIL_FROM`).
+  - A new invoice's message includes its download link.
+  - Until the credentials are set, messages are written to the server log.
+
+**Still needs your accounts**
+- **Generating IRNs and e-way bills directly from the app.** This needs a GSP (GST Suvidha Provider) account. The JSON, validation and recording steps above already work without one.
+- **WhatsApp Business and SMS.** WhatsApp needs the Meta WhatsApp Business account with an approved template. SMS needs a DLT-registered sender for real delivery.
 
 ### What Phase 8 delivers
 

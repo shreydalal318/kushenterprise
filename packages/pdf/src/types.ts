@@ -90,5 +90,7 @@ export interface DocModel {
   watermark?: string | null; // e.g. "CANCELLED"
   signatureDataUri?: string | null;
   upiQrDataUri?: string | null;
+  /** e-invoice details printed at the top once the IRN is generated. */
+  einvoice?: { irn: string; ackNo: string; ackDate: string; qrDataUri: string } | null;
   qtyUnit?: string; // unit shown in the total row
 }

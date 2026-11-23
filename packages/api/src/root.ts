@@ -3,6 +3,7 @@ import { analyticsRouter } from './routers/analytics';
 import { authRouter } from './routers/auth';
 import { customersRouter } from './routers/customers';
 import { employeesRouter } from './routers/employees';
+import { integrationsRouter } from './routers/integrations';
 import { inventoryRouter } from './routers/inventory';
 import { notificationsRouter } from './routers/notifications';
 import { portalRouter } from './routers/portal';
@@ -42,6 +43,7 @@ export const appRouter = router({
   analytics: analyticsRouter,
   website: websiteRouter,
   leads: leadsRouter,
+  integrations: integrationsRouter,
 });
 
 export type AppRouter = typeof appRouter;

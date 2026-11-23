@@ -182,6 +182,8 @@ model CompanySettings {
   defaultInvoiceCopies String[]  @default(["ORIGINAL"]) // ORIGINAL | DUPLICATE | TRIPLICATE
   labelSizes           Json? // e.g. [{ "name": "50x25", "w": 50, "h": 25 }, ...]
   notificationConfig   Json? // channel toggles; API secrets live in env/secret store, not here
+  /// Tally ledger names, e-invoice / e-way bill switches (no secrets).
+  integrationConfig    Json?
   updatedAt            DateTime  @updatedAt
 }
 
@@ -860,11 +862,12 @@ model Invoice {
   cancelledBy   User?     @relation("InvoiceCancelledBy", fields: [cancelledById], references: [id])
 
   // Phase 2: e-invoice / e-way bill readiness
-  irn        String?
-  ackNo      String?
-  ackDate    DateTime?
-  signedQr   String?
-  ewayBillNo String?
+  irn          String?
+  ackNo        String?
+  ackDate      DateTime?
+  signedQr     String?
+  ewayBillNo   String?
+  ewayBillDate DateTime?
 
   pdfFileId       String?
   clientRequestId String? @unique // idempotency for offline scan-to-invoice
@@ -914,6 +917,11 @@ model InvoiceLine {
 model CreditNote {
   id               String           @id @default(cuid())
   number           String           @unique // KE/CN/2026-27/0001
+  /// e-invoice (IRN) for the credit note, when e-invoicing applies.
+  irn              String?
+  ackNo            String?
+  ackDate          DateTime?
+  signedQr         String?
   financialYear    String
   date             DateTime         @db.Date
   customerId       String

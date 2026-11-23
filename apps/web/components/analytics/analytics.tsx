@@ -182,6 +182,14 @@ function ReportsTab({ r }: { r: Range }) {
           ))}
         </ul>
       </Card>
+      <Card>
+        <CardHeader title="Tally & GST e-filing" description="For the period chosen above. Ledger names are set in Settings → Tally & e-filing." />
+        <ul className="divide-y divide-line">
+          <li className="flex flex-wrap items-center justify-between gap-3 px-5 py-3"><div><p className="font-medium text-navy">Tally vouchers (XML)</p><p className="text-sm text-muted">Sales invoices, credit notes and receipts. Tally: Gateway → Import → Vouchers. Re-importing the same period updates instead of duplicating.</p></div><a href={`/api/exports/tally?type=vouchers&from=${r.from}&to=${r.to}`} className="inline-flex h-9 items-center rounded-lg border border-line bg-white px-3 text-sm font-semibold hover:bg-aqua-50">Download XML</a></li>
+          <li className="flex flex-wrap items-center justify-between gap-3 px-5 py-3"><div><p className="font-medium text-navy">Tally masters (XML)</p><p className="text-sm text-muted">Customer ledgers with GSTIN and state, and the sales / tax ledgers used. Import these first.</p></div><a href={`/api/exports/tally?type=masters&from=${r.from}&to=${r.to}`} className="inline-flex h-9 items-center rounded-lg border border-line bg-white px-3 text-sm font-semibold hover:bg-aqua-50">Download XML</a></li>
+          <li className="flex flex-wrap items-center justify-between gap-3 px-5 py-3"><div><p className="font-medium text-navy">e-Invoice JSON (bulk)</p><p className="text-sm text-muted">Every B2B invoice and credit note in the period without an IRN, in the IRP schema 1.1.</p></div><a href={`/api/exports/einvoice?from=${r.from}&to=${r.to}`} className="inline-flex h-9 items-center rounded-lg border border-line bg-white px-3 text-sm font-semibold hover:bg-aqua-50">Download JSON</a></li>
+        </ul>
+      </Card>
       <Card className="overflow-hidden">
         <CardHeader title="Sales register" description={reg.data ? `${reg.data.rows.length} document(s)` : undefined} />
         <Table minWidth={980}>

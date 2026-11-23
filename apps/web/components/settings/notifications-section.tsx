@@ -9,8 +9,8 @@ const CHANNELS = [
   ['inApp', 'In-app', 'Inbox in the web portal and mobile app'],
   ['push', 'Push', 'Mobile app notifications'],
   ['sms', 'SMS', 'Needs a DLT-registered SMS provider'],
-  ['whatsapp', 'WhatsApp', 'Needs a WhatsApp Business API account'],
-  ['email', 'Email', 'Needs an email sending service'],
+  ['whatsapp', 'WhatsApp', 'WhatsApp Cloud API (WHATSAPP_TOKEN + phone number ID + approved template)'],
+  ['email', 'Email', 'Any SMTP server (SMTP_URL)'],
 ] as const;
 
 export function NotificationsSection({ s }: { s: Settings }) {
@@ -19,7 +19,7 @@ export function NotificationsSection({ s }: { s: Settings }) {
   const save = trpc.settings.updateNotifications.useMutation({ onSuccess: (d) => { utils.settings.get.setData(undefined, d); f.setDirty(false); } });
   const v = f.values!;
   return (
-    <SectionForm title="Notifications" description="Which channels are used and for which events. Messages start sending in Phase 6."
+    <SectionForm title="Notifications" description="Which channels are used and for which events. In-app and push work now; SMS, WhatsApp and email start once their provider credentials are set on the server."
       onSubmit={() => save.mutate(v)} saving={save.isPending} saved={save.isSuccess} dirty={f.dirty} error={save.error}>
       <fieldset>
         <legend className="mb-1 text-sm font-medium">Channels</legend>

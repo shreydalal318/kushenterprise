@@ -39,6 +39,7 @@ export interface DocSource {
   watermark?: string | null;
   signatureDataUri?: string | null;
   upiAmount?: number | null;
+  einvoice?: { irn: string; ackNo: string | null; ackDate: string | null; signedQr: string | null } | null;
 }
 
 /**
@@ -55,6 +56,10 @@ export async function buildDocModel(src: DocSource): Promise<DocModel> {
   const upi = src.showBank && src.supplier.upiId && src.upiAmount
     ? await QRCode.toDataURL(`upi://pay?pa=${encodeURIComponent(src.supplier.upiId)}&pn=${encodeURIComponent(src.supplier.name)}&am=${src.upiAmount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(src.number)}`, { margin: 0, width: 300, errorCorrectionLevel: 'M' })
     : null;
+  const einvoice = src.einvoice?.irn ? {
+    irn: src.einvoice.irn, ackNo: src.einvoice.ackNo ?? '', ackDate: src.einvoice.ackDate ?? '',
+    qrDataUri: src.einvoice.signedQr ? await QRCode.toDataURL(src.einvoice.signedQr, { margin: 0, width: 360, errorCorrectionLevel: 'L' }) : '',
+  } : null;
   const units = [...new Set(src.lines.map((l) => l.unit))];
   return {
     title: src.title, labels: { ...DEFAULT_LABELS, ...src.labels }, numberLabel: src.numberLabel, number: src.number, date: src.date, copies: src.copies,
@@ -78,6 +83,7 @@ export async function buildDocModel(src: DocSource): Promise<DocModel> {
     watermark: src.watermark,
     signatureDataUri: src.signatureDataUri,
     upiQrDataUri: upi,
+    einvoice,
     qtyUnit: units.length === 1 ? units[0] : 'units',
   };
 }

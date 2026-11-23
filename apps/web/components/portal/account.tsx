@@ -8,14 +8,15 @@ import { Alert, Badge, Card, CardBody, CardHeader, PageHeader } from '@/componen
 import { Checkbox, TextAreaField } from '@/components/ui/field';
 import { EmptyRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
 import { PaymentBadge } from '@/components/sales/status';
+import { ShareButton } from '@/components/sales/share-button';
 import { cn } from '@/lib/cn';
 import { errorMessage, fieldErrors } from '@/lib/errors';
 import { rupees } from '@/lib/format';
 import { trpc } from '@/lib/trpc';
 
 const pdf = (kind: string, id: string) => `/api/documents/${kind}/${id}`;
-const DocLinks = ({ kind, id }: { kind: string; id: string }) => (
-  <span className="flex gap-3 text-sm"><a className="text-teal-700 hover:underline" href={pdf(kind, id)} target="_blank" rel="noreferrer">View</a><a className="text-teal-700 hover:underline" href={`${pdf(kind, id)}?download=1`}><Download className="inline size-3.5" aria-hidden /> PDF</a></span>
+const DocLinks = ({ kind, id }: { kind: 'invoice' | 'proforma' | 'credit-note'; id: string }) => (
+  <span className="flex items-center gap-3 text-sm"><a className="text-teal-700 hover:underline" href={pdf(kind, id)} target="_blank" rel="noreferrer">View</a><a className="text-teal-700 hover:underline" href={`${pdf(kind, id)}?download=1`}><Download className="inline size-3.5" aria-hidden /> PDF</a><ShareButton kind={kind} id={id} /></span>
 );
 
 export function MyInvoices() {

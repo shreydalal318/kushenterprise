@@ -10,6 +10,8 @@ export interface NotifyInput {
   link?: string | null;
   /** External channels wanted for this message (in-app is always written). */
   channels?: NotificationChannel[];
+  /** Absolute link for WhatsApp / SMS / email (e.g. a signed PDF link); the in-app row keeps `link`. */
+  externalLink?: string | null;
 }
 
 /** Company-level switches (Settings → Notifications) gate every external channel. */
@@ -34,7 +36,7 @@ export async function notify(tx: Tx, input: NotifyInput) {
   const external = (input.channels ?? []).filter((c) => c !== 'IN_APP' && on.has(c));
   const rows = userIds.flatMap((userId) => [
     { userId, channel: 'IN_APP' as const, title: input.title, body: input.body, link: input.link ?? null, status: 'sent' },
-    ...external.map((channel) => ({ userId, channel, title: input.title, body: input.body, link: input.link ?? null, status: 'queued', readAt: new Date() })),
+    ...external.map((channel) => ({ userId, channel, title: input.title, body: input.body, link: input.externalLink ?? input.link ?? null, status: 'queued', readAt: new Date() })),
   ]);
   await tx.notification.createMany({ data: rows });
   if (external.length) deliverSoon();
@@ -87,13 +89,53 @@ const SENDERS: Partial<Record<NotificationChannel, Sender>> = {
   },
   SMS: async (n) => {
     if (!n.user.mobile) return 'skipped';
-    await smsProvider().send(n.user.mobile, `${n.title}: ${n.body}`);
+    await smsProvider().send(n.user.mobile, withLink(`${n.title}: ${n.body}`, n.link));
     return 'sent';
   },
-  // WhatsApp Cloud API and email need provider accounts (Phase 9); until then they go to the log.
-  WHATSAPP: async (n) => { if (!n.user.mobile) return 'skipped'; log('WHATSAPP', n.user.mobile, n.title); return 'sent'; },
-  EMAIL: async (n) => { if (!n.user.email) return 'skipped'; log('EMAIL', n.user.email, n.title); return 'sent'; },
+  WHATSAPP: async (n) => {
+    if (!n.user.mobile) return 'skipped';
+    await sendWhatsApp(n.user.mobile, n.title, withLink(n.body, n.link));
+    return 'sent';
+  },
+  EMAIL: async (n) => {
+    if (!n.user.email) return 'skipped';
+    await sendEmail(n.user.email, n.title, withLink(n.body, n.link));
+    return 'sent';
+  },
 };
+
+/** Only absolute links (signed PDF links, website pages) make sense outside the app. */
+const withLink = (body: string, link: string | null) => (link && /^https?:\/\//.test(link) ? `${body}\n${link}` : body);
+
+/**
+ * WhatsApp Cloud API (Meta). Business-initiated messages must use an approved template; the
+ * template (WHATSAPP_TEMPLATE, default "kush_update") takes two body parameters: title and message.
+ * Without WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID messages go to the log.
+ */
+export async function sendWhatsApp(mobileE164: string, title: string, body: string) {
+  const token = process.env.WHATSAPP_TOKEN;
+  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !phoneId) { log('WHATSAPP', mobileE164, title); return; }
+  const res = await fetch(`https://graph.facebook.com/v21.0/${encodeURIComponent(phoneId)}/messages`, {
+    method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp', to: mobileE164.replace(/^\+/, ''), type: 'template',
+      template: { name: process.env.WHATSAPP_TEMPLATE ?? 'kush_update', language: { code: process.env.WHATSAPP_LANG ?? 'en' }, components: [{ type: 'body', parameters: [{ type: 'text', text: title.slice(0, 200) }, { type: 'text', text: body.replace(/\s*\n\s*/g, ' ').slice(0, 900) }] }] },
+    }),
+  });
+  if (!res.ok) throw new Error(`WhatsApp send failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
+}
+
+/** Email through any SMTP server (SMTP_URL, e.g. smtps://user:password@smtp.example.com:465). Logged when not set. */
+export async function sendEmail(to: string, subject: string, text: string) {
+  const url = process.env.SMTP_URL;
+  if (!url) { log('EMAIL', to, subject); return; }
+  const { createTransport } = await import('nodemailer');
+  const from = process.env.EMAIL_FROM ?? 'Kush Enterprise <no-reply@localhost>';
+  const html = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#1f2933"><p style="font-size:16px;font-weight:bold;color:#1b3a5c">${escapeHtml(subject)}</p>${text.split('\n').map((l) => (/^https?:\/\//.test(l) ? `<p><a href="${escapeHtml(l)}">${escapeHtml(l)}</a></p>` : `<p>${escapeHtml(l)}</p>`)).join('')}</div>`;
+  await createTransport(url).sendMail({ from, to, subject, text, html });
+}
+const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 /** Send queued external notifications. Safe to call repeatedly (each row is claimed once). */
 export async function deliverQueued(db: Db = prisma, limit = 100, only?: { userId?: string }) {

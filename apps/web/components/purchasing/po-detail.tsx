@@ -1,4 +1,5 @@
 'use client';
+import { ShareButton } from '@/components/sales/share-button';
 import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Ban, PackageCheck, Pencil, Send, XCircle } from 'lucide-react';
@@ -36,6 +37,7 @@ export function PoDetail({ id, isNew }: { id: string; isNew: boolean }) {
       <PageHeader title={p.number}
         description={<span className="flex flex-wrap items-center gap-2">{p.supplier.name} · {formatDate(p.date)}{p.expectedDate ? ` · expected ${formatDate(p.expectedDate)}` : ''} <PoBadge status={p.status} /></span>}
         actions={<div className="flex flex-wrap gap-2">
+          {p.status !== 'CANCELLED' && buyer && <ShareButton kind="purchase-order" id={p.id} />}
           {p.status === 'DRAFT' && buyer && <LinkButton variant="secondary" href={`/app/purchase-orders/${p.id}/edit`}><Pencil className="size-4" aria-hidden /> Edit</LinkButton>}
           {p.status === 'DRAFT' && buyer && <Button loading={send.isPending} onClick={() => send.mutate({ id: p.id })}><Send className="size-4" aria-hidden /> Mark as sent</Button>}
           {open && can('MANAGE_STOCK') && <LinkButton href={`/app/stock/receive?po=${p.id}`}><PackageCheck className="size-4" aria-hidden /> Receive goods</LinkButton>}

@@ -24,13 +24,15 @@
     "exceljs": "^4.4.0",
     "superjson": "^2.2.5",
     "zod": "^4.1.12",
-    "@kush/pdf": "workspace:*"
+    "@kush/pdf": "workspace:*",
+    "nodemailer": "^7.0.10"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",
     "dotenv": "^17.2.3",
     "typescript": "^5.9.3",
     "vitest": "^4.0.0",
-    "tsx": "^4.20.6"
+    "tsx": "^4.20.6",
+    "@types/nodemailer": "^7.0.3"
   }
 }

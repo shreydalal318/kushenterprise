@@ -12,3 +12,5 @@ export { resolveCustomerPrices } from './services/pricing';
 export { renderDocument, renderStatement, documentSource, type DocKind } from './services/sales/documents';
 export { deliverQueued } from './notify';
 export { buildReportWorkbook, type SheetSpec } from './services/report-excel';
+export { tallyMastersXml, tallyVouchersXml } from './services/integrations/tally';
+export { verifyShareToken } from './services/integrations/share';
