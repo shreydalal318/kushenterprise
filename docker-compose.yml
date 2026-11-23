@@ -1,0 +1,12 @@
+# Local development database. Usage: docker compose up -d db
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: kush
+      POSTGRES_PASSWORD: kush
+      POSTGRES_DB: kush
+    ports: ["5432:5432"]
+    volumes: [kushdb:/var/lib/postgresql/data]
+volumes:
+  kushdb:

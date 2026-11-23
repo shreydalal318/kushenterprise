@@ -2,5 +2,16 @@ node_modules/
 .DS_Store
 .env
 .env.*
+!.env.example
+.next/
+dist/
+.turbo/
+coverage/
+storage/
+test-results/
+playwright-report/
+next-env.d.ts
+*.tsbuildinfo
 # self-contained HTML previews are large (embedded fonts); regenerate with npm run build
 design/invoice-mockup/out/*.html
+**/e2e/.data/

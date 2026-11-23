@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: kush
+          POSTGRES_PASSWORD: kush
+          POSTGRES_DB: kush_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U kush" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://kush:kush@localhost:5432/kush_test
+      TEST_DATABASE_URL: postgresql://kush:kush@localhost:5432/kush_test
+      AUTH_SECRET: ci-only-auth-secret-not-used-anywhere-else-0123456789
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @kush/db db:generate
+      - run: pnpm --filter @kush/db migrate:deploy
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm --filter @kush/web build
+      - run: pnpm --filter @kush/web exec playwright install --with-deps chromium
+      - run: pnpm test:e2e

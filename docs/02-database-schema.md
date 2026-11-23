@@ -1,6 +1,6 @@
 # (a) Database schema & ER diagram
 
-The full schema is in [`design/schema/schema.prisma`](../design/schema/schema.prisma). It has 45 models and passes `prisma validate`. The diagrams below are split by area so they stay readable. Only keys and the fields that matter for each diagram are shown.
+The full schema is in [`packages/db/prisma/schema.prisma`](../packages/db/prisma/schema.prisma). It has 45 models, and its migrations are in `packages/db/prisma/migrations/`. The diagrams below are split by area so they stay readable. Only keys and the fields that matter for each diagram are shown.
 
 ## Design rules
 

@@ -1,50 +1,91 @@
 # Kush Enterprise: Website + Inventory, Ordering & Billing
 
-One system for Kush Enterprise, a supplier of ophthalmic lenses (IOLs) and medical instruments to hospitals, clinics and doctors. It has three parts:
+One system for Kush Enterprise, a supplier of ophthalmic lenses (IOLs) and medical instruments to hospitals, clinics and doctors:
 
 1. **Public website**: company profile, catalogue (no public prices), enquiry form, customer login.
 2. **Web app (owner + staff)**: inventory, barcode scanning, orders, proforma, Tally-style GST invoices, purchase orders, customer pricing, employees, analytics.
-3. **Mobile app (Android + iOS)**: customer mode (order at own prices, track, download invoices) and staff mode (camera scanning, stock, dispatch, invoicing).
+3. **Mobile app (Android + iOS)**: customer mode and staff mode on one login.
 
-The full brief is in [`docs/00-original-brief.md`](docs/00-original-brief.md).
+Brief: [`docs/00-original-brief.md`](docs/00-original-brief.md) · Stack: [`docs/01-architecture.md`](docs/01-architecture.md) · Schema & ER: [`docs/02-database-schema.md`](docs/02-database-schema.md) · Screens: [`docs/03-screens-by-role.md`](docs/03-screens-by-role.md)
 
-## Status: Phase 0, design for approval
+## Status
 
-The brief asks for three items to approve before any app code is written:
-
-| | Deliverable | Where |
+| Phase | | |
 |---|---|---|
-| **(a)** | Database schema + ER diagrams | [`docs/02-database-schema.md`](docs/02-database-schema.md) · [`design/schema/schema.prisma`](design/schema/schema.prisma) (45 models, passes `prisma validate`) |
-| **(b)** | Screens for each role | [`docs/03-screens-by-role.md`](docs/03-screens-by-role.md) (54 screens) |
-| **(c)** | Tally-style tax invoice mock-up | [`design/invoice-mockup/out/`](design/invoice-mockup/out/): PDFs and PNG previews |
-| | Stack proposal and reasons | [`docs/01-architecture.md`](docs/01-architecture.md) |
+| 0 | Design approval: schema, screens, invoice mock-up | ✅ approved |
+| **1** | **Foundation: schema, auth, roles & permissions, settings, branding** | ✅ **done** (see below) |
+| 2 | Masters: products & lens powers, suppliers, customers, price lists, customer prices | next |
+| 3–8 | Inventory & barcodes → Sales & invoices → POs → Portal & mobile → Analytics → Website | planned |
 
-### Invoice mock-ups
+### What Phase 1 delivers
 
-- `sample-1-tax-invoice-intra-state.pdf`: one page, **CGST + SGST**, 7 lines covering monofocal, toric and trifocal IOLs, OVD and instruments, with batch, expiry, power and serials under each description.
-- `sample-2-tax-invoice-inter-state-multipage.pdf`: **IGST**, 20 lines that run onto a second page. The full header repeats, page 1 ends with "continued to page 2 …", and pages are numbered "Page x of y".
+- **Database**: the full approved schema (45 tables) as a Prisma migration. The seed loads the 37 GST state codes, company settings with placeholders, document number series for the current financial year, the 4 product categories, a default stock location and the first owner account.
+- **Sign-in**
+  - Email or mobile + password (argon2id). Mobile OTP with 6-digit codes that are single-use, expire after 5 minutes, allow 5 attempts, can be resent after 30 s and are limited to 5 an hour. OTP requests give the same response whether or not the number is registered.
+  - 5 wrong passwords lock the account for 15 min.
+  - HttpOnly session cookies for the web; bearer tokens for the future mobile app.
+  - Signed-in device list with remote sign-out. Changing a password signs out the other devices.
+- **Roles & permissions, enforced on the server.**
+  - Owner, Employee and Customer roles. 13 permission checkboxes for each employee.
+  - Every API call is checked. Permission changes apply on the employee's next request. Deactivating someone signs them out at once.
+  - Cross-site POSTs are rejected.
+- **Employees**: add, edit, set permissions with quick-start presets, reset the password (forces a change at next sign-in), deactivate or re-activate.
+- **Settings** (owner only)
+  - Company profile, with a GSTIN check-digit check and a check that the GSTIN matches the state and PAN.
+  - Bank and UPI details, and the signature/stamp image upload.
+  - **Document numbering** for each financial year, with a live preview. A new financial year starts its own series automatically, and numbers are allocated without gaps or duplicates, even when two are taken at the same moment.
+  - Terms and declaration, default invoice copies.
+  - GST rates and units, categories, reorder and expiry-alert defaults, notification channels, label sizes.
+- **Activity log**: an append-only record of sign-ins, lockouts, employee and permission changes, and settings changes, with before/after values.
+- **Branding**: theme in the logo colours, Inter font, favicon/app icons generated from `logo-icon.png` (clear at 16 px), stacked logo on the sign-in page, PWA manifest. Brand teal `#1A9E9A` is used for accents. Button and link text uses a slightly darker teal `#147C79`, because the brand teal on white is below the WCAG AA contrast minimum (3.3:1 against 4.5:1).
+- **Placeholder screens** for later phases. They appear in the menu with a "P2–P8" tag and follow the same permission rules.
 
-To regenerate (the totals, tax and amounts in words are calculated, not typed in):
+## Running locally
+
+Requirements: Node 22+, pnpm 10, PostgreSQL 16 (`docker compose up -d db` starts one).
 
 ```bash
-cd design/invoice-mockup && npm install && npm run build
-# copies: node generate.mjs --copies original,duplicate,triplicate
+cp .env.example .env        # then set SEED_OWNER_EMAIL / SEED_OWNER_PASSWORD
 ```
 
-## Branding
+```bash
+pnpm install
+```
 
-The logos supplied with the brief are in [`brand/source/`](brand/source/). The `brand/*-trim.png` files are the same artwork with the empty margin cropped off (not stretched, recoloured or redrawn), for tight placements such as the invoice header and footer.
+```bash
+pnpm db:deploy && pnpm db:seed
+```
 
-Colours: Navy `#1B3A5C` · Teal `#1A9E9A` · Light aqua `#A9DDDA` · Text `#1F2933`. Font: Inter.
+```bash
+pnpm dev                    # http://localhost:3000, sign in with the seeded owner
+```
 
-## Build phases
+In development, OTP codes are printed to the server log (`SMS_PROVIDER=console`). Real SMS/WhatsApp providers are connected in Phase 6.
 
-1. Foundation: schema, auth, roles and permissions, settings, theme ← *next, after approval*
-2. Masters: products and lens variants, suppliers, customers, price lists, customer prices
-3. Inventory + barcodes: stock ledger, badges, labels, USB and camera scanning, GRN
-4. Sales: orders and status flow, proforma, tax invoice PDF, scan-to-invoice, payments and ledger
-5. Purchase orders: PO, PDF, receive against PO
-6. Customer portal + mobile app
-7. Owner analytics, reports, Excel exports
-8. Public website
-9. Phase 2: Tally XML, e-invoice / e-way bill, WhatsApp automation
+### Tests
+
+```bash
+pnpm typecheck
+```
+
+```bash
+pnpm test                   # unit (core) + API integration tests against TEST_DATABASE_URL
+```
+
+```bash
+pnpm --filter @kush/web build && pnpm test:e2e   # browser tests (Playwright) against the built app
+```
+
+The tests use `TEST_DATABASE_URL`. They apply migrations without wiping anything and create uniquely named data, so they can be re-run against the same database. CI (`.github/workflows/ci.yml`) runs all of the above on every push.
+
+## Repository layout
+
+```
+apps/web            Next.js 16: public site, staff app (/app), customer portal (/portal), API (/api/trpc)
+packages/api        tRPC routers, auth (password, OTP, sessions), permission middleware, services
+packages/core       Pure TypeScript: money/words (lakh-crore), dates & financial year, GST, permissions, validators
+packages/db         Prisma schema, migrations, seed
+design/             Phase 0 invoice mock-up generator (becomes the PDF package in Phase 4)
+brand/              Logo files supplied with the brief (source/) + whitespace-trimmed copies
+docs/               Brief, architecture, schema/ER, screens per role
+```

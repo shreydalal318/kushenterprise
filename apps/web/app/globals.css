@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+/* Kush Enterprise brand tokens (from the logo). */
+@theme {
+  --color-navy: #1b3a5c;
+  --color-navy-800: #15304d;
+  --color-navy-900: #0f243a;
+  --color-teal: #1a9e9a;          /* brand accent: icons, focus rings, active markers */
+  --color-teal-700: #147c79;      /* AA-contrast teal for button fills and link text (5.0:1 on white) */
+  --color-teal-800: #106662;
+  --color-aqua: #a9ddda;          /* highlights, selected rows, badge backgrounds */
+  --color-aqua-50: #eef8f7;
+  --color-aqua-100: #d9f0ee;
+  --color-ink: #1f2933;
+  --color-muted: #5b6774;
+  --color-line: #e3e8ec;
+  --color-canvas: #f6f8f9;
+  --color-danger: #b42318;
+  --color-danger-50: #fef3f2;
+  --color-warn: #b54708;
+  --color-warn-50: #fffaeb;
+  --color-ok: #067647;
+  --color-ok-50: #ecfdf3;
+
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --radius-card: 0.75rem;
+}
+
+@layer base {
+  html { color: var(--color-ink); background: var(--color-canvas); -webkit-text-size-adjust: 100%; }
+  body { font-family: var(--font-sans); font-feature-settings: "cv11" 1; }
+  :focus-visible { outline: 2px solid var(--color-teal); outline-offset: 2px; }
+  ::selection { background: var(--color-aqua); }
+}
+
+/* Indian-number tables align on the decimal point. */
+.num { font-variant-numeric: tabular-nums; text-align: right; }

@@ -58,6 +58,12 @@ model User {
   isActive     Boolean      @default(true)
   lastLoginAt  DateTime?
 
+  // Login protection
+  failedLoginCount   Int       @default(0)
+  lockedUntil        DateTime?
+  mustChangePassword Boolean   @default(false)
+  passwordChangedAt  DateTime?
+
   // A CUSTOMER user belongs to exactly one customer account (a hospital can have many logins).
   customerId String?
   customer   Customer? @relation("CustomerLogins", fields: [customerId], references: [id])
@@ -88,7 +94,9 @@ model Session {
   tokenHash String    @unique
   userAgent String?
   ip        String?
+  client    String    @default("web") // web | mobile
   expiresAt DateTime
+  lastUsedAt DateTime @default(now())
   createdAt DateTime  @default(now())
   revokedAt DateTime?
 
@@ -169,6 +177,9 @@ model CompanySettings {
   proformaValidityDays Int      @default(15)
   expiryAlertDays      Int[]    @default([30, 60, 90])
   defaultReorderLevel  Int      @default(5)
+  gstRates             Decimal[] @db.Decimal(5, 2) // offered in product master, e.g. 0, 5, 12, 18
+  units                String[]  @default(["pcs", "box", "set", "pack"])
+  defaultInvoiceCopies String[]  @default(["ORIGINAL"]) // ORIGINAL | DUPLICATE | TRIPLICATE
   labelSizes           Json? // e.g. [{ "name": "50x25", "w": 50, "h": 25 }, ...]
   notificationConfig   Json? // channel toggles; API secrets live in env/secret store, not here
   updatedAt            DateTime @updatedAt
