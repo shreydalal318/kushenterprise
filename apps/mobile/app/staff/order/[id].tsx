@@ -6,12 +6,13 @@ import { DISPATCH_METHOD_LABEL, DISPATCH_METHODS, formatDate, formatDateTime, is
 import { Scanner } from '@/components/scanner';
 import { Alert, Button, Card, Field, H2, KV, Loading, P, Row, Screen, Small } from '@/components/ui';
 import { OrderStatusBadge } from '@/components/status';
+import { LinkedPos, OrderFromSupplier, StockNote } from '@/components/order-sourcing';
 import { useCan } from '@/lib/auth';
 import { errorText } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
 
-/** Order detail for staff: status steps, scan-to-pack, dispatch details. */
+/** Order detail for staff: stock and sourcing, status steps, scan-to-pack, dispatch details. */
 export default function StaffOrder() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const can = useCan();
@@ -19,7 +20,8 @@ export default function StaffOrder() {
   const q = trpc.orders.get.useQuery({ id: id! });
   const setStatus = trpc.orders.setStatus.useMutation({ onSuccess: () => utils.orders.invalidate() });
   const verify = trpc.orders.verifyPacked.useMutation({ onSuccess: (r) => { if (r.ok) void utils.orders.invalidate(); } });
-  const [mode, setMode] = useState<null | 'pack' | 'dispatch' | 'note' | 'deliver'>(null);
+  const [mode, setMode] = useState<null | 'pack' | 'dispatch' | 'note' | 'deliver' | 'source'>(null);
+  const sq = trpc.orders.shortfall.useQuery({ id: id! });
   const [noteFor, setNoteFor] = useState<OrderStatus | null>(null);
   const [note, setNote] = useState('');
   const [d, setD] = useState({ method: '' as '' | DispatchMethod, courier: '', docketNo: '', vehicleNo: '', dispatchDate: istDateString(), deliveryPersonId: '', deliveryPersonName: '', deliveryPersonMobile: '' });
@@ -32,6 +34,10 @@ export default function StaffOrder() {
   if (!q.data) return q.error ? <Screen><Alert>{errorText(q.error)}</Alert></Screen> : <Loading />;
   const o = q.data;
   const next = nextStatuses(o.status);
+  const stock = new Map((sq.data?.lines ?? []).map((l) => [l.variantId, l]));
+  const toOrder = (sq.data?.lines ?? []).reduce((t, l) => t + l.toOrder, 0);
+  const isOpen = !['CANCELLED', 'DELIVERED'].includes(o.status);
+  const backorder = o.lines.reduce((t, l) => t + l.backorder, 0);
 
   async function onPackScan(code: string) {
     const r = await utils.scan.resolve.fetch({ code }, { staleTime: 0 }).catch(() => null);
@@ -61,7 +67,7 @@ export default function StaffOrder() {
       <Card>
         {o.lines.map((l) => (
           <Row key={l.id} style={{ justifyContent: 'space-between' }}>
-            <View style={{ flex: 1 }}><P>{l.variant.product.name}</P><Small>{l.variant.label ?? l.variant.sku}</Small></View>
+            <View style={{ flex: 1 }}><P>{l.variant.product.name}</P><Small>{l.variant.label ?? l.variant.sku}</Small>{isOpen && mode !== 'pack' && <StockNote line={stock.get(l.variant.id)} />}</View>
             <View style={{ alignItems: 'flex-end' }}>
               <P style={{ fontWeight: '700' }}>{mode === 'pack' ? `${packed[l.variant.id] ?? 0} / ${l.qty}` : l.qty}</P>
               {l.backorder > 0 && o.status !== 'PLACED' && <Small style={{ color: C.warn }}>{l.backorder} to send</Small>}
@@ -70,6 +76,9 @@ export default function StaffOrder() {
         ))}
       </Card>
       {setStatus.error && <Alert>{errorText(setStatus.error)}</Alert>}
+      {isOpen && toOrder > 0 && mode !== 'source' && <Alert tone="warn">{toOrder} unit(s) on this order are not in stock.</Alert>}
+      {mode === null && isOpen && backorder > 0 && sq.data && can('CREATE_PURCHASE_ORDERS') && <Button variant={toOrder > 0 ? 'primary' : 'secondary'} title="Order from supplier" onPress={() => setMode('source')} />}
+      {mode === 'source' && sq.data && <OrderFromSupplier s={sq.data} onClose={() => setMode(null)} />}
       {mode === null && can('UPDATE_ORDER_STATUS') && next.length > 0 && (
         <View style={{ gap: 8 }}>
           {can('SCAN_DISPATCH') && ['PLACED', 'CONFIRMED'].includes(o.status) && <Button title="Pack & verify by scanning" onPress={() => setMode('pack')} />}
@@ -144,8 +153,9 @@ export default function StaffOrder() {
           <Button variant="secondary" title="Back" onPress={() => setMode(null)} />
         </Card>
       )}
+      {sq.data && <LinkedPos s={sq.data} />}
       <H2>History</H2>
-      <Card>{o.events.map((e) => <KV key={e.id} k={`${ORDER_STATUS_LABEL[e.status as OrderStatus]} · ${e.by}`} v={formatDateTime(e.at)} />)}</Card>
+      <Card>{o.events.map((e) => <View key={e.id}><KV k={`${ORDER_STATUS_LABEL[e.status as OrderStatus]} · ${e.by}`} v={formatDateTime(e.at)} />{e.note ? <Small>{e.note}</Small> : null}</View>)}</Card>
       {o.dispatches.map((x) => <Small key={x.id}>{DISPATCH_METHOD_LABEL[x.method as DispatchMethod]} {x.dispatchDate ? formatDate(x.dispatchDate) : ''} {x.deliveryPersonName ?? x.courier ?? ''} {x.docketNo ?? ''}{x.deliveredAt ? ` · delivered${x.receivedBy ? `, received by ${x.receivedBy}` : ''}` : ''}</Small>)}
     </Screen>
   );

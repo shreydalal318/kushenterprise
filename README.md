@@ -37,6 +37,7 @@ Brief: [`docs/00-original-brief.md`](docs/00-original-brief.md) · Stack: [`docs
   - The PO shows *Raised for customer order …*, with a link back to the order.
   - The order's history records which POs were raised.
 - **Tell the customer** sends the doctor a message: "Some items are being ordered from the manufacturer and are expected by …".
+- **The mobile staff app has the same flow on its order screen.** Each item shows a stock line (red when short, amber when a PO covers it), and the screen has an *Order from supplier* card and an *Ordered from supplier* list. History now shows each event's note.
 - **Receiving the goods against that PO** alerts the assigned employee, and the staff who handle that customer: "Stock arrived for KE/SO/…: ready to invoice and dispatch".
 
 ### Local delivery by our own staff (added after Phase 9)

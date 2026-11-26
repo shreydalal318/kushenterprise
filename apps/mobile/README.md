@@ -5,7 +5,7 @@ One Expo (React Native) app with two modes, chosen by who signs in:
 | Customer mode (doctors, hospitals, clinics) | Staff mode (tabs follow the owner's permission ticks) |
 |---|---|
 | Home: outstanding, recent orders, order again | **Scan**: camera or Bluetooth scanner → product, power, batch, expiry, stock by batch, FEFO pick |
-| Catalogue at **their own price**, search by name or **power** | **Orders**: pending first, status steps, **pack & verify by scanning**, dispatch details |
+| Catalogue at **their own price**, search by name or **power** | **Orders**: pending first, status steps, **pack & verify by scanning**, dispatch details, stock and shortfall per item, **order from supplier** (raises POs linked to the order) |
 | Power grid with + / − per power, cart, checkout (address, for doctor, patient, surgery date) | **Bill**: scan-to-invoice at the customer's price, live CGST/SGST or IGST, share the PDF |
 | Order tracking (timeline, dispatch, back-orders), invoice PDFs to share | **Receive**: scan GS1 boxes (batch, expiry, serial), optionally against an open PO |
 | Account balance, ageing, statement PDF, profile change requests | **More**: stock check, offline queue, notifications |
