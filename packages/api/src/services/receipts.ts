@@ -3,7 +3,7 @@ import type { Tx } from '@kush/db';
 import { logActivity } from './activity';
 import { nextDocNumber } from './numbering';
 import { dayToDate, num } from './num';
-import { receiveAgainstPo } from './purchasing';
+import { notifyArrivalsForOrders, receiveAgainstPo } from './purchasing';
 import { defaultLocationId, ensureBatch, loadVariant, postMovement } from './stock';
 
 export interface ReceiptLine {
@@ -81,5 +81,6 @@ export async function createReceipt(
     actorId: args.actorId, action: args.kind === 'GRN' ? 'stock.grn' : 'stock.opening', entityType: 'Grn', entityId: grn.id, ip: args.ip,
     summary: `${args.kind === 'GRN' ? 'Goods received' : 'Opening stock'} ${number}${po ? ` against ${po.number}` : ''}: ${args.lines.length} line(s), ${units} unit(s)`,
   });
+  if (po) await notifyArrivalsForOrders(tx, po.booked.flat().map((b) => b.poLineId), number);
   return { id: grn.id, number, units, po: po ? { number: po.number, complete: po.complete } : null };
 }

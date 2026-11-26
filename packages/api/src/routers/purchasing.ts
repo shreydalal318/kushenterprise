@@ -3,7 +3,7 @@ import { can, istDateString, stateByCode } from '@kush/core';
 import { z } from 'zod';
 import { poInput, poListInput, poReasonInput } from '../schemas';
 import { isoDay, num } from '../services/num';
-import { createPo, lastRates, reorderSuggestions, setPoStatus, updatePo } from '../services/purchasing';
+import { createPo, createPosForOrder, lastRates, reorderSuggestions, setPoStatus, updatePo } from '../services/purchasing';
 import { getSettings } from '../services/settings';
 import { anyPermissionProcedure, permissionProcedure, router } from '../trpc';
 
@@ -43,7 +43,7 @@ export const purchaseOrdersRouter = router({
       where: { id: input.id },
       include: {
         supplier: { select: { id: true, name: true, code: true, stateCode: true, paymentTermsDays: true } },
-        lines: { orderBy: { sl: 'asc' }, include: { variant: { select: { id: true, sku: true, label: true, productId: true, product: { select: { name: true, trackSerial: true, trackBatch: true, trackExpiry: true } } } } } },
+        lines: { orderBy: { sl: 'asc' }, include: { salesOrder: { select: { id: true, number: true, customer: { select: { name: true } } } }, variant: { select: { id: true, sku: true, label: true, productId: true, product: { select: { name: true, trackSerial: true, trackBatch: true, trackExpiry: true } } } } } },
         grns: { orderBy: { createdAt: 'asc' }, select: { id: true, number: true, date: true, supplierInvoiceNo: true, lines: { select: { qty: true } } } },
       },
     });
@@ -61,6 +61,7 @@ export const purchaseOrdersRouter = router({
         track: { serial: l.variant.product.trackSerial, batch: l.variant.product.trackBatch, expiry: l.variant.product.trackExpiry },
         hsnCode: l.hsnCode, unit: l.unit, qtyOrdered: l.qtyOrdered, qtyReceived: l.qtyReceived, pending: Math.max(0, l.qtyOrdered - l.qtyReceived),
         rate: money(l.rate), discPct: num(l.discPct), gstRate: num(l.gstRate), amount: money(l.amount), expectedDate: isoDay(l.expectedDate),
+        salesOrder: l.salesOrder ? { id: l.salesOrder.id, number: l.salesOrder.number, customer: l.salesOrder.customer.name } : null,
       })),
       grns: p.grns.map((g) => ({ id: g.id, number: g.number, date: isoDay(g.date), supplierInvoiceNo: g.supplierInvoiceNo, units: g.lines.reduce((t, l) => t + l.qty, 0) })),
       canSeeRates: show,
@@ -69,6 +70,13 @@ export const purchaseOrdersRouter = router({
 
   create: buyer.input(poInput).mutation(({ ctx, input }) => ctx.db.$transaction((tx) => createPo(tx, input, ctx.user, ctx.ip), tx60)),
   update: buyer.input(poInput.extend({ id: z.string() })).mutation(({ ctx, input }) => ctx.db.$transaction((tx) => updatePo(tx, input.id, input, ctx.user, ctx.ip), tx60)),
+  /** Order items a customer asked for that are not in stock: one PO per supplier, linked to the customer order. */
+  createForOrder: buyer.input(z.object({
+    orderId: z.string(),
+    items: z.array(z.object({ variantId: z.string(), qty: z.number().int().min(1, 'Enter a quantity').max(100000), supplierId: z.string().min(1, 'Choose a supplier'), rate: z.number().min(0).nullable().optional() })).min(1, 'Nothing to order').max(200),
+    expectedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    send: z.boolean().optional(), tellCustomer: z.boolean().optional(),
+  })).mutation(({ ctx, input }) => ctx.db.$transaction((tx) => createPosForOrder(tx, input, ctx.user, ctx.ip), tx60)),
   markSent: buyer.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => ctx.db.$transaction((tx) => setPoStatus(tx, input.id, 'SEND', null, ctx.user, ctx.ip))),
   cancel: buyer.input(poReasonInput).mutation(({ ctx, input }) => ctx.db.$transaction((tx) => setPoStatus(tx, input.id, 'CANCEL', input.reason, ctx.user, ctx.ip))),
   /** Short-close: nothing more is expected from the supplier on this PO. */

@@ -696,11 +696,12 @@ model SalesOrder {
   assignedTo        User?       @relation("OrderAssignee", fields: [assignedToId], references: [id])
   clientRequestId   String?     @unique // idempotency key for offline/mobile submits
 
-  lines      SalesOrderLine[]
-  events     OrderStatusEvent[]
-  dispatches Dispatch[]
-  proformas  Proforma[]
-  invoices   Invoice[]
+  lines         SalesOrderLine[]
+  events        OrderStatusEvent[]
+  dispatches    Dispatch[]
+  proformas     Proforma[]
+  invoices      Invoice[]
+  purchaseLines PurchaseOrderLine[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1099,6 +1100,11 @@ model PurchaseOrderLine {
   amount       Decimal        @db.Decimal(14, 2)
   expectedDate DateTime?      @db.Date
   grnLines     GrnLine[]
+  /// Ordered for a specific customer order (item was out of stock when the doctor ordered).
+  salesOrderId String?
+  salesOrder   SalesOrder?    @relation(fields: [salesOrderId], references: [id])
+
+  @@index([salesOrderId])
 }
 
 model Grn {

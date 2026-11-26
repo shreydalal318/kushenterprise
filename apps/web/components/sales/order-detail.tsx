@@ -1,7 +1,7 @@
 'use client';
 import { useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle2, Circle, FileText, Receipt, ScanLine } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Circle, FileText, Receipt, ScanLine, Truck } from 'lucide-react';
 import { DISPATCH_METHOD_LABEL, DISPATCH_METHODS, formatDate, formatDateTime, istDateString, nextStatuses, ORDER_FLOW, ORDER_STATUS_LABEL, type DispatchMethod, type OrderStatus } from '@kush/core';
 import { Button } from '@/components/ui/button';
 import { Alert, Card, CardBody, CardHeader, PageHeader } from '@/components/ui/card';
@@ -17,6 +17,8 @@ import { rupees } from '@/lib/format';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
 import { useMe } from '@/lib/use-me';
 import { OrderBadge, PaymentBadge } from './status';
+import { OrderFromSupplierDialog } from './order-sourcing';
+import { PoBadge } from '@/components/purchasing/po-status';
 
 type Order = RouterOutputs['orders']['get'];
 
@@ -28,11 +30,17 @@ export function OrderDetail({ id, isNew }: { id: string; isNew: boolean }) {
   const [dispatchOpen, setDispatchOpen] = useState(false);
   const [packOpen, setPackOpen] = useState(false);
   const [deliverOpen, setDeliverOpen] = useState(false);
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const sq = trpc.orders.shortfall.useQuery({ id });
   if (q.error) return <Alert>{errorMessage(q.error)}</Alert>;
   if (!q.data) return <p className="text-sm text-muted">Loading…</p>;
   const o = q.data;
   const next = nextStatuses(o.status);
   const backorder = o.lines.reduce((t, l) => t + l.backorder, 0);
+  const stock = new Map((sq.data?.lines ?? []).map((l) => [l.variantId, l]));
+  const toOrder = (sq.data?.lines ?? []).reduce((t, l) => t + l.toOrder, 0);
+  const linkedPos = [...new Map((sq.data?.lines ?? []).flatMap((l) => l.purchaseOrders).map((p) => [p.id, p])).values()];
+  const open = !['CANCELLED', 'DELIVERED'].includes(o.status);
   const reached = (s: OrderStatus) => o.events.find((e) => e.status === s);
 
   function go(s: OrderStatus) {
@@ -51,9 +59,11 @@ export function OrderDetail({ id, isNew }: { id: string; isNew: boolean }) {
         actions={<div className="flex flex-wrap gap-2">
           {backorder > 0 && o.status !== 'CANCELLED' && can('CREATE_TAX_INVOICE') && <LinkButton href={`/app/invoices/new?order=${o.id}`}><Receipt className="size-4" aria-hidden /> Create tax invoice</LinkButton>}
           {o.status !== 'CANCELLED' && can('CREATE_PROFORMA') && <LinkButton variant="secondary" href={`/app/proforma/new?order=${o.id}`}><FileText className="size-4" aria-hidden /> Proforma</LinkButton>}
+          {open && backorder > 0 && can('CREATE_PURCHASE_ORDERS') && sq.data && <Button variant={toOrder > 0 ? 'primary' : 'secondary'} onClick={() => setSourceOpen(true)}><Truck className="size-4" aria-hidden /> Order from supplier</Button>}
           {can('SCAN_DISPATCH') && ['CONFIRMED', 'PLACED'].includes(o.status) && <Button variant="secondary" onClick={() => setPackOpen(true)}><ScanLine className="size-4" aria-hidden /> Pack &amp; verify</Button>}
         </div>} />
       {isNew && <Alert tone="ok">Order placed.</Alert>}
+      {open && toOrder > 0 && <Alert tone="info">{toOrder} unit(s) on this order are not in stock{can('CREATE_PURCHASE_ORDERS') ? ' — use “Order from supplier” to raise a purchase order.' : '.'}</Alert>}
       {setStatus.error && <Alert>{errorMessage(setStatus.error)}</Alert>}
 
       <Card>
@@ -85,14 +95,15 @@ export function OrderDetail({ id, isNew }: { id: string; isNew: boolean }) {
       <div className="grid gap-5 xl:grid-cols-[1fr_340px]">
         <Card className="overflow-hidden">
           <CardHeader title="Items" description={backorder > 0 && o.invoices.length ? `${backorder} unit(s) still to send (back-order)` : undefined} />
-          <Table minWidth={620}>
-            <THead><tr><Th>Item</Th><Th className="text-right">Ordered</Th><Th className="text-right">Invoiced</Th><Th className="text-right">To send</Th><Th className="text-right">Rate</Th><Th className="text-right">Amount</Th></tr></THead>
+          <Table minWidth={720}>
+            <THead><tr><Th>Item</Th><Th className="text-right">Ordered</Th><Th className="text-right">Invoiced</Th><Th className="text-right">To send</Th><Th className="text-right">In stock</Th><Th className="text-right">Rate</Th><Th className="text-right">Amount</Th></tr></THead>
             <tbody>
               {o.lines.map((l) => (
                 <Tr key={l.id}>
                   <Td><div className="font-medium">{l.variant.product.name}</div><div className="text-xs text-muted">{l.variant.label ?? l.variant.sku}</div></Td>
                   <Td className="num">{l.qty}</Td><Td className="num">{l.qtyDispatched}</Td>
                   <Td className={cn('num font-semibold', l.backorder > 0 ? 'text-warn' : 'text-ok')}>{l.backorder}</Td>
+                  <StockCell line={stock.get(l.variant.id)} backorder={l.backorder} />
                   <Td className="num">{rupees(l.rate)}</Td><Td className="num">{rupees(l.amount)}</Td>
                 </Tr>
               ))}
@@ -100,6 +111,21 @@ export function OrderDetail({ id, isNew }: { id: string; isNew: boolean }) {
           </Table>
         </Card>
         <div className="flex flex-col gap-5">
+          {linkedPos.length > 0 && (
+            <Card className="overflow-hidden">
+              <CardHeader title="Ordered from supplier" />
+              <Table minWidth={300}>
+                <tbody>
+                  {linkedPos.map((p) => (
+                    <Tr key={p.id}>
+                      <Td><Link className="font-mono text-sm text-teal-700 hover:underline" href={`/app/purchase-orders/${p.id}`}>{p.number}</Link><div className="text-xs text-muted">{p.supplier}{p.expectedDate ? ` · expected ${formatDate(p.expectedDate)}` : ''}</div></Td>
+                      <Td className="text-right"><PoBadge status={p.status} /></Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </Table>
+            </Card>
+          )}
           <Card>
             <CardHeader title="Details" />
             <CardBody className="flex flex-col gap-1.5 text-sm">
@@ -138,6 +164,7 @@ export function OrderDetail({ id, isNew }: { id: string; isNew: boolean }) {
           )}
         </div>
       </div>
+      {sourceOpen && sq.data && <OrderFromSupplierDialog s={sq.data} onClose={() => setSourceOpen(false)} />}
       {dispatchOpen && <DispatchDialog o={o} onClose={() => setDispatchOpen(false)} />}
       {packOpen && <PackDialog o={o} onClose={() => setPackOpen(false)} />}
       {deliverOpen && <DeliverDialog o={o} onClose={() => setDeliverOpen(false)} />}
@@ -255,5 +282,16 @@ function PackDialog({ o, onClose }: { o: Order; onClose: () => void }) {
         </ul>
       </div>
     </Dialog>
+  );
+}
+
+function StockCell({ line, backorder }: { line?: { available: number; short: number; onOrder: number }; backorder: number }) {
+  if (!line || backorder === 0) return <Td className="num text-muted">{line?.available ?? '—'}</Td>;
+  return (
+    <Td className="num">
+      <span className={line.short > 0 ? 'font-semibold text-danger' : 'text-ok'}>{line.available}</span>
+      {line.short > 0 && <div className="text-xs text-danger">short {line.short}</div>}
+      {line.onOrder > 0 && <div className="text-xs text-muted">{line.onOrder} on PO</div>}
+    </Td>
   );
 }

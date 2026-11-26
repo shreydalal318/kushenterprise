@@ -31,6 +31,7 @@ export function PoDetail({ id, isNew }: { id: string; isNew: boolean }) {
   const open = p.status === 'SENT' || p.status === 'PARTIALLY_RECEIVED';
   const anyReceived = p.lines.some((l) => l.qtyReceived > 0);
   const pending = p.lines.reduce((t, l) => t + l.pending, 0);
+  const forOrders = [...new Map(p.lines.flatMap((l) => (l.salesOrder ? [[l.salesOrder.id, l.salesOrder] as const] : []))).values()];
   return (
     <div className="flex flex-col gap-5">
       <Link href="/app/purchase-orders" className="flex w-fit items-center gap-1 text-sm text-teal-700 hover:underline"><ArrowLeft className="size-4" aria-hidden /> All purchase orders</Link>
@@ -44,6 +45,7 @@ export function PoDetail({ id, isNew }: { id: string; isNew: boolean }) {
           {open && anyReceived && buyer && <Button variant="secondary" onClick={() => setReasonFor('close')}><XCircle className="size-4" aria-hidden /> Short-close</Button>}
           {(p.status === 'DRAFT' || p.status === 'SENT') && !anyReceived && buyer && <Button variant="danger" onClick={() => setReasonFor('cancel')}><Ban className="size-4" aria-hidden /> Cancel PO</Button>}
         </div>} />
+      {forOrders.length > 0 && <Alert tone="info">Raised for customer order {forOrders.map((so, i) => <span key={so.id}>{i ? ', ' : ''}<Link className="font-medium underline" href={`/app/orders/${so.id}`}>{so.number}</Link> ({so.customer})</span>)}. The team is alerted when these goods are received.</Alert>}
       {isNew && <Alert tone="ok">Saved as a draft. Check the PDF, then mark it as sent once it has gone to the supplier.</Alert>}
       {send.error && <Alert>{errorMessage(send.error)}</Alert>}
       {p.status === 'CANCELLED' && <Alert>Cancelled{p.cancelledAt ? ` on ${formatDateTime(p.cancelledAt)}` : ''}: {p.cancelReason}</Alert>}
@@ -56,7 +58,7 @@ export function PoDetail({ id, isNew }: { id: string; isNew: boolean }) {
           <tbody>
             {p.lines.map((l) => (
               <Tr key={l.id}>
-                <Td><div className="font-medium">{l.name}</div><div className="text-xs text-muted">{l.label ?? l.sku} · HSN {l.hsnCode} · GST {l.gstRate}%</div></Td>
+                <Td><div className="font-medium">{l.name}</div><div className="text-xs text-muted">{l.label ?? l.sku} · HSN {l.hsnCode} · GST {l.gstRate}%</div>{l.salesOrder && <div className="text-xs">For <Link className="text-teal-700 hover:underline" href={`/app/orders/${l.salesOrder.id}`}>{l.salesOrder.number}</Link> · {l.salesOrder.customer}</div>}</Td>
                 <Td className="num">{l.qtyOrdered}</Td>
                 <Td className={cn('num', l.qtyReceived >= l.qtyOrdered && 'text-ok')}>{l.qtyReceived}</Td>
                 <Td className={cn('num font-semibold', l.pending > 0 && open ? 'text-warn' : 'text-muted')}>{l.pending || '—'}</Td>

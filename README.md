@@ -23,6 +23,22 @@ Brief: [`docs/00-original-brief.md`](docs/00-original-brief.md) · Stack: [`docs
 | 8 | Public website, enquiries → leads | ✅ done |
 | **9** | **Tally XML export, e-invoice & e-way bill readiness, WhatsApp / email sharing** | ✅ **done** (see below) |
 
+### Ordering from the supplier when a customer order is out of stock (added after Phase 9)
+
+- The order screen has an **In stock** column for each item. It shows what is in stock (expired batches are not counted), how many are **short**, and how many are already **on a PO** for this order. A banner says when some units are not in stock.
+- **Order from supplier** (needs *Create purchase orders*) opens a dialog that is already filled in:
+  - the short quantity;
+  - the item's usual supplier, which is the one we last bought it from;
+  - an optional expected date;
+  - **Mark as sent now** and **Tell the customer** checkboxes.
+- It raises **one PO per supplier** at the last purchase rate. You can untick *Mark as sent now* to keep it as a draft and review it first.
+- Each PO line stays **linked to the customer order**, and editing a draft keeps that link:
+  - The order shows an *Ordered from supplier* card with each PO's status and expected date.
+  - The PO shows *Raised for customer order …*, with a link back to the order.
+  - The order's history records which POs were raised.
+- **Tell the customer** sends the doctor a message: "Some items are being ordered from the manufacturer and are expected by …".
+- **Receiving the goods against that PO** alerts the assigned employee, and the staff who handle that customer: "Stock arrived for KE/SO/…: ready to invoice and dispatch".
+
 ### Local delivery by our own staff (added after Phase 9)
 
 - **Dispatch now asks how the order is going out**: *Our delivery staff*, *Courier*, *Transport (LR)* or *Customer pickup*.

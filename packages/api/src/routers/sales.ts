@@ -9,6 +9,7 @@ import {
 import { logActivity } from '../services/activity';
 import { dayToDate, isoDay, num } from '../services/num';
 import { resolveCustomerPrices } from '../services/pricing';
+import { orderShortfall } from '../services/purchasing';
 import { getSettings } from '../services/settings';
 import { createCreditNote } from '../services/sales/credit-notes';
 import { cancelInvoice, createInvoice } from '../services/sales/invoices';
@@ -128,6 +129,8 @@ export const ordersRouter = router({
   verifyPacked: permissionProcedure('SCAN_DISPATCH').input(z.object({ id: z.string(), scanned: z.array(z.object({ variantId: z.string(), qty: z.number().int().min(1) })).max(500) })).mutation(({ ctx, input }) =>
     ctx.db.$transaction((tx) => verifyPacked(tx, input.id, input.scanned, ctx.user, ctx.ip))),
 
+  /** Per item: still to send, in stock, short, already on order from a supplier for this order. */
+  shortfall: permissionProcedure('VIEW_ORDERS').input(z.object({ id: z.string() })).query(({ ctx, input }) => orderShortfall(ctx.db, input.id)),
   staff: permissionProcedure('VIEW_ORDERS').query(({ ctx }) => ctx.db.user.findMany({ where: { role: { in: ['OWNER', 'EMPLOYEE'] }, isActive: true }, select: { id: true, name: true, mobile: true }, orderBy: { name: 'asc' } })),
 });
 

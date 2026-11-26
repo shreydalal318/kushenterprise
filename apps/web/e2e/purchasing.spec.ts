@@ -5,7 +5,7 @@ import { run } from './run';
 const T = run.tag.toUpperCase();
 const yymmdd = (iso: string) => iso.slice(2, 4) + iso.slice(5, 7) + iso.slice(8, 10);
 const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
-const ctx: { supplier: string; gelName: string; gtin: string; otherBarcode: string; poUrl: string } = {} as never;
+const ctx: { supplier: string; gelName: string; gelVariant: string; gtin: string; otherBarcode: string; poUrl: string } = {} as never;
 
 async function scan(page: Page, code: string) {
   const f = page.getByLabel('Scan', { exact: true });
@@ -26,6 +26,7 @@ test.describe.serial('Phase 5 purchase orders', () => {
     ctx.gelName = `PO Gel ${T}`;
     const gel = await trpc<{ id: string }>(r, 'products.create', { code: `POG-${T}`, name: ctx.gelName, categoryId, hsnCode: '30049099', gstRate: 12, unit: 'pcs', defaultRate: 400, mrp: 650, purchaseCost: 210 });
     const gv = (await trpc<{ variants: { id: string }[] }>(r, 'products.get', { id: gel.id }, 'GET')).variants[0]!.id;
+    ctx.gelVariant = gv;
     await trpc(r, 'products.updateVariant', { id: gv, isActive: true, reorderLevel: 10 });
     // 2 on hand, bought at ₹190 last time from this supplier → reorder suggestion 18 @ ₹190
     await trpc(r, 'inventory.createGrn', { supplierId: sup.id, date: inDays(0), lines: [{ variantId: gv, batchNo: `OLD${T}`, expiryDate: inDays(300), qty: 2, rate: 190 }] });
@@ -94,5 +95,31 @@ test.describe.serial('Phase 5 purchase orders', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Short-close' }).click();
     await expect(page.getByText(/Short-closed .*Balance not available/)).toBeVisible();
     await snap(page, '42-po-closed');
+  });
+
+  test('a doctor orders more than we have: raise a PO to the usual supplier straight from the order', async ({ page }) => {
+    await login(page, run.owner.email, run.owner.password);
+    const r = page.request;
+    const c = await trpc<{ id: string }>(r, 'customers.create', { type: 'DOCTOR', name: `Dr Sourcing ${T}`, stateCode: '24', paymentTermsDays: 30, billingAddress: { line1: 'Alkapuri', city: 'Vadodara', pincode: '390005', stateCode: '24' } });
+    // 14 gels in stock after the receipt above; the doctor wants 20 → 6 short.
+    const o = await trpc<{ id: string; number: string }>(r, 'orders.create', { customerId: c.id, lines: [{ variantId: ctx.gelVariant, qty: 20 }] });
+    await page.goto(`/app/orders/${o.id}`);
+    await expect(page.getByText('6 unit(s) on this order are not in stock')).toBeVisible();
+    await expect(page.getByText('short 6')).toBeVisible();
+    await page.getByRole('button', { name: 'Order from supplier' }).click();
+    const dlg = page.getByRole('dialog');
+    await expect(dlg.getByLabel(`Order qty for ${ctx.gelName}`)).toHaveValue('6');
+    await expect(dlg.getByLabel(`Supplier for ${ctx.gelName}`).locator('option:checked')).toHaveText(`${ctx.supplier} (usual)`);
+    await dlg.getByLabel('Expected by (optional)').fill(inDays(4));
+    await snap(page, '43-order-from-supplier');
+    await dlg.getByRole('button', { name: 'Raise & mark sent' }).click();
+    await expect(dlg.getByText(/raised and marked as sent/)).toBeVisible();
+    await dlg.getByRole('link', { name: /KE\/PO\// }).click();
+    await expect(page.getByText(`Raised for customer order ${o.number}`)).toBeVisible();
+    await expect(page.getByText('Sent', { exact: true })).toBeVisible();
+    await page.getByRole('link', { name: o.number }).first().click();
+    await expect(page.getByText('6 on PO')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Ordered from supplier' })).toBeVisible();
+    await expect(page.getByText('not in stock')).toHaveCount(0);
   });
 });
