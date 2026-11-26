@@ -69,7 +69,16 @@ export function MyOrder({ id, isNew }: { id: string; isNew: boolean }) {
       </Card>
       {o.dispatches.length > 0 && (
         <Card><CardHeader title="Dispatch" /><CardBody className="flex flex-col gap-2 text-sm">
-          {o.dispatches.map((d, i) => <p key={i} className="flex items-center gap-2"><Truck className="size-4 text-teal-700" aria-hidden />{d.date ? formatDate(d.date) : ''}{d.courier ? ` · ${d.courier}` : ''}{d.docketNo ? ` · docket ${d.docketNo}` : ''}</p>)}
+          {o.dispatches.map((d, i) => (
+            <div key={i} className="flex items-start gap-2">
+              <Truck className="mt-0.5 size-4 text-teal-700" aria-hidden />
+              <p>{d.method === 'OWN_DELIVERY' ? `Out for delivery${d.person ? ` with ${d.person}` : ''}` : d.method === 'PICKUP' ? 'Ready for pickup at our store' : `Sent${d.courier ? ` via ${d.courier}` : ''}${d.docketNo ? ` · ${d.method === 'TRANSPORT' ? 'LR' : 'docket'} ${d.docketNo}` : ''}`}
+                {d.date ? ` · ${formatDate(d.date)}` : ''}
+                {d.method === 'OWN_DELIVERY' && d.personMobile && !d.deliveredAt && <> · <a className="text-teal-700 hover:underline" href={`tel:${d.personMobile}`}>{d.personMobile}</a></>}
+                {d.deliveredAt && <span className="block text-xs text-muted">Delivered {formatDateTime(d.deliveredAt)}{d.receivedBy ? `, received by ${d.receivedBy}` : ''}</span>}
+              </p>
+            </div>
+          ))}
         </CardBody></Card>
       )}
       <Card className="overflow-hidden">

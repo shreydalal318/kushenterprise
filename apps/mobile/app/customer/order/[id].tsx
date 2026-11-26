@@ -33,7 +33,12 @@ export default function OrderScreen() {
           </Row>
         ); })}
       </Card>
-      {o.dispatches.map((d, i) => <Alert key={i} tone="info">Dispatched {d.date ? formatDate(d.date) : ''}{d.courier ? ` via ${d.courier}` : ''}{d.docketNo ? `, docket ${d.docketNo}` : ''}</Alert>)}
+      {o.dispatches.map((d, i) => (
+        <Alert key={i} tone={d.deliveredAt ? 'ok' : 'info'}>
+          {d.method === 'OWN_DELIVERY' ? `Out for delivery${d.person ? ` with ${d.person}${d.personMobile ? ` (${d.personMobile})` : ''}` : ''}` : d.method === 'PICKUP' ? 'Ready for pickup at our store' : `Sent${d.courier ? ` via ${d.courier}` : ''}${d.docketNo ? `, ${d.method === 'TRANSPORT' ? 'LR' : 'docket'} ${d.docketNo}` : ''}`}
+          {d.date ? ` · ${formatDate(d.date)}` : ''}{d.deliveredAt ? `\nDelivered${d.receivedBy ? `, received by ${d.receivedBy}` : ''}` : ''}
+        </Alert>
+      ))}
       <H2>Items</H2>
       <Card>
         {o.lines.map((l) => (

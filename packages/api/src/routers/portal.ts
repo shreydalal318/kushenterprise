@@ -179,7 +179,7 @@ export const portalRouter = router({
       lines: o.lines.map((l) => ({ id: l.id, name: l.variant.product.name, label: l.variant.label, qty: l.qty, sent: l.qtyDispatched, backorder: Math.max(0, l.qty - l.qtyDispatched), rate: num(l.rate) })),
       // Staff notes stay internal; the customer sees each step and when it happened.
       events: o.events.map((e) => ({ status: e.status, at: e.createdAt, note: e.status === 'CANCELLED' || e.status === 'ON_HOLD' ? e.note : null })),
-      dispatches: o.dispatches.map((d) => ({ courier: d.courier, docketNo: d.docketNo, date: isoDay(d.dispatchDate) })),
+      dispatches: o.dispatches.map((d) => ({ method: d.method, courier: d.courier, docketNo: d.docketNo, date: isoDay(d.dispatchDate), person: d.deliveryPersonName, personMobile: d.deliveryPersonMobile, deliveredAt: d.deliveredAt, receivedBy: d.receivedBy })),
       invoices: o.invoices.map((i) => ({ id: i.id, number: i.number, date: isoDay(i.date), total: num(i.grandTotal) })),
     };
   }),

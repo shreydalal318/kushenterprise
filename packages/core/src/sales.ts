@@ -54,3 +54,21 @@ export type InvoiceCopy = (typeof INVOICE_COPIES)[number];
 export const INVOICE_COPY_LABEL: Record<InvoiceCopy, string> = {
   ORIGINAL: 'ORIGINAL FOR RECIPIENT', DUPLICATE: 'DUPLICATE FOR TRANSPORTER', TRIPLICATE: 'TRIPLICATE FOR SUPPLIER',
 };
+
+/** How goods leave the store. */
+export const DISPATCH_METHODS = ['OWN_DELIVERY', 'COURIER', 'TRANSPORT', 'PICKUP'] as const;
+export type DispatchMethod = (typeof DISPATCH_METHODS)[number];
+export const DISPATCH_METHOD_LABEL: Record<DispatchMethod, string> = {
+  OWN_DELIVERY: 'Our delivery staff', COURIER: 'Courier', TRANSPORT: 'Transport (LR)', PICKUP: 'Customer pickup',
+};
+
+/** Same city as us (or same 3-digit PIN area) → our own delivery staff; otherwise a courier. */
+export function suggestDispatchMethod(company: { city?: string | null; pincode?: string | null }, shipTo: { addressLines: string[] } | null | undefined): DispatchMethod {
+  if (!shipTo) return 'COURIER';
+  const text = shipTo.addressLines.join(' ').toLowerCase();
+  const city = (company.city ?? '').trim().toLowerCase();
+  if (city && !/^\[.*\]$/.test(city) && text.includes(city)) return 'OWN_DELIVERY';
+  const pin = text.match(/\b(\d{6})\b/)?.[1];
+  if (pin && company.pincode && /^\d{6}$/.test(company.pincode) && pin.slice(0, 3) === company.pincode.slice(0, 3)) return 'OWN_DELIVERY';
+  return 'COURIER';
+}

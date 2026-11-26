@@ -23,6 +23,20 @@ Brief: [`docs/00-original-brief.md`](docs/00-original-brief.md) · Stack: [`docs
 | 8 | Public website, enquiries → leads | ✅ done |
 | **9** | **Tally XML export, e-invoice & e-way bill readiness, WhatsApp / email sharing** | ✅ **done** (see below) |
 
+### Local delivery by our own staff (added after Phase 9)
+
+- **Dispatch now asks how the order is going out**: *Our delivery staff*, *Courier*, *Transport (LR)* or *Customer pickup*.
+  - It **suggests our own delivery staff** when the delivery address is in the same city (or the same 3-digit PIN area) as the company. Otherwise it suggests a courier.
+  - The company city comes from Settings → Company, so with Vadodara set there, Vadodara orders default to the delivery boy.
+- **Our delivery staff**: pick the staff member (or type the name and mobile of someone outside the system) and, optionally, the vehicle number. No courier or docket is asked for.
+  - The invoice prints "By hand (Ramesh), GJ06AB1234" as *Dispatched through*.
+  - The customer is told "Out for delivery today with Ramesh (98250 …)".
+- **Delivery boys**: give each one a staff login (no permissions needed).
+  - Their deliveries appear in the app's **Deliver** tab and on the web **Deliveries** page, with the address (opens in Maps), a call button and the amount due on the invoice.
+  - They tap **Delivered** and enter who received it. That is the proof of delivery: the order moves to *Delivered* and the customer sees "Received by …".
+- **Deliveries page** (for whoever dispatches): everything still out, grouped by delivery person, plus orders waiting for customer pickup.
+- **Courier / transport** still take the company and docket / LR number. **Pickup** tells the customer the order is ready to collect and is marked delivered when collected.
+
 ### What Phase 9 delivers
 
 - **Tally Prime export** (Analytics → Reports & Excel), for any period:

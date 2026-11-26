@@ -77,6 +77,7 @@ model User {
   assignedOrders    SalesOrder[]       @relation("OrderAssignee")
   orderStatusEvents OrderStatusEvent[]
   stockMovements    StockMovement[]
+  deliveries        Dispatch[]         @relation("Deliveries")
   invoicesCreated   Invoice[]          @relation("InvoiceCreatedBy")
   invoicesCancelled Invoice[]          @relation("InvoiceCancelledBy")
   priceChanges      PriceChangeLog[]
@@ -736,17 +737,37 @@ model OrderStatusEvent {
 }
 
 model Dispatch {
-  id           String     @id @default(cuid())
-  orderId      String
-  order        SalesOrder @relation(fields: [orderId], references: [id])
-  invoiceId    String?    @unique
-  invoice      Invoice?   @relation(fields: [invoiceId], references: [id])
-  courier      String?
-  docketNo     String? // docket / LR no.
-  vehicleNo    String?
-  dispatchDate DateTime   @db.Date
-  scanVerified Boolean    @default(false) // packed items matched order by scan
-  createdAt    DateTime   @default(now())
+  id                   String         @id @default(cuid())
+  orderId              String
+  order                SalesOrder     @relation(fields: [orderId], references: [id])
+  invoiceId            String?        @unique
+  invoice              Invoice?       @relation(fields: [invoiceId], references: [id])
+  method               DispatchMethod @default(COURIER)
+  courier              String? // courier company or transporter name
+  docketNo             String? // docket / LR no.
+  vehicleNo            String?
+  /// Own delivery: an employee (delivery boy) from the system, or a name + mobile for someone else.
+  deliveryPersonId     String?
+  deliveryPerson       User?          @relation("Deliveries", fields: [deliveryPersonId], references: [id])
+  deliveryPersonName   String?
+  deliveryPersonMobile String?
+  dispatchDate         DateTime       @db.Date
+  scanVerified         Boolean        @default(false) // packed items matched order by scan
+  /// Proof of delivery
+  deliveredAt          DateTime?
+  receivedBy           String?
+  deliveryNote         String?
+  createdAt            DateTime       @default(now())
+
+  @@index([deliveryPersonId, deliveredAt])
+}
+
+/// How goods leave: by our own delivery staff (same city), courier, transport (LR), or collected by the customer.
+enum DispatchMethod {
+  OWN_DELIVERY
+  COURIER
+  TRANSPORT
+  PICKUP
 }
 
 enum ProformaStatus {

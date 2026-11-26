@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { canMoveTo, ORDER_STATUS_LABEL, type OrderStatus } from '@kush/core';
+import { canMoveTo, ORDER_STATUS_LABEL, type DispatchMethod, type OrderStatus } from '@kush/core';
 import type { Tx } from '@kush/db';
 import { logActivity } from '../activity';
 import { dayToDate } from '../num';
@@ -60,7 +60,19 @@ export interface StatusInput {
   id: string;
   status: OrderStatus;
   note?: string | null;
-  dispatch?: { courier?: string | null; docketNo?: string | null; vehicleNo?: string | null; dispatchDate: string; invoiceId?: string | null } | null;
+  dispatch?: {
+    method?: DispatchMethod; courier?: string | null; docketNo?: string | null; vehicleNo?: string | null; dispatchDate: string; invoiceId?: string | null;
+    deliveryPersonId?: string | null; deliveryPersonName?: string | null; deliveryPersonMobile?: string | null;
+  } | null;
+  /** Proof of delivery when marking Delivered. */
+  delivery?: { receivedBy?: string | null; note?: string | null } | null;
+}
+
+/** "By hand (Ramesh), GJ06AB1234" / "DTDC" / "Shree Maruti Transport, GJ06…" / "Customer pickup" — printed on the invoice. */
+function dispatchedThrough(method: DispatchMethod, d: { courier?: string | null; vehicleNo?: string | null }, person: string | null) {
+  if (method === 'PICKUP') return 'Customer pickup';
+  if (method === 'OWN_DELIVERY') return [`By hand${person ? ` (${person})` : ''}`, d.vehicleNo].filter(Boolean).join(', ');
+  return [d.courier, d.vehicleNo].filter(Boolean).join(', ') || null;
 }
 
 /** Move an order along Placed → Confirmed → Packed → Dispatched → Delivered (hold / cancel aside). */
@@ -69,20 +81,50 @@ export async function changeOrderStatus(tx: Tx, input: StatusInput, actor: { id:
   if (!o) throw new TRPCError({ code: 'NOT_FOUND' });
   if (!canMoveTo(o.status, input.status)) throw new TRPCError({ code: 'BAD_REQUEST', message: `An order that is ${ORDER_STATUS_LABEL[o.status].toLowerCase()} cannot be marked ${ORDER_STATUS_LABEL[input.status].toLowerCase()}` });
   if (input.status === 'CANCELLED' && o.invoices.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'This order has invoices; cancel those first' });
+  let deliveredWith: string | null = null; // "Ramesh (98250 12345)" for the customer's message
   if (input.status === 'DISPATCHED') {
     if (!o.invoices.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Raise a tax invoice before dispatching' });
-    if (!input.dispatch?.dispatchDate) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Enter the dispatch date and courier details' });
-    const invoiceId = input.dispatch.invoiceId ?? o.invoices[o.invoices.length - 1]!.id;
+    if (!input.dispatch?.dispatchDate) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Enter the dispatch date' });
+    const dsp = input.dispatch;
+    const method: DispatchMethod = dsp.method ?? 'COURIER';
+    if ((method === 'COURIER' || method === 'TRANSPORT') && !dsp.courier) throw new TRPCError({ code: 'BAD_REQUEST', message: method === 'COURIER' ? 'Enter the courier company' : 'Enter the transporter' });
+    let person: { id: string | null; name: string; mobile: string | null } | null = null;
+    if (method === 'OWN_DELIVERY') {
+      if (dsp.deliveryPersonId) {
+        const u = await tx.user.findFirst({ where: { id: dsp.deliveryPersonId, isActive: true, role: { in: ['OWNER', 'EMPLOYEE'] } }, select: { id: true, name: true, mobile: true } });
+        if (!u) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose an active staff member for the delivery' });
+        person = { id: u.id, name: u.name, mobile: u.mobile };
+      } else if (dsp.deliveryPersonName) person = { id: null, name: dsp.deliveryPersonName, mobile: dsp.deliveryPersonMobile ?? null };
+      else throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose who is delivering it' });
+    }
+    if (person) deliveredWith = `${person.name}${person.mobile ? ` (${person.mobile})` : ''}`;
+    const invoiceId = dsp.invoiceId ?? o.invoices[o.invoices.length - 1]!.id;
     const exists = await tx.dispatch.findUnique({ where: { invoiceId } });
-    const data = { orderId: o.id, invoiceId, courier: input.dispatch.courier ?? null, docketNo: input.dispatch.docketNo ?? null, vehicleNo: input.dispatch.vehicleNo ?? null, dispatchDate: dayToDate(input.dispatch.dispatchDate)! };
+    const data = {
+      orderId: o.id, invoiceId, method, courier: method === 'COURIER' || method === 'TRANSPORT' ? dsp.courier ?? null : null, docketNo: method === 'COURIER' || method === 'TRANSPORT' ? dsp.docketNo ?? null : null,
+      vehicleNo: method === 'PICKUP' ? null : dsp.vehicleNo ?? null, dispatchDate: dayToDate(dsp.dispatchDate)!,
+      deliveryPersonId: person?.id ?? null, deliveryPersonName: person?.name ?? null, deliveryPersonMobile: person?.mobile ?? null, deliveredAt: null, receivedBy: null,
+    };
     if (exists) await tx.dispatch.update({ where: { id: exists.id }, data }); else await tx.dispatch.create({ data });
     // Print the dispatch details on the invoice too (Tally's "Dispatched through" / "Dispatch Doc No.").
-    await tx.invoice.update({ where: { id: invoiceId }, data: { dispatchedThrough: [input.dispatch.courier, input.dispatch.vehicleNo].filter(Boolean).join(', ') || undefined, dispatchDocNo: input.dispatch.docketNo ?? undefined } });
+    await tx.invoice.update({ where: { id: invoiceId }, data: { dispatchedThrough: dispatchedThrough(method, dsp, person?.name ?? null), dispatchDocNo: data.docketNo } });
+    if (person?.id && person.id !== actor.id) {
+      const ship = (o.shippingSnapshot ?? {}) as { name?: string; addressLines?: string[] };
+      await notify(tx, { userIds: [person.id], title: `Delivery: ${o.number}`, body: `${ship.name ?? ''}, ${(ship.addressLines ?? []).join(', ')}`, link: `/app/orders/${o.id}`, channels: ['PUSH'] });
+    }
+  }
+  if (input.status === 'DELIVERED') {
+    await tx.dispatch.updateMany({ where: { orderId: o.id, deliveredAt: null }, data: { deliveredAt: new Date(), receivedBy: input.delivery?.receivedBy ?? null, deliveryNote: input.delivery?.note ?? null } });
   }
   await tx.salesOrder.update({ where: { id: o.id }, data: { status: input.status } });
   if (settingsView(await getSettings(tx)).notificationConfig.orderStatusToCustomer) {
     const d = input.dispatch;
-    const body = input.status === 'DISPATCHED' && d ? `Sent${d.courier ? ` via ${d.courier}` : ''}${d.docketNo ? `, docket ${d.docketNo}` : ''}.`
+    const m: DispatchMethod = d?.method ?? 'COURIER';
+    const body = input.status === 'DISPATCHED' && d ? (
+      m === 'OWN_DELIVERY' ? `Out for delivery today${deliveredWith ? ` with ${deliveredWith}` : ''}.`
+        : m === 'PICKUP' ? 'Ready for pickup from our store.'
+          : `Sent${d.courier ? ` via ${d.courier}` : ''}${d.docketNo ? `, ${m === 'TRANSPORT' ? 'LR' : 'docket'} ${d.docketNo}` : ''}.`)
+      : input.status === 'DELIVERED' && input.delivery?.receivedBy ? `Delivered. Received by ${input.delivery.receivedBy}.`
       : input.status === 'CANCELLED' ? `Your order was cancelled${input.note ? `: ${input.note}` : '.'}`
         : input.status === 'ON_HOLD' ? `Your order is on hold${input.note ? `: ${input.note}` : '.'}`
           : `Your order is now ${ORDER_STATUS_LABEL[input.status].toLowerCase()}.`;

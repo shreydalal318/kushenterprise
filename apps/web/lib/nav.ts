@@ -1,7 +1,7 @@
 import { can, isOwner, type Permission, type Principal } from '@kush/core';
 import {
   Activity, BarChart3, Boxes, ClipboardList, Factory, FileText, LayoutDashboard, Package, PackagePlus, Receipt, ScanLine, Settings, ShoppingCart,
-  Tags, Truck, Users, UserCog, Wallet, type LucideIcon,
+  Tags, Truck, Users, UserCog, Wallet, Bike, type LucideIcon,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -22,6 +22,7 @@ export const NAV: { section: string; items: NavItem[] }[] = [
     section: 'Sales',
     items: [
       { href: '/app/orders', label: 'Orders', icon: ShoppingCart, permission: 'VIEW_ORDERS' },
+      { href: '/app/deliveries', label: 'Deliveries', icon: Bike },
       { href: '/app/invoices', label: 'Tax invoices', icon: Receipt, anyOf: ['CREATE_TAX_INVOICE', 'VIEW_ORDERS', 'RECORD_PAYMENTS'] },
       { href: '/app/proforma', label: 'Proforma', icon: FileText, permission: 'CREATE_PROFORMA' },
       { href: '/app/payments', label: 'Payments', icon: Wallet, permission: 'RECORD_PAYMENTS' },

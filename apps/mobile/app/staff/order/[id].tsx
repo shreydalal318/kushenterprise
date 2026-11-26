@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Stack, useLocalSearchParams } from 'expo-router';
-import { formatDate, formatDateTime, istDateString, nextStatuses, ORDER_STATUS_LABEL, type OrderStatus } from '@kush/core';
+import { DISPATCH_METHOD_LABEL, DISPATCH_METHODS, formatDate, formatDateTime, istDateString, nextStatuses, ORDER_STATUS_LABEL, type DispatchMethod, type OrderStatus } from '@kush/core';
 import { Scanner } from '@/components/scanner';
 import { Alert, Button, Card, Field, H2, KV, Loading, P, Row, Screen, Small } from '@/components/ui';
 import { OrderStatusBadge } from '@/components/status';
@@ -18,10 +19,13 @@ export default function StaffOrder() {
   const q = trpc.orders.get.useQuery({ id: id! });
   const setStatus = trpc.orders.setStatus.useMutation({ onSuccess: () => utils.orders.invalidate() });
   const verify = trpc.orders.verifyPacked.useMutation({ onSuccess: (r) => { if (r.ok) void utils.orders.invalidate(); } });
-  const [mode, setMode] = useState<null | 'pack' | 'dispatch' | 'note'>(null);
+  const [mode, setMode] = useState<null | 'pack' | 'dispatch' | 'note' | 'deliver'>(null);
   const [noteFor, setNoteFor] = useState<OrderStatus | null>(null);
   const [note, setNote] = useState('');
-  const [d, setD] = useState({ courier: '', docketNo: '', vehicleNo: '', dispatchDate: istDateString() });
+  const [d, setD] = useState({ method: '' as '' | DispatchMethod, courier: '', docketNo: '', vehicleNo: '', dispatchDate: istDateString(), deliveryPersonId: '', deliveryPersonName: '', deliveryPersonMobile: '' });
+  const staff = trpc.orders.staff.useQuery();
+  const [receivedBy, setReceivedBy] = useState('');
+  const deliver = trpc.orders.markDelivered.useMutation({ onSuccess: () => { void utils.orders.invalidate(); void utils.deliveries.invalidate(); setMode(null); } });
   const counts = useRef<Record<string, number>>({});
   const [packed, setPacked] = useState<Record<string, number>>({});
   const [packMsg, setPackMsg] = useState<string | null>(null);
@@ -42,7 +46,8 @@ export default function StaffOrder() {
   const allPacked = o.lines.every((l) => (packed[l.variant.id] ?? 0) >= l.qty);
 
   function go(s: OrderStatus) {
-    if (s === 'DISPATCHED') return setMode('dispatch');
+    if (s === 'DISPATCHED') { setD((x) => ({ ...x, method: x.method || (o.suggestedDispatch as DispatchMethod) })); return setMode('dispatch'); }
+    if (s === 'DELIVERED') return setMode('deliver');
     if (s === 'CANCELLED' || s === 'ON_HOLD') { setNoteFor(s); setMode('note'); return; }
     setStatus.mutate({ id: o.id, status: s });
   }
@@ -83,13 +88,52 @@ export default function StaffOrder() {
       )}
       {mode === 'dispatch' && (
         <Card>
-          <H2>Dispatch details</H2>
+          <H2>How is it going out?</H2>
           {!o.invoices.some((i) => i.status === 'ISSUED') && <Alert tone="warn">Raise the tax invoice first (Bill tab or web).</Alert>}
-          <Field label="Courier / transporter" value={d.courier} onChangeText={(v) => setD({ ...d, courier: v })} />
-          <Field label="Docket / LR no." value={d.docketNo} onChangeText={(v) => setD({ ...d, docketNo: v })} />
-          <Field label="Vehicle no. (optional)" value={d.vehicleNo} onChangeText={(v) => setD({ ...d, vehicleNo: v })} />
-          <Field label="Dispatch date" value={d.dispatchDate} onChangeText={(v) => setD({ ...d, dispatchDate: v })} />
-          <Button title="Mark dispatched" loading={setStatus.isPending} onPress={() => setStatus.mutate({ id: o.id, status: 'DISPATCHED', dispatch: d }, { onSuccess: () => setMode(null) })} />
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {DISPATCH_METHODS.map((k) => (
+              <Pressable key={k} accessibilityRole="radio" accessibilityState={{ selected: d.method === k }} onPress={() => setD({ ...d, method: k })}
+                style={{ width: '48%', padding: 10, borderRadius: 10, borderWidth: 1, borderColor: d.method === k ? C.teal : C.line, backgroundColor: d.method === k ? C.aqua50 : C.white }}>
+                <P style={{ fontWeight: d.method === k ? '700' : '400' }}>{DISPATCH_METHOD_LABEL[k]}</P>
+                {k === o.suggestedDispatch && <Small style={{ color: C.teal700 }}>suggested</Small>}
+              </Pressable>
+            ))}
+          </View>
+          {d.method === 'OWN_DELIVERY' && (
+            <View style={{ gap: 6 }}>
+              <Small>Delivered by</Small>
+              {[...(staff.data ?? []).map((u) => ({ id: u.id, label: `${u.name}${u.mobile ? ` · ${u.mobile}` : ''}` })), { id: 'OTHER', label: 'Someone else' }].map((u) => (
+                <Pressable key={u.id} accessibilityRole="radio" accessibilityState={{ selected: d.deliveryPersonId === u.id }} onPress={() => setD({ ...d, deliveryPersonId: u.id })} style={{ flexDirection: 'row', gap: 8, alignItems: 'center', paddingVertical: 3 }}>
+                  <Ionicons name={d.deliveryPersonId === u.id ? 'radio-button-on' : 'radio-button-off'} size={20} color={C.teal700} /><P>{u.label}</P>
+                </Pressable>
+              ))}
+              {d.deliveryPersonId === 'OTHER' && <><Field label="Name" value={d.deliveryPersonName} onChangeText={(v) => setD({ ...d, deliveryPersonName: v })} /><Field label="Mobile (optional)" keyboardType="phone-pad" value={d.deliveryPersonMobile} onChangeText={(v) => setD({ ...d, deliveryPersonMobile: v })} /></>}
+              <Field label="Vehicle no. (optional)" autoCapitalize="characters" value={d.vehicleNo} onChangeText={(v) => setD({ ...d, vehicleNo: v })} />
+            </View>
+          )}
+          {(d.method === 'COURIER' || d.method === 'TRANSPORT') && (
+            <>
+              <Field label={d.method === 'COURIER' ? 'Courier company' : 'Transporter'} value={d.courier} onChangeText={(v) => setD({ ...d, courier: v })} />
+              <Field label={d.method === 'COURIER' ? 'Docket no.' : 'LR no.'} value={d.docketNo} onChangeText={(v) => setD({ ...d, docketNo: v })} />
+            </>
+          )}
+          {d.method === 'PICKUP' && <Small>The customer is told it is ready to collect.</Small>}
+          <Field label="Date" value={d.dispatchDate} onChangeText={(v) => setD({ ...d, dispatchDate: v })} />
+          <Button title={d.method === 'PICKUP' ? 'Mark ready for pickup' : 'Mark dispatched'} loading={setStatus.isPending} disabled={!d.method}
+            onPress={() => setStatus.mutate({ id: o.id, status: 'DISPATCHED', dispatch: {
+              method: d.method as DispatchMethod, dispatchDate: d.dispatchDate, vehicleNo: d.vehicleNo || null, courier: d.courier || null, docketNo: d.docketNo || null,
+              deliveryPersonId: d.method === 'OWN_DELIVERY' && d.deliveryPersonId && d.deliveryPersonId !== 'OTHER' ? d.deliveryPersonId : null,
+              deliveryPersonName: d.deliveryPersonId === 'OTHER' ? d.deliveryPersonName : null, deliveryPersonMobile: d.deliveryPersonId === 'OTHER' ? d.deliveryPersonMobile : null,
+            } }, { onSuccess: () => setMode(null) })} />
+          <Button variant="secondary" title="Back" onPress={() => setMode(null)} />
+        </Card>
+      )}
+      {mode === 'deliver' && (
+        <Card>
+          <H2>Proof of delivery</H2>
+          <Field label="Received by" placeholder="e.g. Sister Mary, OT store" value={receivedBy} onChangeText={setReceivedBy} />
+          {deliver.error && <Alert>{errorText(deliver.error)}</Alert>}
+          <Button title="Mark delivered" loading={deliver.isPending} onPress={() => deliver.mutate({ id: o.id, receivedBy })} />
           <Button variant="secondary" title="Back" onPress={() => setMode(null)} />
         </Card>
       )}
@@ -102,7 +146,7 @@ export default function StaffOrder() {
       )}
       <H2>History</H2>
       <Card>{o.events.map((e) => <KV key={e.id} k={`${ORDER_STATUS_LABEL[e.status as OrderStatus]} · ${e.by}`} v={formatDateTime(e.at)} />)}</Card>
-      {o.dispatches.map((x) => <Small key={x.id}>Dispatched {x.dispatchDate ? formatDate(x.dispatchDate) : ''} {x.courier ?? ''} {x.docketNo ?? ''}</Small>)}
+      {o.dispatches.map((x) => <Small key={x.id}>{DISPATCH_METHOD_LABEL[x.method as DispatchMethod]} {x.dispatchDate ? formatDate(x.dispatchDate) : ''} {x.deliveryPersonName ?? x.courier ?? ''} {x.docketNo ?? ''}{x.deliveredAt ? ` · delivered${x.receivedBy ? `, received by ${x.receivedBy}` : ''}` : ''}</Small>)}
     </Screen>
   );
 }

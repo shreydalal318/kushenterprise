@@ -104,11 +104,18 @@ test.describe.serial('Phase 4 sales', () => {
     await expect(dlg).toBeHidden();
 
     await page.getByRole('button', { name: 'Mark dispatched' }).click();
-    await page.getByLabel('Courier / transporter').fill('DTDC');
-    await page.getByLabel('Docket / LR no.').fill(`D${T}`);
-    await page.getByRole('dialog').getByRole('button', { name: 'Mark dispatched' }).click();
+    const dlg2 = page.getByRole('dialog');
+    // Same city as us → our own delivery staff is suggested; this one goes by courier instead.
+    await expect(dlg2.getByRole('radio', { name: /Our delivery staff \(suggested\)/ })).toHaveAttribute('aria-checked', 'true');
+    await dlg2.getByRole('radio', { name: /^Courier/ }).click();
+    await dlg2.getByLabel('Courier company').fill('DTDC');
+    await dlg2.getByLabel('Docket no.').fill(`D${T}`);
+    await dlg2.getByRole('button', { name: 'Mark dispatched' }).click();
     await expect(page.getByText(`D${T}`)).toBeVisible();
     await page.getByRole('button', { name: 'Mark delivered' }).click();
+    await page.getByLabel('Received by').fill('Sister Mary, OT store');
+    await page.getByRole('dialog').getByRole('button', { name: 'Mark delivered' }).click();
+    await expect(page.getByText(/received by Sister Mary, OT store/)).toBeVisible();
     await expect(page.getByRole('button', { name: /Mark / })).toHaveCount(0);
     await snap(page, '32-order-delivered');
   });
@@ -164,5 +171,38 @@ test.describe.serial('Phase 4 sales', () => {
     await expect(page.getByText(/Cancelled by .*Wrong power billed/)).toBeVisible();
     const look = await trpc<{ found: boolean; serial?: { status: string } }>(page.request, 'scan.resolve', { code: ctx.serials[2] }, 'GET');
     expect(look.serial?.status).toBe('IN_STOCK');
+  });
+
+  test('hand an order to a delivery boy; he marks it delivered from Deliveries', async ({ page }) => {
+    await login(page, run.owner.email, run.owner.password);
+    const r = page.request;
+    const customers = await trpc<{ id: string; name: string }[]>(r, 'sales.customers', undefined, 'GET');
+    const c = customers.find((x) => x.name === ctx.customer)!;
+    const gel = await trpc<{ variant: { id: string } }>(r, 'scan.resolve', { code: ctx.gelBarcode }, 'GET');
+    const o = await trpc<{ id: string; number: string }>(r, 'orders.create', { customerId: c.id, lines: [{ variantId: gel.variant.id, qty: 1 }] });
+    await trpc(r, 'orders.setStatus', { id: o.id, status: 'CONFIRMED' });
+    await trpc(r, 'invoices.create', { customerId: c.id, orderId: o.id, date: new Date().toISOString().slice(0, 10), lines: [{ variantId: gel.variant.id, qty: 1 }] });
+    await page.goto(`/app/orders/${o.id}`);
+    await page.getByRole('button', { name: 'Mark packed' }).click();
+    await page.getByRole('button', { name: 'Mark dispatched' }).click();
+    const dlg = page.getByRole('dialog');
+    await dlg.getByLabel('Delivered by').selectOption({ label: new RegExp(run.owner.name) as unknown as string }).catch(async () => {
+      const value = await dlg.getByLabel('Delivered by').locator('option', { hasText: run.owner.name }).first().getAttribute('value');
+      await dlg.getByLabel('Delivered by').selectOption(value!);
+    });
+    await dlg.getByLabel('Vehicle no. (optional)').fill('GJ06AB1234');
+    await snap(page, '35-own-delivery');
+    await dlg.getByRole('button', { name: 'Mark dispatched' }).click();
+    await expect(page.getByText('Our delivery staff', { exact: true })).toBeVisible();
+    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Deliveries' }).click();
+    const row = page.getByRole('listitem').filter({ hasText: o.number }).first();
+    await expect(row).toBeVisible();
+    await snap(page, '36-deliveries');
+    await row.getByRole('button', { name: 'Mark delivered' }).click();
+    await page.getByLabel('Received by').fill('Reception desk');
+    await page.getByRole('dialog').getByRole('button', { name: 'Mark delivered' }).click();
+    await expect(page.getByRole('listitem').filter({ hasText: o.number })).toHaveCount(0);
+    await page.goto(`/app/orders/${o.id}`);
+    await expect(page.getByText(/received by Reception desk/)).toBeVisible();
   });
 });

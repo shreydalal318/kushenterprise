@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { istDateString, isOwner, ORDER_SORT_RANK, paymentStatus, round2, stateByCode } from '@kush/core';
+import { can, istDateString, isOwner, ORDER_SORT_RANK, paymentStatus, round2, stateByCode, suggestDispatchMethod } from '@kush/core';
 
 import { z } from 'zod';
 import {
@@ -16,7 +16,7 @@ import { customerLedger, receivables } from '../services/sales/ledger';
 import { changeOrderStatus, createOrder, verifyPacked } from '../services/sales/orders';
 import { allocatePayment, deletePayment, recordPayment } from '../services/sales/payments';
 import { convertProforma, createProforma } from '../services/sales/proformas';
-import { anyPermissionProcedure, ownerProcedure, permissionProcedure, router } from '../trpc';
+import { anyPermissionProcedure, ownerProcedure, permissionProcedure, router, staffProcedure } from '../trpc';
 
 const actorOf = (u: { id: string; role: string; permissions: readonly string[] }) => ({ id: u.id, isOwner: isOwner(u as never) });
 const tx60 = { timeout: 60_000 };
@@ -90,8 +90,10 @@ export const ordersRouter = router({
     });
     if (!o) throw new TRPCError({ code: 'NOT_FOUND' });
     const placedBy = await ctx.db.user.findUnique({ where: { id: o.placedById }, select: { name: true, role: true } });
+    const company = await getSettings(ctx.db);
     return {
       ...o, placedBy, surgeryDate: isoDay(o.surgeryDate),
+      suggestedDispatch: suggestDispatchMethod(company, o.shippingSnapshot as { addressLines: string[] } | null),
       lines: o.lines.map((l) => ({ id: l.id, variant: l.variant, qty: l.qty, qtyDispatched: l.qtyDispatched, backorder: Math.max(0, l.qty - l.qtyDispatched), rate: num(l.rate), amount: round2(l.qty * num(l.rate)) })),
       events: o.events.map((e) => ({ id: e.id, status: e.status, note: e.note, at: e.createdAt, by: e.byUser.name })),
       dispatches: o.dispatches.map((d) => ({ ...d, dispatchDate: isoDay(d.dispatchDate) })),
@@ -112,11 +114,21 @@ export const ordersRouter = router({
     return { ok: true };
   }),
 
+  /**
+   * Proof of delivery. The delivery person the order was handed to can mark it delivered (from the
+   * app) even without the order-status permission; anyone with that permission can too.
+   */
+  markDelivered: staffProcedure.input(z.object({ id: z.string(), receivedBy: z.string().trim().min(2, 'Who received it?').max(80), note: z.string().trim().max(300).optional().nullable() })).mutation(async ({ ctx, input }) => {
+    const mine = await ctx.db.dispatch.count({ where: { orderId: input.id, deliveryPersonId: ctx.user.id, deliveredAt: null } });
+    if (!mine && !can(ctx.user, 'UPDATE_ORDER_STATUS')) throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the person delivering this order can mark it delivered' });
+    return ctx.db.$transaction((tx) => changeOrderStatus(tx, { id: input.id, status: 'DELIVERED', delivery: { receivedBy: input.receivedBy, note: input.note ?? null } }, ctx.user, ctx.ip));
+  }),
+
   /** Scan-to-dispatch: compare what was packed (scanned) with the order. */
   verifyPacked: permissionProcedure('SCAN_DISPATCH').input(z.object({ id: z.string(), scanned: z.array(z.object({ variantId: z.string(), qty: z.number().int().min(1) })).max(500) })).mutation(({ ctx, input }) =>
     ctx.db.$transaction((tx) => verifyPacked(tx, input.id, input.scanned, ctx.user, ctx.ip))),
 
-  staff: permissionProcedure('VIEW_ORDERS').query(({ ctx }) => ctx.db.user.findMany({ where: { role: { in: ['OWNER', 'EMPLOYEE'] }, isActive: true }, select: { id: true, name: true }, orderBy: { name: 'asc' } })),
+  staff: permissionProcedure('VIEW_ORDERS').query(({ ctx }) => ctx.db.user.findMany({ where: { role: { in: ['OWNER', 'EMPLOYEE'] }, isActive: true }, select: { id: true, name: true, mobile: true }, orderBy: { name: 'asc' } })),
 });
 
 // ------------------------------------------------------------------ proformas

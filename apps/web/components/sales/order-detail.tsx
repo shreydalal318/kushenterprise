@@ -2,7 +2,7 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, CheckCircle2, Circle, FileText, Receipt, ScanLine } from 'lucide-react';
-import { formatDate, formatDateTime, istDateString, nextStatuses, ORDER_FLOW, ORDER_STATUS_LABEL, type OrderStatus } from '@kush/core';
+import { DISPATCH_METHOD_LABEL, DISPATCH_METHODS, formatDate, formatDateTime, istDateString, nextStatuses, ORDER_FLOW, ORDER_STATUS_LABEL, type DispatchMethod, type OrderStatus } from '@kush/core';
 import { Button } from '@/components/ui/button';
 import { Alert, Card, CardBody, CardHeader, PageHeader } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
@@ -11,7 +11,7 @@ import { LinkButton } from '@/components/ui/link-button';
 import { Table, Td, Th, THead, Tr } from '@/components/ui/table';
 import { ScanField } from '@/components/scan/scan-field';
 import { cn } from '@/lib/cn';
-import { errorMessage } from '@/lib/errors';
+import { errorMessage, fieldErrors } from '@/lib/errors';
 import { scanError, scanOk } from '@/lib/feedback';
 import { rupees } from '@/lib/format';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
@@ -27,6 +27,7 @@ export function OrderDetail({ id, isNew }: { id: string; isNew: boolean }) {
   const setStatus = trpc.orders.setStatus.useMutation({ onSuccess: () => utils.orders.invalidate() });
   const [dispatchOpen, setDispatchOpen] = useState(false);
   const [packOpen, setPackOpen] = useState(false);
+  const [deliverOpen, setDeliverOpen] = useState(false);
   if (q.error) return <Alert>{errorMessage(q.error)}</Alert>;
   if (!q.data) return <p className="text-sm text-muted">Loading…</p>;
   const o = q.data;
@@ -36,6 +37,7 @@ export function OrderDetail({ id, isNew }: { id: string; isNew: boolean }) {
 
   function go(s: OrderStatus) {
     if (s === 'DISPATCHED') return setDispatchOpen(true);
+    if (s === 'DELIVERED') return setDeliverOpen(true);
     const note = s === 'CANCELLED' || s === 'ON_HOLD' ? prompt(s === 'CANCELLED' ? 'Why is the order cancelled?' : 'Why is it on hold?') : null;
     if ((s === 'CANCELLED' || s === 'ON_HOLD') && !note) return;
     setStatus.mutate({ id: o.id, status: s, note });
@@ -122,7 +124,15 @@ export function OrderDetail({ id, isNew }: { id: string; isNew: boolean }) {
             <Card>
               <CardHeader title="Dispatch" />
               <ul className="divide-y divide-line text-sm">
-                {o.dispatches.map((d) => <li key={d.id} className="px-5 py-2">{formatDate(d.dispatchDate)} · {d.courier ?? 'Courier'} {d.docketNo ? `· docket ${d.docketNo}` : ''} {d.vehicleNo ? `· ${d.vehicleNo}` : ''}<div className="text-xs text-muted">Invoice {d.invoice?.number}</div></li>)}
+                {o.dispatches.map((d) => (
+                  <li key={d.id} className="px-5 py-2">
+                    <span className="font-medium">{DISPATCH_METHOD_LABEL[d.method as DispatchMethod]}</span> · {formatDate(d.dispatchDate)}
+                    {d.method === 'OWN_DELIVERY' && d.deliveryPersonName && <> · {d.deliveryPersonName}{d.deliveryPersonMobile ? ` (${d.deliveryPersonMobile})` : ''}</>}
+                    {(d.method === 'COURIER' || d.method === 'TRANSPORT') && <> · {d.courier}{d.docketNo ? ` · ${d.method === 'TRANSPORT' ? 'LR' : 'docket'} ${d.docketNo}` : ''}</>}
+                    {d.vehicleNo ? ` · ${d.vehicleNo}` : ''}
+                    <div className="text-xs text-muted">Invoice {d.invoice?.number}{d.deliveredAt ? ` · delivered ${formatDateTime(d.deliveredAt)}${d.receivedBy ? `, received by ${d.receivedBy}` : ''}` : ' · not delivered yet'}</div>
+                  </li>
+                ))}
               </ul>
             </Card>
           )}
@@ -130,27 +140,80 @@ export function OrderDetail({ id, isNew }: { id: string; isNew: boolean }) {
       </div>
       {dispatchOpen && <DispatchDialog o={o} onClose={() => setDispatchOpen(false)} />}
       {packOpen && <PackDialog o={o} onClose={() => setPackOpen(false)} />}
+      {deliverOpen && <DeliverDialog o={o} onClose={() => setDeliverOpen(false)} />}
     </div>
   );
 }
 
 function DispatchDialog({ o, onClose }: { o: Order; onClose: () => void }) {
   const utils = trpc.useUtils();
+  const staff = trpc.orders.staff.useQuery();
   const invoices = o.invoices.filter((i) => i.status === 'ISSUED');
-  const [v, setV] = useState({ courier: '', docketNo: '', vehicleNo: '', dispatchDate: istDateString(), invoiceId: invoices.at(-1)?.id ?? '' });
+  const [v, setV] = useState({ method: o.suggestedDispatch as DispatchMethod, courier: '', docketNo: '', vehicleNo: '', dispatchDate: istDateString(), invoiceId: invoices.at(-1)?.id ?? '', deliveryPersonId: '', deliveryPersonName: '', deliveryPersonMobile: '' });
   const m = trpc.orders.setStatus.useMutation({ onSuccess: async () => { await utils.orders.invalidate(); onClose(); } });
+  const other = v.deliveryPersonId === 'OTHER';
+  function save() {
+    m.mutate({ id: o.id, status: 'DISPATCHED', dispatch: {
+      method: v.method, dispatchDate: v.dispatchDate, invoiceId: v.invoiceId || undefined, vehicleNo: v.vehicleNo,
+      courier: v.method === 'COURIER' || v.method === 'TRANSPORT' ? v.courier : null, docketNo: v.method === 'COURIER' || v.method === 'TRANSPORT' ? v.docketNo : null,
+      deliveryPersonId: v.method === 'OWN_DELIVERY' && !other ? v.deliveryPersonId || null : null,
+      deliveryPersonName: v.method === 'OWN_DELIVERY' && other ? v.deliveryPersonName : null, deliveryPersonMobile: v.method === 'OWN_DELIVERY' && other ? v.deliveryPersonMobile : null,
+    } });
+  }
   return (
-    <Dialog open onClose={onClose} title="Dispatch details" description="Printed on the invoice and shown to the customer." size="sm"
-      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={m.isPending} onClick={() => m.mutate({ id: o.id, status: 'DISPATCHED', dispatch: { ...v, invoiceId: v.invoiceId || undefined } })}>Mark dispatched</Button></>}>
-      <div className="flex flex-col gap-3">
-        {invoices.length === 0 ? <Alert tone="warn">Raise a tax invoice before dispatching.</Alert> : (
-          <SelectField label="Invoice" value={v.invoiceId} onChange={(e) => setV({ ...v, invoiceId: e.target.value })}>{invoices.map((i) => <option key={i.id} value={i.id}>{i.number}</option>)}</SelectField>
+    <Dialog open onClose={onClose} title="Dispatch" description="How is this order going out? The details print on the invoice and the customer is told." size="md"
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={m.isPending} disabled={!invoices.length} onClick={save}>{v.method === 'PICKUP' ? 'Mark ready for pickup' : 'Mark dispatched'}</Button></>}>
+      <div className="flex flex-col gap-4">
+        {invoices.length === 0 && <Alert tone="warn">Raise a tax invoice before dispatching.</Alert>}
+        <div role="radiogroup" aria-label="Dispatch method" className="grid grid-cols-2 gap-2">
+          {DISPATCH_METHODS.map((k) => (
+            <button key={k} type="button" role="radio" aria-checked={v.method === k} onClick={() => setV({ ...v, method: k })}
+              className={cn('rounded-lg border px-3 py-2.5 text-left text-sm', v.method === k ? 'border-teal bg-aqua-50 font-semibold text-navy ring-1 ring-teal' : 'border-line hover:bg-canvas')}>
+              {DISPATCH_METHOD_LABEL[k]}{k === o.suggestedDispatch && <span className="text-xs font-normal text-teal-700"> (suggested)</span>}
+            </button>
+          ))}
+        </div>
+        {invoices.length > 1 && <SelectField label="Invoice" value={v.invoiceId} onChange={(e) => setV({ ...v, invoiceId: e.target.value })}>{invoices.map((i) => <option key={i.id} value={i.id}>{i.number}</option>)}</SelectField>}
+        {v.method === 'OWN_DELIVERY' && (
+          <>
+            <SelectField label="Delivered by" value={v.deliveryPersonId} onChange={(e) => setV({ ...v, deliveryPersonId: e.target.value })} hint="Staff in the list see this delivery in their app and mark it delivered there.">
+              <option value="">Choose…</option>
+              {staff.data?.map((u) => <option key={u.id} value={u.id}>{u.name}{u.mobile ? ` · ${u.mobile}` : ''}</option>)}
+              <option value="OTHER">Someone else (enter name)</option>
+            </SelectField>
+            {other && <div className="grid grid-cols-2 gap-3"><TextField label="Name" value={v.deliveryPersonName} onChange={(e) => setV({ ...v, deliveryPersonName: e.target.value })} /><TextField label="Mobile (optional)" inputMode="tel" value={v.deliveryPersonMobile} onChange={(e) => setV({ ...v, deliveryPersonMobile: e.target.value })} /></div>}
+            <TextField label="Vehicle no. (optional)" placeholder="GJ06AB1234" value={v.vehicleNo} onChange={(e) => setV({ ...v, vehicleNo: e.target.value.toUpperCase() })} />
+          </>
         )}
-        <TextField label="Courier / transporter" value={v.courier} onChange={(e) => setV({ ...v, courier: e.target.value })} />
-        <TextField label="Docket / LR no." value={v.docketNo} onChange={(e) => setV({ ...v, docketNo: e.target.value })} />
-        <TextField label="Vehicle no. (optional)" value={v.vehicleNo} onChange={(e) => setV({ ...v, vehicleNo: e.target.value })} />
-        <TextField label="Dispatch date" type="date" value={v.dispatchDate} onChange={(e) => setV({ ...v, dispatchDate: e.target.value })} />
+        {(v.method === 'COURIER' || v.method === 'TRANSPORT') && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TextField label={v.method === 'COURIER' ? 'Courier company' : 'Transporter'} value={v.courier} onChange={(e) => setV({ ...v, courier: e.target.value })} />
+            <TextField label={v.method === 'COURIER' ? 'Docket no.' : 'LR no.'} value={v.docketNo} onChange={(e) => setV({ ...v, docketNo: e.target.value })} />
+            {v.method === 'TRANSPORT' && <TextField label="Vehicle no. (optional)" value={v.vehicleNo} onChange={(e) => setV({ ...v, vehicleNo: e.target.value.toUpperCase() })} />}
+          </div>
+        )}
+        {v.method === 'PICKUP' && <p className="text-sm text-muted">The customer is told the order is ready to collect. Mark it delivered when they pick it up.</p>}
+        <TextField label={v.method === 'PICKUP' ? 'Ready on' : 'Dispatch date'} type="date" value={v.dispatchDate} onChange={(e) => setV({ ...v, dispatchDate: e.target.value })} wrapperClassName="max-w-xs" />
         {m.error && <Alert>{errorMessage(m.error)}</Alert>}
+      </div>
+    </Dialog>
+  );
+}
+
+/** Proof of delivery: who received the goods. */
+function DeliverDialog({ o, onClose }: { o: Order; onClose: () => void }) {
+  const utils = trpc.useUtils();
+  const [receivedBy, setReceivedBy] = useState('');
+  const [note, setNote] = useState('');
+  const m = trpc.orders.markDelivered.useMutation({ onSuccess: async () => { await utils.orders.invalidate(); onClose(); } });
+  const fe = fieldErrors(m.error);
+  return (
+    <Dialog open onClose={onClose} title="Mark delivered" description="Who received the goods? This is kept as proof of delivery and shown to the customer." size="sm"
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={m.isPending} onClick={() => m.mutate({ id: o.id, receivedBy, note })}>Mark delivered</Button></>}>
+      <div className="flex flex-col gap-3">
+        <TextField label="Received by" placeholder="e.g. Sister Mary, OT store" value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)} error={fe.receivedBy} />
+        <TextField label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
+        {m.error && !fe.receivedBy && <Alert>{errorMessage(m.error)}</Alert>}
       </div>
     </Dialog>
   );

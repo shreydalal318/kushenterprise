@@ -1,6 +1,6 @@
 /** Phase 4 input schemas: orders, proformas, invoices, credit notes, payments. */
 import { z } from 'zod';
-import { INVOICE_COPIES, ORDER_STATUSES, PAYMENT_MODES } from '@kush/core';
+import { DISPATCH_METHODS, INVOICE_COPIES, ORDER_STATUSES, PAYMENT_MODES } from '@kush/core';
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use a date');
 const optDate = z.union([z.null(), z.literal('').transform(() => null), isoDate]).optional().transform((v) => v ?? null);
@@ -35,7 +35,11 @@ export const orderStatusInput = z.object({
   id,
   status: z.enum(ORDER_STATUSES),
   note: optText(300),
-  dispatch: z.object({ courier: optText(80), docketNo: optText(60), vehicleNo: optText(30), dispatchDate: isoDate, invoiceId: id.optional() }).optional().nullable(),
+  dispatch: z.object({
+    method: z.enum(DISPATCH_METHODS).default('COURIER'), courier: optText(80), docketNo: optText(60), vehicleNo: optText(30), dispatchDate: isoDate, invoiceId: id.optional(),
+    deliveryPersonId: id.nullable().optional(), deliveryPersonName: optText(80), deliveryPersonMobile: optText(20),
+  }).optional().nullable(),
+  delivery: z.object({ receivedBy: optText(80), note: optText(300) }).optional().nullable(),
 });
 
 const saleLine = z.object({

@@ -22,3 +22,15 @@ describe('sales rules', () => {
     expect(ageingBucket('2026-09-01', today)).toBe('90+');
   });
 });
+
+import { suggestDispatchMethod } from '../src/sales';
+describe('dispatch method suggestion', () => {
+  it('suggests our own delivery staff in the same city or PIN area, a courier elsewhere', () => {
+    const co = { city: 'Vadodara', pincode: '390007' };
+    expect(suggestDispatchMethod(co, { addressLines: ['OT Stores', 'Alkapuri', 'Vadodara - 390005'] })).toBe('OWN_DELIVERY');
+    expect(suggestDispatchMethod(co, { addressLines: ['Main Road', 'Waghodia - 391760'] })).toBe('COURIER');
+    expect(suggestDispatchMethod({ city: 'Baroda', pincode: '390007' }, { addressLines: ['Sayajigunj - 390020'] })).toBe('OWN_DELIVERY');
+    expect(suggestDispatchMethod(co, { addressLines: ['FC Road', 'Pune - 411004'] })).toBe('COURIER');
+    expect(suggestDispatchMethod({ city: '[City]', pincode: '[PIN]' }, { addressLines: ['x - 390001'] })).toBe('COURIER');
+  });
+});
