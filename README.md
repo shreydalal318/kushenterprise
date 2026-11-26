@@ -344,7 +344,7 @@ Open **http://localhost:3000** (or the Codespaces preview) and sign in:
 | Owner (everything) | `owner@example.com` | `ChangeMe!2026` |
 | Counter staff (orders, billing, customers) | `ravi.counter@demo.local` | `DemoStaff2026` |
 | Store staff (stock, scanning, products) | `sunita.store@demo.local` | `DemoStaff2026` |
-| Customer (Mobile OTP tab) | `90000 10001` | The 6-digit code is printed in the terminal running `pnpm dev` |
+| Customer (Mobile OTP tab) | `90000 10001` | Press **Send code**, then run `pnpm otp` in any terminal to see the 6-digit code |
 
 `pnpm setup:demo` creates `.env` if it is missing (with a random `AUTH_SECRET`), creates the database tables and loads the demo data: 3 suppliers, 30 products with 223 lens powers, 10 customers, 2 price lists, special prices, 638 units of opening stock, demo sales (orders, invoices, payments, a credit note), demo purchase orders and demo website enquiries (leads). Running it again does no harm.
 
