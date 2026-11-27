@@ -154,7 +154,7 @@ export default function Receive() {
       {sup && (
         <Card>
           <H2>Add items</H2>
-          <ProductPicker onPick={onPick} receiving />
+          <ProductPicker onPick={onPick} allSizes />
           <Button variant="secondary" title={scanOpen ? 'Close scanner' : 'Scan barcode'} onPress={() => { setScanOpen(!scanOpen); setSerialFor(null); }} />
           {scanOpen && <Scanner onScan={onScan} height={180} startCamera />}
         </Card>

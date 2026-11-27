@@ -15,10 +15,11 @@ const NONE = new Set<string>();
 
 /**
  * Find a product by name or code and add it from live stock: no barcode needed. Lenses add the
- * earliest-expiring serial that isn't on the bill yet (first expiry, first out). `receiving` lists
- * every active size instead, in stock or not, since receiving goods is what adds the stock.
+ * earliest-expiring serial that isn't on the bill yet (first expiry, first out). `allSizes` lists
+ * every active size instead, in stock or not, with stock shown only as information: receiving goods
+ * adds the stock, and an order can be taken for something that still has to be bought.
  */
-export function ProductPicker({ onPick, taken = NONE, receiving = false }: { onPick: (p: Picked) => void; taken?: Set<string>; receiving?: boolean }) {
+export function ProductPicker({ onPick, taken = NONE, allSizes = false }: { onPick: (p: Picked) => void; taken?: Set<string>; allSizes?: boolean }) {
   const [q, setQ] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
   const [vq, setVq] = useState('');
@@ -48,15 +49,15 @@ export function ProductPicker({ onPick, taken = NONE, receiving = false }: { onP
                 {stock.data && (() => {
                   const product = stock.data.product;
                   const all = stock.data.variants
-                    .filter((v) => !receiving || v.isActive)
+                    .filter((v) => !allSizes || v.isActive)
                     .map((v) => {
                       const batches = v.batches.filter((b) => !b.expired).sort((a, b) => (a.expiryDate ?? '9999').localeCompare(b.expiryDate ?? '9999'));
                       const serials = batches.flatMap((b) => b.serials).filter((x) => !taken.has(x));
                       const left = product.trackSerial ? serials.length : batches.reduce((t, b) => t + b.qty - b.reserved, 0);
                       return { v, serials, left };
                     })
-                    .filter((x) => receiving || x.left > 0);
-                  if (!all.length) return <Small>{receiving ? 'This product has no active sizes.' : 'Nothing in stock that hasn\'t expired.'}</Small>;
+                    .filter((x) => allSizes || x.left > 0);
+                  if (!all.length) return <Small>{allSizes ? 'This product has no active sizes.' : 'Nothing in stock that hasn\'t expired.'}</Small>;
                   // Lenses can have dozens of powers: let staff narrow them down.
                   const rows = vq.trim() ? all.filter(({ v }) => `${v.label ?? ''} ${v.sku}`.toLowerCase().includes(vq.trim().toLowerCase())) : all;
                   return (
@@ -65,9 +66,9 @@ export function ProductPicker({ onPick, taken = NONE, receiving = false }: { onP
                       {!rows.length && <Small>No size matches “{vq}”.</Small>}
                       {rows.map(({ v, serials, left }) => (
                         <Row key={v.id} style={{ justifyContent: 'space-between' }}>
-                          <View style={{ flex: 1 }}><Text style={{ fontWeight: '600', color: C.ink }}>{v.label ?? product.name}</Text><Small>{receiving ? `${v.qty} in stock` : `${left} available`}</Small></View>
+                          <View style={{ flex: 1 }}><Text style={{ fontWeight: '600', color: C.ink }}>{v.label ?? product.name}</Text><Small>{allSizes ? (v.qty > 0 ? `${v.qty} in stock` : 'Not in stock') : `${left} available`}</Small></View>
                           <Pressable accessibilityRole="button" accessibilityLabel={`Add ${v.label ?? product.name}`}
-                            onPress={() => onPick({ productId: product.id, productName: product.name, trackSerial: product.trackSerial, trackBatch: product.trackBatch, trackExpiry: product.trackExpiry, variantId: v.id, label: v.label, serial: product.trackSerial && !receiving ? serials[0] ?? null : null })}
+                            onPress={() => onPick({ productId: product.id, productName: product.name, trackSerial: product.trackSerial, trackBatch: product.trackBatch, trackExpiry: product.trackExpiry, variantId: v.id, label: v.label, serial: product.trackSerial && !allSizes ? serials[0] ?? null : null })}
                             style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: C.teal700, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 }}>
                             <Ionicons name="add" size={16} color={C.white} /><Text style={{ color: C.white, fontWeight: '700' }}>Add</Text>
                           </Pressable>

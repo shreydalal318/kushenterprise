@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { DISPATCH_METHOD_LABEL, DISPATCH_METHODS, formatDate, formatDateTime, istDateString, nextStatuses, ORDER_STATUS_LABEL, type DispatchMethod, type OrderStatus } from '@kush/core';
 import { readableError } from '@/components/errors';
-import { Alert, Button, Card, Field, H2, KV, Loading, P, Row, Screen, Small } from '@/components/ui';
+import { HandlerPicker } from '@/components/handler-picker';
+import { Alert, Badge, Button, Card, Field, H2, KV, Loading, P, Row, Screen, Small } from '@/components/ui';
 import { OrderStatusBadge } from '@/components/status';
 import { LinkedPos, OrderFromSupplier, StockNote } from '@/components/order-sourcing';
 import { useAuth, useCan } from '@/lib/auth';
@@ -27,6 +28,9 @@ export default function StaffOrder() {
   const staff = trpc.orders.staff.useQuery();
   const [receivedBy, setReceivedBy] = useState('');
   const deliver = trpc.orders.markDelivered.useMutation({ onSuccess: () => { void utils.orders.invalidate(); void utils.deliveries.invalidate(); setModeState(null); } });
+  const [assigning, setAssigning] = useState(false);
+  // Waits for the refetch, so the picker closes on the new name rather than the old one.
+  const assign = trpc.orders.assign.useMutation({ onSuccess: async () => { await utils.orders.invalidate(); setAssigning(false); } });
   // Opening or closing a card starts without the last card's error.
   const setMode = (m: typeof mode) => { setStatus.reset(); deliver.reset(); setModeState(m); };
   if (!q.data) return q.error ? <Screen><Alert>{readableError(q.error)}</Alert></Screen> : <Loading />;
@@ -45,6 +49,8 @@ export default function StaffOrder() {
   // Invoiced goods are packed: an invoiced order on hold can only go back to Packed.
   const resumeTo = o.status === 'ON_HOLD' ? next.filter((x) => x !== 'CANCELLED' && (!hasInvoice || x === 'PACKED')) : [];
   const busy = setStatus.isPending;
+  const canAssign = isOpen && (can('CREATE_ORDERS') || can('UPDATE_ORDER_STATUS'));
+  const handlerId = o.assignedTo?.id ?? null;
 
   function go(s: OrderStatus) {
     if (busy) return;
@@ -58,6 +64,30 @@ export default function StaffOrder() {
       <Stack.Screen options={{ title: o.number }} />
       <Row style={{ justifyContent: 'space-between' }}><P style={{ fontWeight: '700' }}>{o.customer.name}</P><OrderStatusBadge status={o.status} /></Row>
       {o.forDoctor && <Small>For {o.forDoctor.name}</Small>}
+      {(o.assignedTo || isOpen) && (
+        <Row style={{ justifyContent: 'space-between' }}>
+          <Row style={{ flex: 1 }}>
+            <Ionicons name="person-circle-outline" size={20} color={o.assignedTo ? C.teal700 : C.warn} />
+            {o.assignedTo ? <P style={{ flex: 1 }}>Handled by <Text style={{ fontWeight: '700' }}>{o.assignedTo.name}</Text></P> : <Badge label="Not assigned" tone="warn" />}
+          </Row>
+          {canAssign && !assigning && (
+            <Pressable accessibilityRole="button" hitSlop={8} onPress={() => { assign.reset(); setAssigning(true); }}>
+              <Text style={{ color: C.teal700, fontWeight: '700' }}>{o.assignedTo ? 'Change' : 'Assign'}</Text>
+            </Pressable>
+          )}
+        </Row>
+      )}
+      {canAssign && assigning && (
+        <Card>
+          <H2>Who will handle it?</H2>
+          <Small>They make the tax invoice, dispatch and deliver it.</Small>
+          <HandlerPicker value={handlerId} noneLabel="Not assigned" disabled={assign.isPending}
+            onChange={(v) => (v === handlerId ? setAssigning(false) : assign.mutate({ id: o.id, assignedToId: v }))} />
+          {assign.isPending && <Small>Saving…</Small>}
+          {assign.error && <Alert>{readableError(assign.error)}</Alert>}
+          <Button variant="secondary" title="Back" disabled={assign.isPending} onPress={() => setAssigning(false)} />
+        </Card>
+      )}
       {o.surgeryDate && <Alert tone="warn">Surgery {formatDate(o.surgeryDate)}{o.patientName ? ` · ${o.patientName}` : ''}</Alert>}
       {o.customerNote && <Alert tone="info">Customer note: {o.customerNote}</Alert>}
       <Card>

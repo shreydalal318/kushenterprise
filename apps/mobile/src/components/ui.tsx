@@ -71,6 +71,16 @@ export function Tabs<T extends string>({ value, options, onChange }: { value: T;
   );
 }
 
+/** A pill for picking one of several: list filters, who handles an order. */
+export function Chip({ label, selected, onPress, disabled, role = 'radio', style }: { label: string; selected: boolean; onPress: () => void; disabled?: boolean; role?: 'radio' | 'tab'; style?: StyleProp<ViewStyle> }) {
+  return (
+    <Pressable accessibilityRole={role} accessibilityLabel={label} accessibilityState={{ selected, disabled }} onPress={onPress} disabled={disabled}
+      style={[{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, borderWidth: 1, borderColor: selected ? C.teal700 : C.line, backgroundColor: selected ? C.aqua100 : C.white, opacity: disabled ? 0.5 : 1 }, style]}>
+      <Text style={{ fontSize: 13, fontWeight: selected ? '700' : '500', color: selected ? C.navy : C.muted }}>{label}</Text>
+    </Pressable>
+  );
+}
+
 export const s = StyleSheet.create({
   card: { backgroundColor: C.white, borderRadius: R.lg, borderWidth: 1, borderColor: C.line, padding: 14, gap: 8 },
   h1: { fontSize: 22, fontWeight: '700', color: C.navy },
