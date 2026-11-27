@@ -14,17 +14,23 @@ import { useMe } from '@/lib/use-me';
 import { OrderBadge } from './status';
 
 const sel = 'h-10 rounded-lg border border-line bg-white px-3 text-sm';
+/** Filter value (and ?assigned= link value) for orders nobody has been chosen to handle yet. */
+const NOBODY = 'none';
+const NotAssigned = ({ status }: { status: OrderStatus }) => <Badge tone={status === 'DELIVERED' || status === 'CANCELLED' ? 'neutral' : 'warn'}>Not assigned</Badge>;
 
 export function OrderList() {
   const { can } = useMe();
   const [q, setQ] = useState('');
   const params = useSearchParams();
   const [status, setStatus] = useState(params.get('status') ?? '');
-  const [assignedToId, setAssigned] = useState('');
+  const [assigned, setAssigned] = useState(params.get('assigned') ?? '');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const staff = trpc.orders.staff.useQuery();
-  const list = trpc.orders.list.useQuery({ q: q || undefined, status: (status || undefined) as OrderStatus | 'TO_INVOICE' | undefined, assignedToId: assignedToId || undefined, from: from || undefined, to: to || undefined });
+  const list = trpc.orders.list.useQuery({
+    q: q || undefined, status: (status || undefined) as OrderStatus | 'TO_INVOICE' | undefined, from: from || undefined, to: to || undefined,
+    ...(assigned === NOBODY ? { unassigned: true } : { assignedToId: assigned || undefined }),
+  });
   return (
     <>
       <PageHeader title="Orders" description="Pending orders are listed first." actions={can('CREATE_ORDERS') && <LinkButton href="/app/orders/new"><Plus className="size-4" aria-hidden /> New order</LinkButton>} />
@@ -34,8 +40,9 @@ export function OrderList() {
         <select aria-label="Status" className={sel} value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">Any status</option><option value="TO_INVOICE">To invoice (placed or confirmed)</option>{ORDER_STATUSES.map((s) => <option key={s} value={s}>{ORDER_STATUS_LABEL[s]}</option>)}
         </select>
-        <select aria-label="Assigned to" className={sel} value={assignedToId} onChange={(e) => setAssigned(e.target.value)}>
-          <option value="">Anyone</option>{staff.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        <select aria-label="Handled by" className={sel} value={assigned} onChange={(e) => setAssigned(e.target.value)}>
+          <option value="">Anyone</option><option value={NOBODY}>Not assigned</option>
+          {staff.data?.filter((s) => s.role === 'EMPLOYEE').map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         <label className="flex min-w-0 items-center gap-2 text-sm text-muted">From <input aria-label="From date" type="date" className={`${sel} min-w-0 flex-1`} value={from} onChange={(e) => setFrom(e.target.value)} /></label>
         <label className="flex min-w-0 items-center gap-2 text-sm text-muted">To <input aria-label="To date" type="date" className={`${sel} min-w-0 flex-1`} value={to} onChange={(e) => setTo(e.target.value)} /></label>
@@ -59,7 +66,8 @@ export function OrderList() {
                   {o.backorder > 0 && o.status !== 'PLACED' && o.status !== 'CANCELLED' && <Badge tone="warn">{o.backorder} to invoice</Badge>}
                 </div>
               </div>
-              <p className="mt-2 flex justify-between text-xs text-muted"><span>{o.units} unit{o.units === 1 ? '' : 's'} · <span className="font-medium text-ink">{rupees(o.value)}</span></span><span>{o.assignedTo ?? formatDateTime(o.createdAt)}</span></p>
+              <p className="mt-2 flex justify-between text-xs text-muted"><span>{o.units} unit{o.units === 1 ? '' : 's'} · <span className="font-medium text-ink">{rupees(o.value)}</span></span><span>{formatDateTime(o.createdAt)}</span></p>
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-muted">Handled by {o.assignedTo ? <span className="font-medium text-ink">{o.assignedTo}</span> : <NotAssigned status={o.status} />}</p>
             </Link>
           </li>
         ))}
@@ -67,7 +75,7 @@ export function OrderList() {
 
       <Card className="hidden overflow-hidden sm:block">
         <Table minWidth={860}>
-          <THead><tr><Th>Order</Th><Th>Customer</Th><Th>Status</Th><Th className="text-right">Units</Th><Th className="text-right">Value</Th><Th>Assigned</Th><Th>Source</Th></tr></THead>
+          <THead><tr><Th>Order</Th><Th>Customer</Th><Th>Status</Th><Th className="text-right">Units</Th><Th className="text-right">Value</Th><Th>Handled by</Th><Th>Source</Th></tr></THead>
           <tbody>
             {!list.data && <LoadingRow cols={7} error={list.error} />}{list.data?.length === 0 && <EmptyRow cols={7}>No orders.</EmptyRow>}
             {list.data?.map((o) => (
@@ -77,7 +85,7 @@ export function OrderList() {
                 <Td><OrderBadge status={o.status} />{o.backorder > 0 && o.status !== 'PLACED' && o.status !== 'CANCELLED' && <Badge tone="warn" className="ml-1">{o.backorder} to invoice</Badge>}</Td>
                 <Td className="num">{o.units}</Td>
                 <Td className="num">{rupees(o.value)}</Td>
-                <Td className="text-sm">{o.assignedTo ?? '—'}</Td>
+                <Td className="text-sm">{o.assignedTo ?? <NotAssigned status={o.status} />}</Td>
                 <Td className="text-xs text-muted">{o.source === 'STAFF' ? 'Staff' : o.source === 'PORTAL' ? 'Portal' : 'App'}</Td>
               </Tr>
             ))}

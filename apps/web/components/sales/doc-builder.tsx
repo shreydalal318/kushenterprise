@@ -53,6 +53,7 @@ const newKey = () => `l${++seq}`;
 const uuid = () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
 const TITLES: Record<BuilderMode, string> = { invoice: 'Save tax invoice', proforma: 'Save proforma', order: 'Place order' };
+const NOBODY = 'NONE';
 
 export function DocBuilder({ mode, prefill }: { mode: BuilderMode; prefill?: BuilderPrefill }) {
   const router = useRouter();
@@ -60,6 +61,10 @@ export function DocBuilder({ mode, prefill }: { mode: BuilderMode; prefill?: Bui
   const { isOwner } = useMe();
   const customers = trpc.sales.customers.useQuery();
   const company = trpc.sales.companyReady.useQuery(undefined, { enabled: mode !== 'order' });
+  // Whoever enters an order picks its handler on purpose: '' = not chosen yet, NOBODY = leave it for someone to assign.
+  const staff = trpc.orders.staff.useQuery(undefined, { enabled: mode === 'order' });
+  const handlers = staff.data?.filter((u) => u.role === 'EMPLOYEE') ?? [];
+  const [handler, setHandler] = useState('');
   const [customerId, setCustomerId] = useState(prefill?.customerId ?? '');
   const [shipId, setShipId] = useState<string>(prefill?.shippingAddressId ?? '');
   const [doctorId, setDoctorId] = useState<string>(prefill?.forDoctorId ?? '');
@@ -169,7 +174,7 @@ export function DocBuilder({ mode, prefill }: { mode: BuilderMode; prefill?: Bui
       createProforma.mutate({ ...common, date, orderId: prefill?.orderId ?? null, validUntil: extra.validUntil, lines: lines.map((l) => ({ variantId: l.variantId, qty: l.qty, discPct: l.discPct, rate: isOwner ? l.rate : null })) },
         { onSuccess: (r) => after(`/app/proforma/${r.id}?new=1`)() });
     } else {
-      createOrder.mutate({ ...common, clientRequestId: requestId.current, patientName: extra.patientName, surgeryDate: extra.surgeryDate, customerNote: extra.customerNote, lines: lines.map((l) => ({ variantId: l.variantId, qty: l.qty })) },
+      createOrder.mutate({ ...common, assignedToId: handler === NOBODY ? null : handler, clientRequestId: requestId.current, patientName: extra.patientName, surgeryDate: extra.surgeryDate, customerNote: extra.customerNote, lines: lines.map((l) => ({ variantId: l.variantId, qty: l.qty })) },
         { onSuccess: (r) => after(`/app/orders/${r.id}?new=1`)() });
     }
   }
@@ -177,6 +182,7 @@ export function DocBuilder({ mode, prefill }: { mode: BuilderMode; prefill?: Bui
   const units = lines.reduce((t, l) => t + l.qty, 0);
   const serialProblems = mode === 'invoice' && lines.some((l) => l.trackSerial && l.serials.length !== l.qty);
   const zeroQty = lines.some((l) => l.qty < 1);
+  const noHandler = mode === 'order' && !handler;
   // Serial-tracked lines are only as long as the serials ticked: say which ones still need ticking (and why Save may be off).
   const shortSerials = mode === 'invoice' ? lines.filter((l) => l.trackSerial && l.serials.length < Math.max(1, l.wanted ?? 0)) : [];
   return (
@@ -193,7 +199,14 @@ export function DocBuilder({ mode, prefill }: { mode: BuilderMode; prefill?: Bui
           <SelectField label="Deliver to" value={ship?.id ?? ''} onChange={(e) => setShipId(e.target.value)} disabled={!customer}>
             {shippingOptions.map((a) => <option key={a.id} value={a.id}>{a.label ?? (a.kind === 'BILLING' ? 'Billing address' : 'Shipping')} · {a.city} ({stateByCode(a.stateCode)?.shortCode})</option>)}
           </SelectField>
-          {mode !== 'order' ? <TextField label={mode === 'invoice' ? 'Invoice date' : 'Date'} type="date" value={date} onChange={(e) => setDate(e.target.value)} /> : <div />}
+          {mode !== 'order' ? <TextField label={mode === 'invoice' ? 'Invoice date' : 'Date'} type="date" value={date} onChange={(e) => setDate(e.target.value)} /> : (
+            <SelectField label="Who will handle it" required value={handler} onChange={(e) => setHandler(e.target.value)} error={fe.assignedToId}
+              hint={staff.error ? errorMessage(staff.error) : 'They make the invoice, pack, dispatch and deliver it.'}>
+              <option value="" disabled>Choose…</option>
+              {handlers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+              <option value={NOBODY}>Not assigned yet</option>
+            </SelectField>
+          )}
           {customer && customer.doctors.length > 0 && (
             <SelectField label="For doctor (optional)" value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
               <option value="">—</option>
@@ -286,8 +299,9 @@ export function DocBuilder({ mode, prefill }: { mode: BuilderMode; prefill?: Bui
         {shortSerials.map((l) => { const n = Math.max(1, l.wanted ?? 0) - l.serials.length; return <span key={l.key} className="text-sm text-warn">Tick {n} serial{n === 1 ? '' : 's'} for {l.name}{l.label ? ` ${l.label}` : ''}{l.serials.length === 0 ? ' (or remove the line)' : ''}</span>; })}
         {lines.some((l) => l.qty < 1 && !(mode === 'invoice' && l.trackSerial)) && <span className="text-sm text-warn">Each line needs a quantity of at least 1.</span>}
         {serialProblems && <span className="text-sm text-warn">Each serial-tracked item needs one serial per unit.</span>}
+        {noHandler && <span className="text-sm text-warn">Choose who will handle this order (or “Not assigned yet”).</span>}
         {/* Stays disabled after saving until the new page opens (proformas have no idempotency key, so a second click would save twice). */}
-        <Button size="lg" disabled={!customerId || !lines.length || serialProblems || zeroQty || m.isSuccess} loading={m.isPending || m.isSuccess} onClick={submit}>{TITLES[mode]}{total != null ? ` · ${rupees(total)}` : ''}</Button>
+        <Button size="lg" disabled={!customerId || !lines.length || serialProblems || zeroQty || noHandler || m.isSuccess} loading={m.isPending || m.isSuccess} onClick={submit}>{TITLES[mode]}{total != null ? ` · ${rupees(total)}` : ''}</Button>
       </div>
     </div>
   );

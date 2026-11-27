@@ -137,7 +137,8 @@ export const ordersRouter = router({
 
   /** Per item: still to invoice, in stock, short, already on order from a supplier for this order. */
   shortfall: permissionProcedure('VIEW_ORDERS').input(z.object({ id: z.string() })).query(({ ctx, input }) => orderShortfall(ctx.db, input.id)),
-  staff: permissionProcedure('VIEW_ORDERS').query(({ ctx }) => ctx.db.user.findMany({ where: { role: { in: ['OWNER', 'EMPLOYEE'] }, isActive: true }, select: { id: true, name: true, mobile: true, role: true }, orderBy: { name: 'asc' } })),
+  // Handlers to choose from when entering an order, and delivery people when dispatching.
+  staff: anyPermissionProcedure('VIEW_ORDERS', 'CREATE_ORDERS').query(({ ctx }) => ctx.db.user.findMany({ where: { role: { in: ['OWNER', 'EMPLOYEE'] }, isActive: true }, select: { id: true, name: true, mobile: true, role: true }, orderBy: { name: 'asc' } })),
 });
 
 // ------------------------------------------------------------------ proformas

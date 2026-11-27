@@ -2,10 +2,10 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, Circle, FileText, Receipt, Truck } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Circle, FileText, Loader2, Receipt, Truck, UserRound } from 'lucide-react';
 import { DISPATCH_METHOD_LABEL, DISPATCH_METHODS, formatDate, formatDateTime, istDateString, nextStatuses, ORDER_FLOW, ORDER_STATUS_LABEL, type DispatchMethod, type OrderStatus } from '@kush/core';
 import { Button } from '@/components/ui/button';
-import { Alert, Card, CardBody, CardHeader, PageHeader } from '@/components/ui/card';
+import { Alert, Badge, Card, CardBody, CardHeader, PageHeader } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { SelectField, TextField } from '@/components/ui/field';
 import { LinkButton } from '@/components/ui/link-button';
@@ -80,7 +80,10 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
     <div className="flex flex-col gap-5">
       <Link href="/app/orders" className="flex w-fit items-center gap-1 text-sm text-teal-700 hover:underline"><ArrowLeft className="size-4" aria-hidden /> All orders</Link>
       <PageHeader title={o.number}
-        description={<span className="flex flex-wrap items-center gap-2">{o.customer.name}{o.forDoctor ? ` · for ${o.forDoctor.name}` : ''} <OrderBadge status={o.status} /></span>}
+        description={<span className="flex flex-col gap-2">
+          <span className="flex flex-wrap items-center gap-2">{o.customer.name}{o.forDoctor ? ` · for ${o.forDoctor.name}` : ''} <OrderBadge status={o.status} /></span>
+          <HandledBy o={o} open={open} />
+        </span>}
         actions={<div className="flex flex-wrap gap-2">
           {open && backorder > 0 && can('CREATE_PROFORMA') && <LinkButton variant="secondary" href={`/app/proforma/new?order=${o.id}`}><FileText className="size-4" aria-hidden /> Proforma</LinkButton>}
           {open && backorder > 0 && can('CREATE_PURCHASE_ORDERS') && sq.data && <Button variant={toOrder > 0 ? 'primary' : 'secondary'} onClick={() => setSourceOpen(true)}><Truck className="size-4" aria-hidden /> Order from supplier</Button>}
@@ -184,7 +187,6 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
               {o.surgeryDate && <p><span className="text-muted">Surgery date:</span> {formatDate(o.surgeryDate)}</p>}
               {o.customerNote && <p><span className="text-muted">Note:</span> {o.customerNote}</p>}
               <p><span className="text-muted">Placed by:</span> {o.placedBy?.name} ({o.source === 'STAFF' ? 'staff' : 'customer'})</p>
-              <p><span className="text-muted">Assigned to:</span> {o.assignedTo?.name ?? '—'}</p>
             </CardBody>
           </Card>
           {(o.invoices.length > 0 || o.proformas.length > 0) && (
@@ -218,6 +220,38 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
       {dispatchOpen && <DispatchDialog o={o} refreshing={q.isFetching} onClose={() => setDispatchOpen(false)} />}
       {deliverOpen && <DeliverDialog o={o} onClose={() => setDeliverOpen(false)} />}
     </div>
+  );
+}
+
+/** The one employee who invoices (which packs), dispatches and delivers the order. */
+function HandledBy({ o, open }: { o: Order; open: boolean }) {
+  const { can } = useMe();
+  const utils = trpc.useUtils();
+  const canAssign = can('CREATE_ORDERS') || can('UPDATE_ORDER_STATUS');
+  const staff = trpc.orders.staff.useQuery(undefined, { enabled: canAssign });
+  // Awaiting the refetch keeps the new choice showing (and the spinner) until the page has it; the dashboard counts follow the handler too.
+  const m = trpc.orders.assign.useMutation({ onSuccess: () => Promise.all([utils.orders.invalidate(), utils.analytics.invalidate()]) });
+  const handlers = staff.data?.filter((u) => u.role === 'EMPLOYEE') ?? [];
+  const current = o.assignedTo;
+  const none = <Badge tone={open ? 'warn' : 'neutral'}>Not assigned</Badge>;
+  return (
+    <span className="flex flex-wrap items-center gap-2 text-ink">
+      <UserRound className="size-4 text-muted" aria-hidden />
+      {canAssign ? (
+        <label className="flex items-center gap-2"><span className="text-muted">Handled by</span>
+          <select value={m.isPending ? (m.variables.assignedToId ?? '') : (current?.id ?? '')} disabled={m.isPending} onChange={(e) => m.mutate({ id: o.id, assignedToId: e.target.value || null })}
+            className="h-8 max-w-56 rounded-md border border-line bg-white px-2 text-sm font-semibold text-ink disabled:opacity-60">
+            <option value="">Not assigned</option>
+            {/* Someone since made inactive still shows as the handler until it is changed. */}
+            {current && !handlers.some((u) => u.id === current.id) && <option value={current.id}>{current.name}</option>}
+            {handlers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+        </label>
+      ) : <><span className="text-muted">Handled by:</span>{current && <strong className="font-semibold">{current.name}</strong>}</>}
+      {!current && !m.isPending && none}
+      {m.isPending && <Loader2 className="size-4 animate-spin text-muted" aria-label="Saving" />}
+      {(m.error ?? staff.error) && <span role="alert" className="text-danger">{errorMessage(m.error ?? staff.error)}</span>}
+    </span>
   );
 }
 
