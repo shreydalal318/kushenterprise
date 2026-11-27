@@ -15,7 +15,7 @@ COPY . .
 RUN pnpm install --frozen-lockfile --filter "@kush/web..."
 # Chromium for invoice, proforma, PO and statement PDFs.
 RUN pnpm --filter @kush/web exec playwright install --with-deps chromium
-RUN pnpm --filter @kush/web build
+RUN LOW_MEMORY_BUILD=1 pnpm --filter @kush/web build
 
 ENV NODE_ENV=production PORT=3000
 EXPOSE 3000

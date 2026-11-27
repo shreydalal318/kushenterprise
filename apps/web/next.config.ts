@@ -12,8 +12,14 @@ const securityHeaders = [
   { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=()' },
 ];
 
+// The Docker build (Render: 8 GB, but many CPUs) sets LOW_MEMORY_BUILD=1: fewer build workers, and no
+// type-check inside `next build` (CI runs `pnpm typecheck` on every push).
+const lowMemoryBuild = process.env.LOW_MEMORY_BUILD === '1';
+
 const nextConfig: NextConfig = {
   transpilePackages: ['@kush/api', '@kush/core', '@kush/db', '@kush/pdf'],
+  typescript: { ignoreBuildErrors: lowMemoryBuild },
+  experimental: lowMemoryBuild ? { cpus: 2 } : {},
   serverExternalPackages: ['@node-rs/argon2', '@prisma/client', '.prisma/client', 'playwright-core', 'qrcode'],
   poweredByHeader: false,
   async headers() {
