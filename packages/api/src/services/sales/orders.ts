@@ -7,7 +7,7 @@ import { nextDocNumber } from '../numbering';
 import { resolveCustomerPrices } from '../pricing';
 import { loadVariant } from '../stock';
 import { customerForDocument } from './common';
-import { notify, notifyCustomer, staffForCustomer } from '../../notify';
+import { notify, notifyCustomer, orderStaffIds } from '../../notify';
 import { getSettings, settingsView } from '../settings';
 
 export interface OrderInput {
@@ -48,9 +48,11 @@ export async function createOrder(tx: Tx, input: OrderInput, actor: { id: string
     },
   });
   await logActivity(tx, { actorId: actor.id, action: 'order.create', entityType: 'SalesOrder', entityId: o.id, ip, summary: `Order ${number} for ${doc.customer.name}${doc.doctor ? ` (for ${doc.doctor.name})` : ''}: ${input.lines.length} line(s)` });
+  const units = input.lines.reduce((t, l) => t + l.qty, 0);
+  // Every order, from a customer or entered at the counter, goes to the whole order team (except whoever entered it).
+  const team = [...(await orderStaffIds(tx)), ...(assignedToId ? [assignedToId] : [])].filter((id) => id !== actor.id);
+  await notify(tx, { userIds: team, title: `New order ${number}`, body: `${doc.customer.name}${doc.doctor ? ` for ${doc.doctor.name}` : ''}: ${units} unit(s)${input.surgeryDate ? `, surgery ${input.surgeryDate}` : ''}`, link: `/app/orders/${o.id}`, channels: ['PUSH'] });
   if (input.source !== 'STAFF') {
-    const units = input.lines.reduce((t, l) => t + l.qty, 0);
-    await notify(tx, { userIds: [...(await staffForCustomer(tx, doc.customer.id)), ...(assignedToId ? [assignedToId] : [])], title: `New order ${number}`, body: `${doc.customer.name}${doc.doctor ? ` for ${doc.doctor.name}` : ''}: ${units} unit(s)${input.surgeryDate ? `, surgery ${input.surgeryDate}` : ''}`, link: `/app/orders/${o.id}`, channels: ['PUSH'] });
     await notifyCustomer(tx, doc.customer.id, { title: `Order ${number} received`, body: `We have your order for ${units} unit(s) and will confirm it shortly.`, link: `/portal/orders/${o.id}` });
   }
   return { id: o.id, number, duplicate: false };

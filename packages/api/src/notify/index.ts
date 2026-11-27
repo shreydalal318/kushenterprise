@@ -55,6 +55,18 @@ export async function staffForCustomer(db: Db, customerId: string | null) {
   return [...owners.map((o) => o.id), ...(c?.assignedEmployeeId ? [c.assignedEmployeeId] : [])];
 }
 
+/**
+ * Everyone who works on orders: every active owner, plus employees who can see orders. One person
+ * often packs, bills and delivers, so new orders go to all of them, not just one assignee.
+ */
+export async function orderStaffIds(db: Db) {
+  const rows = await db.user.findMany({
+    where: { isActive: true, OR: [{ role: 'OWNER' }, { role: 'EMPLOYEE', permissions: { has: 'VIEW_ORDERS' } }] },
+    select: { id: true },
+  });
+  return rows.map((u) => u.id);
+}
+
 /** Notify a customer's logins through the channels they chose. */
 export async function notifyCustomer(tx: Tx, customerId: string, msg: Omit<NotifyInput, 'userIds' | 'channels'>) {
   const c = await tx.customer.findUnique({ where: { id: customerId }, select: { notifyChannels: true } });

@@ -151,6 +151,17 @@ describe('orders → invoice → dispatch', () => {
     await expect(v.invoices.create({ customerId: gj.id, date: today, lines: [{ variantId: gel.v, qty: 1 }] })).rejects.toMatchObject({ code: 'FORBIDDEN' });
     await expect(v.payments.record({ customerId: gj.id, date: today, amount: 1, mode: 'CASH' })).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
+
+  it('tells the whole order team about a new order, but not whoever entered it', async () => {
+    const packer = await makeUser('EMPLOYEE', { permissions: ['VIEW_ORDERS', 'SCAN_DISPATCH'] });
+    const noOrders = await makeUser('EMPLOYEE', { permissions: [] });
+    const o = await (await api(clerk)).orders.create({ customerId: gj.id, lines: [{ variantId: gel.v, qty: 1 }] });
+    const got = async (u: { id: string }) => prisma.notification.count({ where: { userId: u.id, title: `New order ${o.number}`, channel: 'IN_APP' } });
+    expect(await got(owner)).toBe(1);
+    expect(await got(packer)).toBe(1);
+    expect(await got(clerk)).toBe(0);
+    expect(await got(noOrders)).toBe(0);
+  });
 });
 
 describe('proforma', () => {
