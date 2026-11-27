@@ -35,7 +35,8 @@ export default function StaffHome() {
       { label: 'To dispatch', value: count('PACKED'), icon: 'paper-plane-outline' as Icon, tone: C.warn, to: '/staff/orders?status=PACKED', orders: true },
       { label: 'Out for delivery', value: count('DISPATCHED'), icon: 'car-outline' as Icon, tone: C.ok, to: '/staff/orders?status=DISPATCHED', orders: true },
     ] : []),
-    { label: 'My deliveries', value: mine.data?.length ?? 0, icon: 'bicycle-outline', tone: C.teal700, to: '/staff/deliveries' },
+    // The owner only sees this when something has actually been handed to them to deliver.
+    ...(me?.role !== 'OWNER' || (mine.data?.length ?? 0) > 0 ? [{ label: 'My deliveries', value: mine.data?.length ?? 0, icon: 'bicycle-outline' as Icon, tone: C.teal700, to: '/staff/deliveries' }] : []),
   ];
   const actions: { label: string; icon: Icon; to: string; show: boolean }[] = [
     { label: 'Scan a barcode', icon: 'scan-outline', to: '/staff/scan', show: true },

@@ -26,7 +26,8 @@ export default function StaffOrders() {
   return (
     <View style={{ flex: 1, backgroundColor: C.canvas }}>
       <View style={{ padding: 12, gap: 8 }}>
-        <Tabs value={mine} onChange={setMine} options={[['all', 'All orders'], ['mine', 'Assigned to me']]} />
+        {/* The owner looks after every order; "assigned to me" is for employees. */}
+        {me.data && me.data.role !== 'OWNER' && <Tabs value={mine} onChange={setMine} options={[['all', 'All orders'], ['mine', 'Assigned to me']]} />}
         <TextInput accessibilityLabel="Search orders" value={search} onChangeText={setSearch} placeholder="Search order no. or customer" style={s.input} placeholderTextColor="#9aa5b1" autoCorrect={false} returnKeyType="search" />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 6 }}>
           {FILTERS.map(([k, label]) => (
