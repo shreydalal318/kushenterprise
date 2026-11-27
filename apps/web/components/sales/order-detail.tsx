@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, Circle, FileText, Receipt, ScanLine, Truck } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Circle, FileText, Receipt, Truck } from 'lucide-react';
 import { DISPATCH_METHOD_LABEL, DISPATCH_METHODS, formatDate, formatDateTime, istDateString, nextStatuses, ORDER_FLOW, ORDER_STATUS_LABEL, type DispatchMethod, type OrderStatus } from '@kush/core';
 import { Button } from '@/components/ui/button';
 import { Alert, Card, CardBody, CardHeader, PageHeader } from '@/components/ui/card';
@@ -10,10 +10,8 @@ import { Dialog } from '@/components/ui/dialog';
 import { SelectField, TextField } from '@/components/ui/field';
 import { LinkButton } from '@/components/ui/link-button';
 import { Table, Td, Th, THead, Tr } from '@/components/ui/table';
-import { ScanField } from '@/components/scan/scan-field';
 import { cn } from '@/lib/cn';
 import { errorMessage, fieldErrors } from '@/lib/errors';
-import { scanError, scanOk } from '@/lib/feedback';
 import { rupees } from '@/lib/format';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
 import { useMe } from '@/lib/use-me';
@@ -39,7 +37,6 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
     if (q.data.status === 'PACKED' && q.data.invoices.some((i) => i.status === 'ISSUED')) setDispatchOpen(true);
     router.replace(`/app/orders/${id}`, { scroll: false });
   }, [openDispatch, q.data, q.isFetching]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [packOpen, setPackOpen] = useState(false);
   const [deliverOpen, setDeliverOpen] = useState(false);
   const [sourceOpen, setSourceOpen] = useState(false);
   const sq = trpc.orders.shortfall.useQuery({ id });
@@ -48,6 +45,7 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
   const o = q.data;
   const next = nextStatuses(o.status);
   const backorder = o.lines.reduce((t, l) => t + l.backorder, 0);
+  const hasInvoice = o.invoices.some((i) => i.status === 'ISSUED');
   const stock = new Map((sq.data?.lines ?? []).map((l) => [l.variantId, l]));
   const toOrder = (sq.data?.lines ?? []).reduce((t, l) => t + l.toOrder, 0);
   const linkedPos = [...new Map((sq.data?.lines ?? []).flatMap((l) => l.purchaseOrders).map((p) => [p.id, p])).values()];
@@ -68,19 +66,26 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
       <PageHeader title={o.number}
         description={<span className="flex flex-wrap items-center gap-2">{o.customer.name}{o.forDoctor ? ` · for ${o.forDoctor.name}` : ''} <OrderBadge status={o.status} /></span>}
         actions={<div className="flex flex-wrap gap-2">
-          {backorder > 0 && o.status !== 'CANCELLED' && can('CREATE_TAX_INVOICE') && <LinkButton href={`/app/invoices/new?order=${o.id}${o.status === 'PACKED' ? '&next=dispatch' : ''}`}><Receipt className="size-4" aria-hidden /> Create tax invoice</LinkButton>}
           {o.status !== 'CANCELLED' && can('CREATE_PROFORMA') && <LinkButton variant="secondary" href={`/app/proforma/new?order=${o.id}`}><FileText className="size-4" aria-hidden /> Proforma</LinkButton>}
           {open && backorder > 0 && can('CREATE_PURCHASE_ORDERS') && sq.data && <Button variant={toOrder > 0 ? 'primary' : 'secondary'} onClick={() => setSourceOpen(true)}><Truck className="size-4" aria-hidden /> Order from supplier</Button>}
-          {can('SCAN_DISPATCH') && ['CONFIRMED', 'PLACED'].includes(o.status) && <Button variant="secondary" onClick={() => setPackOpen(true)}><ScanLine className="size-4" aria-hidden /> Pack &amp; verify</Button>}
         </div>} />
       {isNew && <Alert tone="ok">Order placed.</Alert>}
       {open && toOrder > 0 && <Alert tone="info">{toOrder} unit(s) on this order are not in stock{can('CREATE_PURCHASE_ORDERS') ? ' — use “Order from supplier” to raise a purchase order.' : '.'}</Alert>}
       {setStatus.error && <Alert>{errorMessage(setStatus.error)}</Alert>}
 
       <Card>
-        <CardHeader title="Status" actions={can('UPDATE_ORDER_STATUS') && next.length > 0 && (
+        {/* The main path: Make tax invoice (also confirms and packs) → Dispatch → Delivered. */}
+        <CardHeader title="Status" actions={open && (
           <div className="flex flex-wrap gap-2">
-            {next.map((s) => <Button key={s} size="sm" variant={s === 'CANCELLED' ? 'danger' : s === 'ON_HOLD' ? 'secondary' : 'primary'} loading={setStatus.isPending && setStatus.variables?.status === s} onClick={() => go(s)}>{s === 'ON_HOLD' ? 'Put on hold' : s === 'CANCELLED' ? 'Cancel order' : `Mark ${ORDER_STATUS_LABEL[s].toLowerCase()}`}</Button>)}
+            {backorder > 0 && ['PLACED', 'CONFIRMED', 'PACKED'].includes(o.status) && can('CREATE_TAX_INVOICE') && (
+              <LinkButton href={`/app/invoices/new?order=${o.id}&next=dispatch`} variant={hasInvoice && o.status === 'PACKED' ? 'secondary' : 'primary'} className="h-8 px-3"><Receipt className="size-4" aria-hidden /> {hasInvoice ? 'Invoice the rest' : 'Make tax invoice'}</LinkButton>
+            )}
+            {can('UPDATE_ORDER_STATUS') && o.status === 'PACKED' && hasInvoice && <Button size="sm" onClick={() => go('DISPATCHED')}><Truck className="size-4" aria-hidden /> Dispatch</Button>}
+            {can('UPDATE_ORDER_STATUS') && o.status === 'DISPATCHED' && <Button size="sm" onClick={() => go('DELIVERED')}>Mark delivered</Button>}
+            {can('UPDATE_ORDER_STATUS') && o.status === 'PLACED' && <Button size="sm" variant="secondary" loading={setStatus.isPending && setStatus.variables?.status === 'CONFIRMED'} onClick={() => go('CONFIRMED')}>Confirm only</Button>}
+            {can('UPDATE_ORDER_STATUS') && o.status === 'ON_HOLD' && next.filter((s) => s !== 'CANCELLED').map((s) => <Button key={s} size="sm" variant="secondary" onClick={() => go(s)}>Resume ({ORDER_STATUS_LABEL[s].toLowerCase()})</Button>)}
+            {can('UPDATE_ORDER_STATUS') && next.includes('ON_HOLD') && <Button size="sm" variant="secondary" onClick={() => go('ON_HOLD')}>Put on hold</Button>}
+            {can('UPDATE_ORDER_STATUS') && next.includes('CANCELLED') && <Button size="sm" variant="danger" onClick={() => go('CANCELLED')}>Cancel order</Button>}
           </div>
         )} />
         <CardBody>
@@ -194,7 +199,6 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
       </div>
       {sourceOpen && sq.data && <OrderFromSupplierDialog s={sq.data} onClose={() => setSourceOpen(false)} />}
       {dispatchOpen && <DispatchDialog o={o} refreshing={q.isFetching} onClose={() => setDispatchOpen(false)} />}
-      {packOpen && <PackDialog o={o} onClose={() => setPackOpen(false)} />}
       {deliverOpen && <DeliverDialog o={o} onClose={() => setDeliverOpen(false)} />}
     </div>
   );
@@ -279,45 +283,6 @@ function DeliverDialog({ o, onClose }: { o: Order; onClose: () => void }) {
         <TextField label="Received by" placeholder="e.g. Sister Mary, OT store" value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)} error={fe.receivedBy} />
         <TextField label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
         {m.error && !fe.receivedBy && <Alert>{errorMessage(m.error)}</Alert>}
-      </div>
-    </Dialog>
-  );
-}
-
-/** Scan every packed box; the order is marked Packed only when everything matches. */
-function PackDialog({ o, onClose }: { o: Order; onClose: () => void }) {
-  const utils = trpc.useUtils();
-  const [scanned, setScanned] = useState<Record<string, number>>({});
-  const counts = useRef<Record<string, number>>({});
-  const queue = useRef<Promise<void>>(Promise.resolve());
-  const [msg, setMsg] = useState<string | null>(null);
-  const verify = trpc.orders.verifyPacked.useMutation({ onSuccess: async (r) => { if (r.ok) { await utils.orders.invalidate(); onClose(); } } });
-  // Scans are handled one at a time against a ref, so a fast scanner can't double-count or skip the "too many" check.
-  const onScan = (code: string) => { queue.current = queue.current.then(() => handleScan(code)); return queue.current; };
-  async function handleScan(code: string) {
-    const r = await utils.scan.resolve.fetch({ code }, { staleTime: 0 }).catch(() => null);
-    if (!r?.found) { scanError(); setMsg(`Unknown barcode ${code}`); return; }
-    const line = o.lines.find((l) => l.variant.id === r.variant.id);
-    if (!line) { scanError(); setMsg(`${r.product.name} ${r.variant.label ?? ''} is NOT on this order`); return; }
-    const n = (counts.current[r.variant.id] ?? 0) + 1;
-    if (n > line.qty) { scanError(); setMsg(`Too many: only ${line.qty} × ${r.product.name} ${r.variant.label ?? ''} ordered`); return; }
-    scanOk(); setMsg(null);
-    counts.current = { ...counts.current, [r.variant.id]: n };
-    setScanned(counts.current);
-  }
-  const done = o.lines.every((l) => (scanned[l.variant.id] ?? 0) >= l.qty);
-  return (
-    <Dialog open onClose={onClose} title="Pack & verify" description="Scan each box as it goes into the parcel." size="lg"
-      footer={<><Button variant="secondary" onClick={onClose}>Close</Button><Button disabled={!done} loading={verify.isPending} onClick={() => verify.mutate({ id: o.id, scanned: Object.entries(scanned).map(([variantId, qty]) => ({ variantId, qty })) })}>Mark packed</Button></>}>
-      <div className="flex flex-col gap-3">
-        <ScanField onScan={onScan} />
-        {msg && <Alert>{msg}</Alert>}
-        {verify.data && !verify.data.ok && <Alert>{verify.data.problems.join('; ')}</Alert>}
-        <ul className="divide-y divide-line rounded-lg border border-line text-sm">
-          {o.lines.map((l) => { const n = scanned[l.variant.id] ?? 0; return (
-            <li key={l.id} className="flex items-center justify-between px-3 py-2"><span>{l.variant.product.name} <span className="text-muted">{l.variant.label ?? ''}</span></span><span className={cn('font-semibold', n >= l.qty ? 'text-ok' : 'text-muted')}>{n} / {l.qty}</span></li>
-          ); })}
-        </ul>
       </div>
     </Dialog>
   );
