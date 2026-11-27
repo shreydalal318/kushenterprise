@@ -1,2 +1,2 @@
-import { NotificationsList } from '@/components/notifications';
-export default function NotificationsScreen() { return <NotificationsList />; }
+import { CustomerMessages } from '@/customer/notifications';
+export default function NotificationsScreen() { return <CustomerMessages />; }

@@ -1,193 +1,373 @@
-import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { useCallback, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { DISPATCH_METHOD_LABEL, DISPATCH_METHODS, formatDate, formatDateTime, istDateString, nextStatuses, ORDER_STATUS_LABEL, type DispatchMethod, type OrderStatus } from '@kush/core';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { DISPATCH_METHOD_LABEL, DISPATCH_METHODS, formatDate, formatDateTime, istDateString, nextStatuses, type DispatchMethod, type OrderStatus } from '@kush/core';
+import { dispatchNext } from '@/components/bill-form';
 import { readableError } from '@/components/errors';
 import { HandlerPicker } from '@/components/handler-picker';
-import { Alert, Badge, Button, Card, Field, H2, KV, Loading, P, Row, Screen, Small } from '@/components/ui';
-import { OrderStatusBadge } from '@/components/status';
 import { LinkedPos, OrderFromSupplier, StockNote } from '@/components/order-sourcing';
+import { StaffStatusBadge, surgeryIn, surgeryText, surgeryTone } from '@/components/status';
+import { Alert, Button, Card, Field, H2, KV, LinkButton, Loading, P, Row, Screen, Small } from '@/components/ui';
 import { useAuth, useCan } from '@/lib/auth';
-import { C } from '@/lib/theme';
-import { trpc } from '@/lib/trpc';
+import { docPath, openPdf } from '@/lib/documents';
+import { errorText, rupees } from '@/lib/format';
+import { C, R } from '@/lib/theme';
+import { trpc, type RouterOutputs } from '@/lib/trpc';
 
-/** Order detail for staff: stock and sourcing, then Make tax invoice -> Dispatch -> Delivered. */
+type Order = RouterOutputs['orders']['get'];
+type Icon = keyof typeof Ionicons.glyphMap;
+const SOURCE: Record<string, string> = { STAFF: 'phone / WhatsApp', PORTAL: 'website', MOBILE_APP: 'customer app' };
+const METHOD_ICON: Record<DispatchMethod, Icon> = { OWN_DELIVERY: 'bicycle-outline', COURIER: 'cube-outline', TRANSPORT: 'bus-outline', PICKUP: 'storefront-outline' };
+/** A real calendar day as YYYY-MM-DD (2026-02-30 is not). */
+const isDay = (v: string) => { const d = new Date(`${v}T00:00:00Z`); return /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v); };
+const howSent = (x: Order['dispatches'][number]) =>
+  x.method === 'OWN_DELIVERY' ? `Our staff: ${x.deliveryPersonName ?? 'someone'}${x.vehicleNo ? ` · vehicle ${x.vehicleNo}` : ''}`
+    : x.method === 'COURIER' ? `Courier: ${x.courier ?? ''}${x.docketNo ? ` · docket ${x.docketNo}` : ''}`
+      : x.method === 'TRANSPORT' ? `Transport: ${x.courier ?? ''}${x.docketNo ? ` · LR ${x.docketNo}` : ''}`
+        : 'Customer collects it from the store';
+
+/** One step of the tracker: a tick or its number, the line down to the next step, and what happened. */
+function Step({ n, title, done, lineOn, last, children }: { n: number; title: string; done: boolean; lineOn?: boolean; last?: boolean; children?: ReactNode }) {
+  return (
+    <View style={{ flexDirection: 'row', gap: 12 }}>
+      <View style={{ alignItems: 'center' }}>
+        <View style={{ width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: done ? C.teal700 : C.line, backgroundColor: done ? C.teal700 : C.white, alignItems: 'center', justifyContent: 'center' }}>
+          {done ? <Ionicons name="checkmark" size={18} color={C.white} /> : <Text style={{ color: C.muted, fontWeight: '700' }}>{n}</Text>}
+        </View>
+        {!last && <View style={{ flex: 1, width: 2, minHeight: 14, backgroundColor: lineOn ? C.teal700 : C.line }} />}
+      </View>
+      <View style={{ flex: 1, gap: 3, paddingTop: 3, paddingBottom: last ? 0 : 16 }}>
+        <P style={{ fontWeight: '700', color: done ? C.navy : C.muted }}>{title}</P>
+        {children}
+      </View>
+    </View>
+  );
+}
+
+function ActionRow({ icon, title, onPress, danger }: { icon: Icon; title: string; onPress: () => void; danger?: boolean }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPress}
+      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, paddingHorizontal: 4, opacity: pressed ? 0.6 : 1 })}>
+      <Ionicons name={icon} size={20} color={danger ? C.danger : C.teal700} />
+      <Text style={{ fontSize: 16, fontWeight: '600', color: danger ? C.danger : C.ink }}>{title}</Text>
+    </Pressable>
+  );
+}
+
+/** One order, top to bottom: where it is (Order → Invoice → Dispatch → Done), what to know, and one button for the next step. */
 export default function StaffOrder() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, saved } = useLocalSearchParams<{ id: string; saved?: string }>();
   const can = useCan();
   const { me } = useAuth();
   const utils = trpc.useUtils();
   const q = trpc.orders.get.useQuery({ id: id! });
-  const setStatus = trpc.orders.setStatus.useMutation({ onSuccess: () => utils.orders.invalidate() });
-  const [mode, setModeState] = useState<null | 'dispatch' | 'note' | 'deliver' | 'source'>(null);
   const sq = trpc.orders.shortfall.useQuery({ id: id! });
-  const [noteFor, setNoteFor] = useState<OrderStatus | null>(null);
-  const [note, setNote] = useState('');
-  const [d, setD] = useState({ method: '' as '' | DispatchMethod, courier: '', docketNo: '', vehicleNo: '', dispatchDate: istDateString(), deliveryPersonId: '', deliveryPersonName: '', deliveryPersonMobile: '' });
   const staff = trpc.orders.staff.useQuery();
-  const [receivedBy, setReceivedBy] = useState('');
-  const deliver = trpc.orders.markDelivered.useMutation({ onSuccess: () => { void utils.orders.invalidate(); void utils.deliveries.invalidate(); setModeState(null); } });
-  const [assigning, setAssigning] = useState(false);
+  const setStatus = trpc.orders.setStatus.useMutation({ onSuccess: () => utils.orders.invalidate() });
+  const deliver = trpc.orders.markDelivered.useMutation({ onSuccess: () => { void utils.orders.invalidate(); void utils.deliveries.invalidate(); } });
   // Waits for the refetch, so the picker closes on the new name rather than the old one.
-  const assign = trpc.orders.assign.useMutation({ onSuccess: async () => { await utils.orders.invalidate(); setAssigning(false); } });
-  // Opening or closing a card starts without the last card's error.
-  const setMode = (m: typeof mode) => { setStatus.reset(); deliver.reset(); setModeState(m); };
-  if (!q.data) return q.error ? <Screen><Alert>{readableError(q.error)}</Alert></Screen> : <Loading />;
+  const assign = trpc.orders.assign.useMutation({ onSuccess: () => utils.orders.invalidate() });
+  const [mode, setModeState] = useState<null | 'dispatch' | 'deliver' | 'hold' | 'cancel' | 'source'>(null);
+  const [assigning, setAssigning] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [note, setNote] = useState('');
+  const [receivedBy, setReceivedBy] = useState('');
+  const [d, setD] = useState({ method: '' as '' | DispatchMethod, courier: '', docketNo: '', vehicleNo: '', dispatchDate: istDateString(), personId: '', personName: '', personMobile: '' });
+  const [pdf, setPdf] = useState<{ id: string | null; error: string | null }>({ id: null, error: null });
+  // The short green line after each action ("Dispatched ✓ Next: …"); a new order arrives with ?saved=1.
+  const [flash, setFlash] = useState<string | null>(saved ? 'Order saved ✓' : null);
+  // Opening or closing a form starts without the last form's error.
+  const setMode = (m: typeof mode) => { setStatus.reset(); deliver.reset(); setConfirmCancel(false); setModeState(m); if (m) setFlash(null); };
+  const finish = (msg: string) => { setModeState(null); setShowMore(false); setNote(''); setFlash(msg); };
+  // "Dispatch this order" on the invoice just made comes straight back to the dispatch form.
+  useFocusEffect(useCallback(() => { if (id && dispatchNext.delete(id)) { setFlash(null); setModeState('dispatch'); } }, [id]));
+
+  if (!q.data) return q.error
+    ? <Screen><Alert>{errorText(q.error)}</Alert><Button variant="secondary" title="Try again" loading={q.isFetching} onPress={() => void q.refetch()} /></Screen>
+    : <Loading />;
   const o = q.data;
   const next = nextStatuses(o.status);
   const stock = new Map((sq.data?.lines ?? []).map((l) => [l.variantId, l]));
   const toOrder = (sq.data?.lines ?? []).reduce((t, l) => t + l.toOrder, 0);
   const isOpen = !['CANCELLED', 'DELIVERED'].includes(o.status);
   const backorder = o.lines.reduce((t, l) => t + l.backorder, 0);
+  const total = o.lines.reduce((t, l) => t + l.amount, 0);
   const hasInvoice = o.invoices.some((i) => i.status === 'ISSUED');
+  const sent = o.dispatches.length > 0;
+  const delivered = o.status === 'DELIVERED';
   // A back-order invoice raised after the order went out still has to be dispatched.
   const toSend = o.invoices.find((i) => i.status === 'ISSUED' && !o.dispatches.some((x) => x.invoiceId === i.id));
-  const canDispatch = can('UPDATE_ORDER_STATUS') && ((o.status === 'PACKED' && hasInvoice) || (o.status === 'DISPATCHED' && !!toSend));
+  const canStatus = can('UPDATE_ORDER_STATUS');
+  const canDispatch = canStatus && ((o.status === 'PACKED' && hasInvoice) || (o.status === 'DISPATCHED' && !!toSend));
   // The person it was handed to may mark it delivered without the status permission (the API allows it).
-  const canDeliver = o.status === 'DISPATCHED' && (can('UPDATE_ORDER_STATUS') || o.dispatches.some((x) => x.deliveryPersonId === me?.id && !x.deliveredAt));
-  // Invoiced goods are packed: an invoiced order on hold can only go back to Packed.
-  const resumeTo = o.status === 'ON_HOLD' ? next.filter((x) => x !== 'CANCELLED' && (!hasInvoice || x === 'PACKED')) : [];
-  const busy = setStatus.isPending;
-  const canAssign = isOpen && (can('CREATE_ORDERS') || can('UPDATE_ORDER_STATUS'));
+  const canDeliver = o.status === 'DISPATCHED' && (canStatus || o.dispatches.some((x) => x.deliveryPersonId === me?.id && !x.deliveredAt));
+  const canInvoice = can('CREATE_TAX_INVOICE');
+  const canSource = isOpen && backorder > 0 && !!sq.data && can('CREATE_PURCHASE_ORDERS');
+  const canAssign = isOpen && (can('CREATE_ORDERS') || canStatus);
   const handlerId = o.assignedTo?.id ?? null;
+  const busy = setStatus.isPending;
+  // Invoiced goods are packed: an invoiced order resumes as Invoiced, otherwise as New, the way it was.
+  const resumeTo: OrderStatus | null = o.status !== 'ON_HOLD' ? null : hasInvoice ? 'PACKED' : o.events.some((e) => e.status === 'CONFIRMED') ? 'CONFIRMED' : 'PLACED';
+  const latest = (s: string) => [...o.events].reverse().find((e) => e.status === s);
+  const stopped = o.status === 'ON_HOLD' || o.status === 'CANCELLED' ? latest(o.status) : undefined;
+  const pastHolds = o.events.filter((e) => e.status === 'ON_HOLD' && e.note && e !== stopped);
+  const deliveredBy = [...o.dispatches].filter((x) => x.deliveredAt).sort((a, b) => b.deliveredAt!.getTime() - a.deliveredAt!.getTime())[0];
+  const goInvoice = () => router.push(`/staff/invoice?orderId=${o.id}`);
+  const openDeliver = () => { setReceivedBy(''); setMode('deliver'); };
+  const view = mode === 'dispatch' && !canDispatch ? null : mode;
 
-  function go(s: OrderStatus) {
-    if (busy) return;
-    if (s === 'DISPATCHED') { setD((x) => ({ ...x, method: x.method || (o.suggestedDispatch as DispatchMethod) })); return setMode('dispatch'); }
-    if (s === 'DELIVERED') { setReceivedBy(''); return setMode('deliver'); }
-    if (s === 'CANCELLED' || s === 'ON_HOLD') { setNoteFor(s); setNote(''); setMode('note'); return; }
-    setStatus.mutate({ id: o.id, status: s });
+  async function showPdf(invId: string, number: string) {
+    setPdf({ id: invId, error: null });
+    try { await openPdf(docPath('invoice', invId), `${number}.pdf`); setPdf({ id: null, error: null }); }
+    catch (e) { const t = errorText(e); setPdf({ id: null, error: /pdf/i.test(t) ? t : `Could not open the PDF. ${t}` }); }
   }
-  return (
-    <Screen>
-      <Stack.Screen options={{ title: o.number }} />
-      <Row style={{ justifyContent: 'space-between' }}><P style={{ fontWeight: '700' }}>{o.customer.name}</P><OrderStatusBadge status={o.status} /></Row>
-      {o.forDoctor && <Small>For {o.forDoctor.name}</Small>}
-      {(o.assignedTo || isOpen) && (
-        <Row style={{ justifyContent: 'space-between' }}>
-          <Row style={{ flex: 1 }}>
-            <Ionicons name="person-circle-outline" size={20} color={o.assignedTo ? C.teal700 : C.warn} />
-            {o.assignedTo ? <P style={{ flex: 1 }}>Handled by <Text style={{ fontWeight: '700' }}>{o.assignedTo.name}</Text></P> : <Badge label="Not assigned" tone="warn" />}
-          </Row>
-          {canAssign && !assigning && (
-            <Pressable accessibilityRole="button" hitSlop={8} onPress={() => { assign.reset(); setAssigning(true); }}>
-              <Text style={{ color: C.teal700, fontWeight: '700' }}>{o.assignedTo ? 'Change' : 'Assign'}</Text>
+
+  if (view === 'source' && sq.data) return <Screen><Stack.Screen options={{ title: o.number }} /><OrderFromSupplier s={sq.data} onClose={() => setMode(null)} /></Screen>;
+
+  if (view === 'dispatch') {
+    const method = d.method || (o.suggestedDispatch as DispatchMethod);
+    const other = d.personId === 'OTHER';
+    const missing = [
+      method === 'OWN_DELIVERY' && !d.personId && 'choose who is delivering it',
+      method === 'OWN_DELIVERY' && other && !d.personName.trim() && 'write the delivery person’s name',
+      method === 'COURIER' && !d.courier.trim() && 'write the courier company',
+      method === 'TRANSPORT' && !d.courier.trim() && 'write the transporter',
+      !isDay(d.dispatchDate.trim()) && 'write the date as YYYY-MM-DD',
+    ].filter(Boolean);
+    const save = () => setStatus.mutate({ id: o.id, status: 'DISPATCHED', dispatch: {
+      method, dispatchDate: d.dispatchDate.trim(), invoiceId: toSend?.id, vehicleNo: method === 'OWN_DELIVERY' ? d.vehicleNo.trim() || null : null,
+      courier: method === 'COURIER' || method === 'TRANSPORT' ? d.courier.trim() : null, docketNo: method === 'COURIER' || method === 'TRANSPORT' ? d.docketNo.trim() || null : null,
+      deliveryPersonId: method === 'OWN_DELIVERY' && !other ? d.personId : null,
+      deliveryPersonName: method === 'OWN_DELIVERY' && other ? d.personName.trim() : null, deliveryPersonMobile: method === 'OWN_DELIVERY' && other ? d.personMobile.trim() || null : null,
+    } }, { onSuccess: () => finish(method === 'PICKUP' ? 'Ready for pickup ✓ Next: mark it delivered when the customer collects it.' : 'Dispatched ✓ Next: mark it delivered when it reaches the customer.') });
+    return (
+      <Screen footer={
+        <>
+          {setStatus.error && <Alert>{readableError(setStatus.error)}</Alert>}
+          {missing.length > 0 && <Small style={{ textAlign: 'center' }}>To save: {missing.join(', ')}.</Small>}
+          <Button title={method === 'PICKUP' ? 'Mark ready for pickup' : 'Mark dispatched'} loading={busy} disabled={missing.length > 0} onPress={save} />
+          <LinkButton tone="muted" title="Back" onPress={() => setMode(null)} />
+        </>
+      }>
+        <Stack.Screen options={{ title: o.number }} />
+        <H2>How is it going out?</H2>
+        <Small>{sent && toSend ? `Sending invoice ${toSend.number}.` : `${o.customer.name} · ${rupees(total)}`}</Small>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+          {DISPATCH_METHODS.map((k) => (
+            <Pressable key={k} accessibilityRole="radio" accessibilityState={{ selected: method === k }} accessibilityLabel={DISPATCH_METHOD_LABEL[k]} onPress={() => setD({ ...d, method: k })}
+              style={{ width: '48%', minHeight: 64, padding: 10, gap: 4, borderRadius: R.md, borderWidth: method === k ? 2 : 1, borderColor: method === k ? C.teal700 : C.line, backgroundColor: method === k ? C.aqua50 : C.white }}>
+              <Ionicons name={METHOD_ICON[k]} size={22} color={method === k ? C.teal700 : C.muted} />
+              <P style={{ fontWeight: method === k ? '700' : '500' }}>{DISPATCH_METHOD_LABEL[k]}</P>
+              {k === o.suggestedDispatch && <Small style={{ color: C.teal700 }}>Suggested</Small>}
             </Pressable>
+          ))}
+        </View>
+        {method === 'OWN_DELIVERY' && (
+          <Card>
+            <H2>Who is delivering it?</H2>
+            {[...(staff.data ?? []).map((u) => ({ id: u.id, label: `${u.name}${u.mobile ? ` · ${u.mobile}` : ''}` })), { id: 'OTHER', label: 'Someone else' }].map((u) => (
+              <Pressable key={u.id} accessibilityRole="radio" accessibilityState={{ selected: d.personId === u.id }} accessibilityLabel={u.label} onPress={() => setD({ ...d, personId: u.id })} style={{ flexDirection: 'row', gap: 10, alignItems: 'center', minHeight: 44 }}>
+                <Ionicons name={d.personId === u.id ? 'radio-button-on' : 'radio-button-off'} size={22} color={C.teal700} /><P>{u.label}</P>
+              </Pressable>
+            ))}
+            {other && <><Field label="Name" value={d.personName} onChangeText={(v) => setD({ ...d, personName: v })} maxLength={80} /><Field label="Mobile (optional)" keyboardType="phone-pad" value={d.personMobile} onChangeText={(v) => setD({ ...d, personMobile: v })} maxLength={20} /></>}
+            <Field label="Vehicle no. (optional)" autoCapitalize="characters" value={d.vehicleNo} onChangeText={(v) => setD({ ...d, vehicleNo: v })} maxLength={30} />
+          </Card>
+        )}
+        {(method === 'COURIER' || method === 'TRANSPORT') && (
+          <Card>
+            <Field label={method === 'COURIER' ? 'Courier company' : 'Transporter'} value={d.courier} onChangeText={(v) => setD({ ...d, courier: v })} maxLength={80} />
+            <Field label={method === 'COURIER' ? 'Docket no. (optional)' : 'LR no. (optional)'} value={d.docketNo} onChangeText={(v) => setD({ ...d, docketNo: v })} maxLength={60} />
+          </Card>
+        )}
+        {method === 'PICKUP' && <Alert tone="info">The customer collects it from the store. Mark it delivered when they do.</Alert>}
+        <Field label="Date sent (YYYY-MM-DD)" value={d.dispatchDate} onChangeText={(v) => setD({ ...d, dispatchDate: v })} keyboardType="numbers-and-punctuation" maxLength={10} />
+      </Screen>
+    );
+  }
+
+  if (view === 'deliver') {
+    const ok = receivedBy.trim().length >= 2;
+    return (
+      <Screen footer={
+        <>
+          {deliver.error && <Alert>{readableError(deliver.error)}</Alert>}
+          {!ok && <Small style={{ textAlign: 'center' }}>To save: write who received it.</Small>}
+          <Button title="Mark delivered" loading={deliver.isPending} disabled={!ok} onPress={() => deliver.mutate({ id: o.id, receivedBy: receivedBy.trim() }, { onSuccess: () => finish('Delivered ✓ This order is done.') })} />
+          <LinkButton tone="muted" title="Back" onPress={() => setMode(null)} />
+        </>
+      }>
+        <Stack.Screen options={{ title: o.number }} />
+        <H2>Who received it?</H2>
+        <Small>{o.customer.name}</Small>
+        <Field label="Received by (name)" placeholder="e.g. Sister Mary, OT store" value={receivedBy} onChangeText={setReceivedBy} maxLength={80} autoFocus />
+      </Screen>
+    );
+  }
+
+  if (view === 'hold' || view === 'cancel') {
+    const cancel = view === 'cancel';
+    const save = () => setStatus.mutate({ id: o.id, status: cancel ? 'CANCELLED' : 'ON_HOLD', note: note.trim() }, { onSuccess: () => finish(cancel ? 'Order cancelled.' : 'Put on hold ✓ Resume it when it can go ahead.') });
+    return (
+      <Screen footer={
+        <>
+          {setStatus.error && <Alert>{readableError(setStatus.error)}</Alert>}
+          {confirmCancel ? (
+            <>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: C.danger, textAlign: 'center' }}>Cancel this order? This can’t be undone.</Text>
+              <Button variant="danger" title="Yes, cancel the order" loading={busy} onPress={save} />
+              <LinkButton tone="muted" title="No, keep it" onPress={() => setConfirmCancel(false)} />
+            </>
+          ) : (
+            <>
+              {!note.trim() && <Small style={{ textAlign: 'center' }}>To save: write the reason.</Small>}
+              <Button variant={cancel ? 'danger' : 'primary'} title={cancel ? 'Cancel order' : 'Put on hold'} loading={busy} disabled={!note.trim()} onPress={() => (cancel ? setConfirmCancel(true) : save())} />
+              <LinkButton tone="muted" title="Back" onPress={() => setMode(null)} />
+            </>
           )}
+        </>
+      }>
+        <Stack.Screen options={{ title: o.number }} />
+        <H2>{cancel ? 'Cancel this order' : 'Put this order on hold'}</H2>
+        <Small>{cancel ? 'Write why, so everyone knows.' : 'Nothing more happens to it until someone resumes it. Write why, so everyone knows.'}</Small>
+        <Field label={cancel ? 'Why is it cancelled?' : 'Why is it on hold?'} value={note} onChangeText={setNote} maxLength={300} multiline autoFocus />
+      </Screen>
+    );
+  }
+
+  // The one next step, at the bottom. A step this person may not do says who can.
+  const ask = 'You can’t do this yourself: ask the owner.';
+  const step: { hint: string; title?: string; onPress?: () => void } | null =
+    o.status === 'PLACED' || o.status === 'CONFIRMED' ? (canInvoice ? { hint: 'Next: make the invoice.', title: 'Make invoice', onPress: goInvoice } : { hint: `Next: make the invoice. ${ask}` })
+      : o.status === 'PACKED' ? (canDispatch ? { hint: 'Next: send it out.', title: 'Dispatch order', onPress: () => setMode('dispatch') } : { hint: `Next: send it out. ${ask}` })
+        : o.status === 'DISPATCHED' && toSend && canDispatch ? { hint: `Next: send out invoice ${toSend.number}.`, title: `Dispatch invoice ${toSend.number}`, onPress: () => setMode('dispatch') }
+          : o.status === 'DISPATCHED' ? (canDeliver ? { hint: 'Next: mark it delivered when it reaches the customer.', title: 'Mark delivered', onPress: openDeliver } : { hint: 'On its way. The person delivering it marks it delivered.' })
+            : o.status === 'ON_HOLD' ? (canStatus && resumeTo ? { hint: 'On hold. Next: resume it when it can go ahead.', title: 'Resume order', onPress: () => setStatus.mutate({ id: o.id, status: resumeTo }, { onSuccess: () => finish('Order resumed ✓') }) } : { hint: `On hold. ${ask}` })
+              : delivered ? { hint: 'Delivered ✓ Nothing more to do.' } : null;
+  const invoiceRest = isOpen && hasInvoice && backorder > 0 && ['PACKED', 'DISPATCHED'].includes(o.status) && canInvoice;
+  const more: { icon: Icon; title: string; onPress: () => void; danger?: boolean }[] = [
+    ...(canSource ? [{ icon: 'cart-outline' as Icon, title: 'Order from supplier', onPress: () => setMode('source') }] : []),
+    ...(o.status === 'PLACED' && canStatus ? [{ icon: 'checkmark-circle-outline' as Icon, title: 'Confirm order (invoice later)', onPress: () => setStatus.mutate({ id: o.id, status: 'CONFIRMED' }, { onSuccess: () => finish('Saved ✓ Next: make the invoice.') }) }] : []),
+    // When a later invoice is waiting to go out, delivering what already went is the less likely step.
+    ...(toSend && canDeliver ? [{ icon: 'checkmark-done-outline' as Icon, title: 'Mark delivered', onPress: openDeliver }] : []),
+    ...(next.includes('ON_HOLD') && canStatus ? [{ icon: 'pause-circle-outline' as Icon, title: 'Put on hold', onPress: () => { setNote(''); setMode('hold'); } }] : []),
+    // The server refuses to cancel an order with an issued invoice; that invoice is cancelled first (web).
+    ...(next.includes('CANCELLED') && !hasInvoice && canStatus ? [{ icon: 'close-circle-outline' as Icon, title: 'Cancel order', danger: true, onPress: () => { setNote(''); setMode('cancel'); } }] : []),
+  ];
+  const tone = o.surgeryDate ? surgeryTone(o.surgeryDate, !isOpen) : 'neutral';
+
+  return (
+    <Screen footer={(step || invoiceRest) && (
+      <>
+        {step && <Text style={{ fontSize: 15, fontWeight: '600', color: C.navy, textAlign: 'center' }}>{step.hint}</Text>}
+        {setStatus.error && <Alert>{readableError(setStatus.error)}</Alert>}
+        {step?.title && step.onPress && <Button title={step.title} loading={busy} onPress={step.onPress} />}
+        {invoiceRest && <LinkButton title="Invoice remaining items" icon={<Ionicons name="receipt-outline" size={18} color={C.teal700} />} onPress={goInvoice} />}
+      </>
+    )}>
+      <Stack.Screen options={{ title: o.number }} />
+      {flash && <Alert tone="ok">{flash}</Alert>}
+      {stopped && <Alert tone={o.status === 'CANCELLED' ? 'danger' : 'warn'}>{o.status === 'CANCELLED' ? 'Cancelled' : 'On hold'}{stopped.note ? `: ${stopped.note}` : ''} ({stopped.by}, {formatDate(stopped.at)})</Alert>}
+      <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontSize: 20, fontWeight: '700', color: C.navy }}>{o.customer.name}</Text>
+          {o.forDoctor && <Small>For {o.forDoctor.name}</Small>}
+        </View>
+        <StaffStatusBadge status={o.status} />
+      </Row>
+
+      <Card>
+        <Step n={1} title="Order received" done lineOn={hasInvoice}>
+          <Small>{formatDateTime(o.createdAt)}</Small>
+          <Small>{o.source === 'STAFF' ? `Entered by ${o.placedBy?.name ?? 'staff'} · ${SOURCE.STAFF}` : `Placed by ${o.placedBy?.name ?? o.customer.name} on the ${SOURCE[o.source] ?? 'app'}`}</Small>
+        </Step>
+        <Step n={2} title="Invoiced" done={hasInvoice} lineOn={sent}>
+          {!o.invoices.length && <Small>Not yet</Small>}
+          {o.invoices.map((i) => (
+            <Row key={i.id} style={{ justifyContent: 'space-between' }}>
+              <Small style={[{ flex: 1 }, i.status !== 'ISSUED' && { textDecorationLine: 'line-through' }]}>{i.number} · {formatDate(i.date)} · {rupees(i.grandTotal)}{i.status !== 'ISSUED' ? ' (cancelled)' : ''}</Small>
+              {i.status === 'ISSUED' && (
+                <Pressable accessibilityRole="button" accessibilityLabel={`Open the PDF of invoice ${i.number}`} hitSlop={6} disabled={!!pdf.id} onPress={() => void showPdf(i.id, i.number)}
+                  style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 36, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: C.teal700, opacity: pressed ? 0.6 : 1 })}>
+                  {pdf.id === i.id ? <ActivityIndicator size="small" color={C.teal700} /> : <Ionicons name="document-text-outline" size={16} color={C.teal700} />}
+                  <Text style={{ color: C.teal700, fontWeight: '700' }}>PDF</Text>
+                </Pressable>
+              )}
+            </Row>
+          ))}
+          {pdf.error && <Alert>{pdf.error}</Alert>}
+        </Step>
+        <Step n={3} title="Dispatched" done={sent} lineOn={delivered}>
+          {!sent && <Small>Not yet</Small>}
+          {o.dispatches.map((x) => <Small key={x.id}>{howSent(x)} · {formatDate(x.dispatchDate)}{o.invoices.length > 1 && x.invoice ? ` · invoice ${x.invoice.number}` : ''}</Small>)}
+          {sent && toSend && isOpen && <Small style={{ color: C.warn }}>Invoice {toSend.number} is not sent out yet</Small>}
+        </Step>
+        <Step n={4} title="Delivered" done={delivered} last>
+          {delivered
+            ? <Small>{formatDateTime(deliveredBy?.deliveredAt ?? latest('DELIVERED')?.at)}{deliveredBy?.receivedBy ? ` · received by ${deliveredBy.receivedBy}` : ''}</Small>
+            : <Small>Not yet</Small>}
+        </Step>
+        {pastHolds.map((e) => <Small key={e.id}>Was on hold {formatDate(e.at)} ({e.by}): {e.note}</Small>)}
+      </Card>
+
+      {o.surgeryDate && (
+        <Alert tone={tone === 'danger' ? 'danger' : tone === 'warn' ? 'warn' : 'info'}>
+          {surgeryText(o.surgeryDate)}{surgeryIn(o.surgeryDate) >= 0 ? ` · ${formatDate(o.surgeryDate)}` : ''}{o.patientName ? ` · Patient: ${o.patientName}` : ''}
+        </Alert>
+      )}
+      {!o.surgeryDate && o.patientName && <Alert tone="info">Patient: {o.patientName}</Alert>}
+      {o.customerNote && <Alert tone="info">Note: {o.customerNote}</Alert>}
+
+      {(o.assignedTo || isOpen) && !assigning && (
+        <Row style={{ justifyContent: 'space-between', minHeight: 44 }}>
+          <Row style={{ flex: 1 }}>
+            <Ionicons name="person-circle-outline" size={22} color={o.assignedTo ? C.teal700 : C.warn} />
+            {o.assignedTo ? <P style={{ flex: 1 }}>Handled by <Text style={{ fontWeight: '700' }}>{o.assignedTo.id === me?.id ? 'you' : o.assignedTo.name}</Text></P> : <P style={{ color: C.warn, fontWeight: '700' }}>Not assigned</P>}
+          </Row>
+          {canAssign && <LinkButton title={o.assignedTo ? 'Change' : 'Assign'} onPress={() => { assign.reset(); setFlash(null); setAssigning(true); }} />}
         </Row>
       )}
       {canAssign && assigning && (
         <Card>
           <H2>Who will handle it?</H2>
-          <Small>They make the tax invoice, dispatch and deliver it.</Small>
+          <Small>They make the invoice, send it out and mark it delivered.</Small>
           <HandlerPicker value={handlerId} noneLabel="Not assigned" disabled={assign.isPending}
-            onChange={(v) => (v === handlerId ? setAssigning(false) : assign.mutate({ id: o.id, assignedToId: v }))} />
+            onChange={(v) => (v === handlerId ? setAssigning(false) : assign.mutate({ id: o.id, assignedToId: v }, {
+              onSuccess: () => { setAssigning(false); setFlash(v ? `Now handled by ${staff.data?.find((u) => u.id === v)?.name ?? 'them'} ✓` : 'Set to not assigned.'); },
+            }))} />
           {assign.isPending && <Small>Saving…</Small>}
           {assign.error && <Alert>{readableError(assign.error)}</Alert>}
-          <Button variant="secondary" title="Back" disabled={assign.isPending} onPress={() => setAssigning(false)} />
+          <LinkButton tone="muted" title="Back" disabled={assign.isPending} onPress={() => setAssigning(false)} />
         </Card>
       )}
-      {o.surgeryDate && <Alert tone="warn">Surgery {formatDate(o.surgeryDate)}{o.patientName ? ` · ${o.patientName}` : ''}</Alert>}
-      {o.customerNote && <Alert tone="info">Customer note: {o.customerNote}</Alert>}
+
       <Card>
+        <H2>Items</H2>
         {o.lines.map((l) => (
-          <Row key={l.id} style={{ justifyContent: 'space-between' }}>
+          <Row key={l.id} style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <View style={{ flex: 1 }}><P>{l.variant.product.name}</P><Small>{l.variant.label ?? l.variant.sku}</Small>{isOpen && <StockNote line={stock.get(l.variant.id)} />}</View>
             <View style={{ alignItems: 'flex-end' }}>
-              <P style={{ fontWeight: '700' }}>{l.qty}</P>
-              {isOpen && l.backorder > 0 && o.status !== 'PLACED' && <Small style={{ color: C.warn }}>{l.backorder} to invoice</Small>}
+              <P style={{ fontWeight: '700' }}>× {l.qty}</P>
+              {isOpen && hasInvoice && l.backorder > 0 && <Small style={{ color: C.warn }}>{l.backorder} not invoiced yet</Small>}
             </View>
           </Row>
         ))}
+        <KV k="Total" v={rupees(total)} />
       </Card>
-      {isOpen && toOrder > 0 && mode !== 'source' && <Alert tone="warn">{toOrder} unit(s) on this order are not in stock.</Alert>}
-      {mode === null && isOpen && backorder > 0 && sq.data && can('CREATE_PURCHASE_ORDERS') && <Button variant={toOrder > 0 ? 'primary' : 'secondary'} title="Order from supplier" onPress={() => setMode('source')} />}
-      {mode === 'source' && sq.data && <OrderFromSupplier s={sq.data} onClose={() => setMode(null)} />}
-      {mode === null && isOpen && (
-        <View style={{ gap: 8 }}>
-          {/* The main path: Make tax invoice (also confirms and packs) -> Dispatch -> Delivered. */}
-          {setStatus.error && <Alert>{readableError(setStatus.error)}</Alert>}
-          {backorder > 0 && ['PLACED', 'CONFIRMED', 'PACKED', 'DISPATCHED'].includes(o.status) && can('CREATE_TAX_INVOICE') && (
-            <Button title={hasInvoice ? 'Invoice the remaining items' : 'Make tax invoice'} variant={canDispatch || canDeliver ? 'secondary' : 'primary'} onPress={() => router.push(`/staff/invoice?orderId=${o.id}`)} />
-          )}
-          {canDispatch && <Button title={o.status === 'DISPATCHED' && toSend ? `Dispatch invoice ${toSend.number}` : 'Dispatch'} onPress={() => go('DISPATCHED')} />}
-          {canDeliver && <Button title="Mark delivered" variant={canDispatch ? 'secondary' : 'primary'} onPress={() => go('DELIVERED')} />}
-          {can('UPDATE_ORDER_STATUS') && (
-            <Row style={{ gap: 8, flexWrap: 'wrap' }}>
-              {o.status === 'PLACED' && <Button variant="secondary" title="Confirm only" loading={busy && setStatus.variables?.status === 'CONFIRMED'} disabled={busy} onPress={() => go('CONFIRMED')} />}
-              {resumeTo.map((x) => <Button key={x} variant="secondary" title={`Resume (${ORDER_STATUS_LABEL[x].toLowerCase()})`} loading={busy && setStatus.variables?.status === x} disabled={busy} onPress={() => go(x)} />)}
-              {next.includes('ON_HOLD') && <Button variant="secondary" title="Put on hold" disabled={busy} onPress={() => go('ON_HOLD')} />}
-              {/* The server refuses to cancel an order with an issued invoice; that invoice is cancelled first (web). */}
-              {next.includes('CANCELLED') && !hasInvoice && <Button variant="danger" title="Cancel order" disabled={busy} onPress={() => go('CANCELLED')} />}
-            </Row>
-          )}
+      {isOpen && toOrder > 0 && <Alert tone="warn">{toOrder} item{toOrder === 1 ? ' is' : 's are'} not in stock.{canSource ? ' Order from the supplier under More actions.' : ''}</Alert>}
+      {sq.data && <LinkedPos s={sq.data} />}
+
+      {more.length > 0 && (
+        <View>
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: showMore }} onPress={() => setShowMore(!showMore)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44 }}>
+            <Text style={{ color: C.teal700, fontWeight: '700', fontSize: 15 }}>More actions</Text>
+            <Ionicons name={showMore ? 'chevron-up' : 'chevron-down'} size={18} color={C.teal700} />
+          </Pressable>
+          {showMore && <Card style={{ gap: 0, paddingVertical: 4 }}>{more.map((a) => <ActionRow key={a.title} {...a} />)}</Card>}
         </View>
       )}
-      {mode === 'dispatch' && (
-        <Card>
-          <H2>How is it going out?</H2>
-          {!hasInvoice ? <Alert tone="warn">Make the tax invoice first.</Alert> : toSend && <Small>Goes out with invoice {toSend.number}</Small>}
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-            {DISPATCH_METHODS.map((k) => (
-              <Pressable key={k} accessibilityRole="radio" accessibilityState={{ selected: d.method === k }} onPress={() => setD({ ...d, method: k })}
-                style={{ width: '48%', padding: 10, borderRadius: 10, borderWidth: 1, borderColor: d.method === k ? C.teal : C.line, backgroundColor: d.method === k ? C.aqua50 : C.white }}>
-                <P style={{ fontWeight: d.method === k ? '700' : '400' }}>{DISPATCH_METHOD_LABEL[k]}</P>
-                {k === o.suggestedDispatch && <Small style={{ color: C.teal700 }}>suggested</Small>}
-              </Pressable>
-            ))}
-          </View>
-          {d.method === 'OWN_DELIVERY' && (
-            <View style={{ gap: 6 }}>
-              <Small>Delivered by</Small>
-              {[...(staff.data ?? []).map((u) => ({ id: u.id, label: `${u.name}${u.mobile ? ` · ${u.mobile}` : ''}` })), { id: 'OTHER', label: 'Someone else' }].map((u) => (
-                <Pressable key={u.id} accessibilityRole="radio" accessibilityState={{ selected: d.deliveryPersonId === u.id }} onPress={() => setD({ ...d, deliveryPersonId: u.id })} style={{ flexDirection: 'row', gap: 8, alignItems: 'center', paddingVertical: 3 }}>
-                  <Ionicons name={d.deliveryPersonId === u.id ? 'radio-button-on' : 'radio-button-off'} size={20} color={C.teal700} /><P>{u.label}</P>
-                </Pressable>
-              ))}
-              {d.deliveryPersonId === 'OTHER' && <><Field label="Name" value={d.deliveryPersonName} onChangeText={(v) => setD({ ...d, deliveryPersonName: v })} /><Field label="Mobile (optional)" keyboardType="phone-pad" value={d.deliveryPersonMobile} onChangeText={(v) => setD({ ...d, deliveryPersonMobile: v })} /></>}
-              <Field label="Vehicle no. (optional)" autoCapitalize="characters" value={d.vehicleNo} onChangeText={(v) => setD({ ...d, vehicleNo: v })} />
-            </View>
-          )}
-          {(d.method === 'COURIER' || d.method === 'TRANSPORT') && (
-            <>
-              <Field label={d.method === 'COURIER' ? 'Courier company' : 'Transporter'} value={d.courier} onChangeText={(v) => setD({ ...d, courier: v })} />
-              <Field label={d.method === 'COURIER' ? 'Docket no.' : 'LR no.'} value={d.docketNo} onChangeText={(v) => setD({ ...d, docketNo: v })} />
-            </>
-          )}
-          {d.method === 'PICKUP' && <Small>The customer is told it is ready to collect.</Small>}
-          <Field label="Date" value={d.dispatchDate} onChangeText={(v) => setD({ ...d, dispatchDate: v })} />
-          {setStatus.error && <Alert>{readableError(setStatus.error)}</Alert>}
-          <Button title={d.method === 'PICKUP' ? 'Mark ready for pickup' : 'Mark dispatched'} loading={busy} disabled={!d.method}
-            onPress={() => setStatus.mutate({ id: o.id, status: 'DISPATCHED', dispatch: {
-              method: d.method as DispatchMethod, dispatchDate: d.dispatchDate, invoiceId: toSend?.id, vehicleNo: d.vehicleNo || null, courier: d.courier || null, docketNo: d.docketNo || null,
-              deliveryPersonId: d.method === 'OWN_DELIVERY' && d.deliveryPersonId && d.deliveryPersonId !== 'OTHER' ? d.deliveryPersonId : null,
-              deliveryPersonName: d.deliveryPersonId === 'OTHER' ? d.deliveryPersonName : null, deliveryPersonMobile: d.deliveryPersonId === 'OTHER' ? d.deliveryPersonMobile : null,
-            } }, { onSuccess: () => setModeState(null) })} />
-          <Button variant="secondary" title="Back" onPress={() => setMode(null)} />
-        </Card>
-      )}
-      {mode === 'deliver' && (
-        <Card>
-          <H2>Proof of delivery</H2>
-          <Field label="Received by" placeholder="e.g. Sister Mary, OT store" value={receivedBy} onChangeText={setReceivedBy} maxLength={80} />
-          {deliver.error && <Alert>{readableError(deliver.error)}</Alert>}
-          <Button title="Mark delivered" loading={deliver.isPending} disabled={receivedBy.trim().length < 2} onPress={() => deliver.mutate({ id: o.id, receivedBy: receivedBy.trim() })} />
-          <Button variant="secondary" title="Back" onPress={() => setMode(null)} />
-        </Card>
-      )}
-      {mode === 'note' && noteFor && (
-        <Card>
-          <Field label={noteFor === 'CANCELLED' ? 'Why is the order cancelled?' : 'Why is it on hold?'} value={note} onChangeText={setNote} maxLength={300} />
-          {setStatus.error && <Alert>{readableError(setStatus.error)}</Alert>}
-          <Button variant={noteFor === 'CANCELLED' ? 'danger' : 'primary'} title={noteFor === 'CANCELLED' ? 'Cancel order' : 'Put on hold'} loading={busy} disabled={!note.trim()} onPress={() => setStatus.mutate({ id: o.id, status: noteFor, note: note.trim() }, { onSuccess: () => { setModeState(null); setNote(''); } })} />
-          <Button variant="secondary" title="Back" onPress={() => setMode(null)} />
-        </Card>
-      )}
-      {sq.data && <LinkedPos s={sq.data} />}
-      <H2>History</H2>
-      <Card>{o.events.map((e) => <View key={e.id}><KV k={`${ORDER_STATUS_LABEL[e.status as OrderStatus]} · ${e.by}`} v={formatDateTime(e.at)} />{e.note ? <Small>{e.note}</Small> : null}</View>)}</Card>
-      {o.dispatches.map((x) => <Small key={x.id}>{DISPATCH_METHOD_LABEL[x.method as DispatchMethod]} {x.dispatchDate ? formatDate(x.dispatchDate) : ''} {x.deliveryPersonName ?? x.courier ?? ''} {x.docketNo ?? ''}{x.deliveredAt ? ` · delivered${x.receivedBy ? `, received by ${x.receivedBy}` : ''}` : ''}</Small>)}
     </Screen>
   );
 }

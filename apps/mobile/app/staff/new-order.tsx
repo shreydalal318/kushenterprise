@@ -67,7 +67,7 @@ export default function NewOrder() {
       });
       void utils.orders.invalidate();
       // Someone who may enter orders but not view them can't open the order screen.
-      if (can('VIEW_ORDERS')) router.replace(`/staff/order/${r.id}`);
+      if (can('VIEW_ORDERS')) router.replace(`/staff/order/${r.id}?saved=1`);
       else setSaved(r.number);
     } catch {
       // Shown below from create.error.
@@ -77,7 +77,7 @@ export default function NewOrder() {
   }
 
   if (!can('CREATE_ORDERS')) return <Screen><Alert tone="warn">You can’t enter orders. Ask the owner to give you that permission.</Alert></Screen>;
-  if (saved) return <Screen><Alert tone="ok">Order {saved} saved.</Alert><Button title="Done" onPress={() => router.back()} /></Screen>;
+  if (saved) return <Screen><Alert tone="ok">Order {saved} saved ✓</Alert><Button title="Done" onPress={() => (router.canGoBack() ? router.back() : router.replace('/staff'))} /></Screen>;
   if (!customers.data) return customers.error ? <Screen><Alert>{readableError(customers.error)}</Alert></Screen> : <Loading />;
   return (
     <Screen footer={
@@ -138,7 +138,7 @@ export default function NewOrder() {
 
       <Card>
         <H2>Who will handle it?</H2>
-        <Small>They make the tax invoice, dispatch and deliver it.</Small>
+        <Small>They make the invoice, send it out and mark it delivered.</Small>
         <HandlerPicker value={handler} onChange={setHandler} disabled={create.isPending} />
       </Card>
     </Screen>

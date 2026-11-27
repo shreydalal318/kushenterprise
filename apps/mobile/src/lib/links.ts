@@ -9,9 +9,9 @@ export function appRoute(link: string | null | undefined, customer: boolean, can
     if (m) return `/customer/order/${m[1]}`;
     return /\/portal\/(invoices|account)/.test(link) ? '/customer/account' : null;
   }
-  if (/\/app\/deliveries/.test(link)) return '/staff/deliveries';
+  // Staff home is the orders list, or for delivery staff without order access, their deliveries.
+  if (/\/app\/deliveries/.test(link)) return '/staff';
   const m = link.match(/\/app\/orders\/([^/?#]+)/);
-  // Delivery staff without order access get their delivery list instead of a screen they can't open.
-  if (m) return canViewOrders ? `/staff/order/${m[1]}` : '/staff/deliveries';
+  if (m) return canViewOrders ? `/staff/order/${m[1]}` : '/staff';
   return null;
 }

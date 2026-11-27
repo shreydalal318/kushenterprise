@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { computeGst, istDateString } from '@kush/core';
 import { readableError } from '@/components/errors';
@@ -15,10 +15,12 @@ import { trpc } from '@/lib/trpc';
 interface Line { key: string; variantId: string; productId: string; name: string; label: string | null; hsn: string; gstRate: number; trackSerial: boolean; qty: number; serials: string[]; batchId: string | null }
 const BAD: Record<string, string> = { EXPIRED: 'batch expired', OUT_OF_STOCK: 'out of stock', SERIAL_NOT_IN_STOCK: 'serial not in stock', BATCH_NOT_IN_STOCK: 'that batch is not in stock', INACTIVE: 'inactive item' };
 const byExpiry = (a: { expiryDate: string | null }, b: { expiryDate: string | null }) => (a.expiryDate ?? '9999').localeCompare(b.expiryDate ?? '9999');
+/** Orders whose invoice was just made here and whose person chose "Send it out": the order screen opens its dispatch form on return. */
+export const dispatchNext = new Set<string>();
 
 /**
  * Tax invoice at the counter or the hospital: find products by name (or scan), at this customer's price.
- * With `orderId` (an order's "Make tax invoice") it starts from the order's customer and the items still
+ * With `orderId` (an order's "Make invoice") it starts from the order's customer and the items still
  * to invoice, at the rates locked on the order; `onDone` goes back to that order.
  */
 export function BillForm({ orderId, onDone }: { orderId?: string; onDone?: () => void }) {
@@ -174,18 +176,27 @@ export function BillForm({ orderId, onDone }: { orderId?: string; onDone?: () =>
   function newBill() { setDone(null); setLines([]); setMsg(null); setCustomerId(null); setPdf({ busy: false, error: null }); create.reset(); }
 
   if (done) return (
-    <Screen>
-      {done.queued ? <Alert tone="warn">No connection. The invoice is saved on this phone and will be issued automatically when you are back online.</Alert> : <Alert tone="ok">Invoice {done.number} saved. Stock is updated.</Alert>}
-      {done.id && <Button title="Share / print PDF" variant={orderId ? 'secondary' : 'primary'} loading={pdf.busy} onPress={() => void sharePdf(done.id!, done.number)} />}
+    <Screen footer={orderId ? (
+      <>
+        {done.id && <Text style={{ fontSize: 15, fontWeight: '600', color: C.navy, textAlign: 'center' }}>Next: send it out.</Text>}
+        <Button title={done.id ? 'Send it out (dispatch)' : 'Back to the order'} onPress={() => { if (done.id) dispatchNext.add(orderId); void utils.orders.invalidate(); onDone?.(); }} />
+      </>
+    ) : undefined}>
+      {done.queued ? <Alert tone="warn">No connection. The invoice is saved on this phone and will be made by itself when you are back online.</Alert> : <Alert tone="ok">Invoice {done.number} made ✓ Stock is updated.</Alert>}
+      {done.id && <Button title="Share / print PDF" variant={orderId ? 'secondary' : 'primary'} icon={<Ionicons name="document-text-outline" size={18} color={orderId ? C.ink : C.white} />} loading={pdf.busy} onPress={() => void sharePdf(done.id!, done.number)} />}
       {pdf.error && <Alert>{pdf.error}</Alert>}
-      {orderId
-        ? <Button title={done.id ? 'Dispatch this order' : 'Back to the order'} onPress={() => { void utils.orders.invalidate(); onDone?.(); }} />
-        : <Button variant="secondary" title="New bill" onPress={newBill} />}
+      {!orderId && <Button variant="secondary" title="New bill" onPress={newBill} />}
     </Screen>
   );
   if (!customers.data) return customers.error ? <Screen><Alert>{readableError(customers.error)}</Alert></Screen> : <Loading />;
   return (
-    <Screen>
+    <Screen footer={customer && (
+      <>
+        {create.error && !isNetworkError(create.error) && <Alert>{readableError(create.error)}</Alert>}
+        {!lines.length && prefill !== 'loading' && <Small style={{ textAlign: 'center' }}>To save: add at least one item.</Small>}
+        <Button title={`Save invoice${totals ? ` · ${rupees(totals.total)}` : ''}`} loading={create.isPending} disabled={prefill === 'loading' || !lines.length} onPress={() => void save()} />
+      </>
+    )}>
       {company.data && !company.data.ready && <Alert tone="warn">Set the company state in Settings → Company (web) before billing.</Alert>}
       {prefill === 'loading' && <Card><Loading /><Small style={{ textAlign: 'center' }}>Loading the items still to invoice on this order…</Small></Card>}
       {!customer ? (
@@ -238,8 +249,6 @@ export function BillForm({ orderId, onDone }: { orderId?: string; onDone?: () =>
           <KV k="Total" v={rupees(totals.total)} />
         </Card>
       )}
-      {create.error && !isNetworkError(create.error) && <Alert>{readableError(create.error)}</Alert>}
-      {lines.length > 0 && <Button title={`Save tax invoice${totals ? ` · ${rupees(totals.total)}` : ''}`} loading={create.isPending} disabled={prefill === 'loading'} onPress={() => void save()} />}
     </Screen>
   );
 }

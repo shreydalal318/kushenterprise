@@ -21,9 +21,10 @@ export function NotificationsList() {
       {mark.error && <Alert>{errorText(mark.error)}</Alert>}
       {q.data.length === 0 && <Empty>No notifications yet.</Empty>}
       {q.data.map((n) => {
+        // Staff home is a tab: go back to it rather than stacking a second copy.
         const route = appRoute(n.link, me?.role === 'CUSTOMER', can('VIEW_ORDERS'));
         return (
-          <Pressable key={n.id} accessibilityRole="button" onPress={() => { if (!n.readAt) mark.mutate({ ids: [n.id] }); if (route) router.push(route as never); }}>
+          <Pressable key={n.id} accessibilityRole="button" onPress={() => { if (!n.readAt) mark.mutate({ ids: [n.id] }); if (route === '/staff') router.navigate(route); else if (route) router.push(route as never); }}>
             <Card style={!n.readAt ? { borderColor: C.teal, backgroundColor: C.aqua50 } : undefined}>
               <Row style={{ alignItems: 'flex-start' }}>
                 <View style={{ width: 8, height: 8, borderRadius: 4, marginTop: 7, backgroundColor: n.readAt ? 'transparent' : C.teal }} />

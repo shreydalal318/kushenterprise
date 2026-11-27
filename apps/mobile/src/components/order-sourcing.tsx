@@ -15,7 +15,7 @@ export function StockNote({ line }: { line?: Shortfall['lines'][number] }) {
   if (!line || line.backorder === 0) return null;
   return (
     <Small style={{ color: line.short === 0 ? C.ok : line.toOrder > 0 ? C.danger : C.warn }}>
-      In stock {line.available}{line.short > 0 ? ` · short ${line.short}` : ''}{line.onOrder > 0 ? ` · ${line.onOrder} on PO` : ''}
+      In stock {line.available}{line.short > 0 ? ` · ${line.short} more needed` : ''}{line.onOrder > 0 ? ` · ${line.onOrder} ordered from supplier` : ''}
     </Small>
   );
 }

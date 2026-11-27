@@ -1,114 +1,122 @@
-import { Pressable, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { FlatList, Pressable, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { formatDate } from '@kush/core';
-import { HandlerTag, OrderStatusBadge } from '@/components/status';
-import { Card, H2, Loading, P, Row, Screen, Small } from '@/components/ui';
+import { MyDeliveries } from '@/components/deliveries';
+import { HandlerTag, StaffStatusBadge, staffStatus, StepDots, stepOf, SurgeryChip, surgeryIn } from '@/components/status';
+import { Alert, Button, Card, Loading, P, Row, s, Small, Tabs } from '@/components/ui';
 import { useAuth, useCan } from '@/lib/auth';
-import { rupees } from '@/lib/format';
+import { errorText, rupees } from '@/lib/format';
 import { C, R } from '@/lib/theme';
-import { trpc } from '@/lib/trpc';
+import { trpc, type RouterOutputs } from '@/lib/trpc';
 
-type Icon = keyof typeof Ionicons.glyphMap;
+type Order = RouterOutputs['orders']['list'][number];
+// Asked for status by status: the server returns the newest 200, and an old open order must never be
+// pushed off the list by newer delivered ones.
+const TODO = ['TO_INVOICE', 'PACKED', 'DISPATCHED', 'ON_HOLD'] as const;
+const DONE = ['DELIVERED', 'CANCELLED'] as const;
+/** 0 surgery today, tomorrow or already past · 1 within 3 days · 2 later · 3 no surgery date. */
+const urgency = (o: Order) => { if (!o.surgeryDate) return 3; const d = surgeryIn(o.surgeryDate); return d <= 1 ? 0 : d <= 3 ? 1 : 2; };
 
-const greeting = () => {
-  const h = Number(new Intl.DateTimeFormat('en-IN', { hour: 'numeric', hour12: false, timeZone: 'Asia/Kolkata' }).format(new Date()));
-  return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-};
-
-/** Staff home: what needs doing now, quick actions, and the latest open orders. */
+/** Staff home. Delivery-only staff can't see orders, so theirs is the list of what they have to deliver. */
 export default function StaffHome() {
+  const can = useCan();
+  return can('VIEW_ORDERS') ? <Orders /> : <MyDeliveries />;
+}
+
+/** Two lists only: To do (everything still open, most urgent first) and Done. */
+function Orders() {
   const { me } = useAuth();
   const can = useCan();
-  const seesOrders = can('VIEW_ORDERS');
+  const [tab, setTab] = useState<'todo' | 'done'>('todo');
+  const [search, setSearch] = useState('');
+  const [term, setTerm] = useState('');
+  const [unassignedFirst, setUnassignedFirst] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setTerm(search.trim().slice(0, 60)), 300); return () => clearTimeout(t); }, [search]);
+  const q = term || undefined;
+  const todo = trpc.useQueries((t) => TODO.map((status) => t.orders.list({ status, q }, { placeholderData: (prev) => prev, refetchInterval: 60_000 })));
+  const done = trpc.useQueries((t) => DONE.map((status) => t.orders.list({ status, q }, { placeholderData: (prev) => prev, enabled: tab === 'done' })));
+  // The owner oversees and never handles. An employee's own orders (asked of the server by id, not matched
+  // by name) and anything handed to them to deliver come first within the same urgency.
   const owner = me?.role === 'OWNER';
-  const orders = trpc.orders.list.useQuery({}, { enabled: seesOrders, refetchInterval: 60_000 });
-  // The orders this employee handles, asked of the server rather than matched by name.
-  const handling = trpc.orders.list.useQuery({ assignedToId: me?.id }, { enabled: seesOrders && !!me && !owner, refetchInterval: 60_000 });
-  const mine = trpc.deliveries.mine.useQuery(undefined, { refetchInterval: 120_000 });
-  const isOpen = (o: { status: string }) => !['DELIVERED', 'CANCELLED'].includes(o.status);
-  const list = orders.data ?? [];
-  const count = (s: string) => list.filter((o) => o.status === s).length;
-  const open = list.filter(isOpen);
+  const handling = trpc.orders.list.useQuery({ assignedToId: me?.id, limit: 500 }, { enabled: !!me && !owner, refetchInterval: 60_000 });
+  const drops = trpc.deliveries.mine.useQuery(undefined, { refetchInterval: 120_000 });
+  const handled = new Set(owner ? [] : (handling.data ?? []).map((o) => o.id));
+  const mine = new Set([...handled, ...(drops.data ?? []).map((d) => d.orderId)]);
 
-  // Each tile opens the Orders tab filtered to it. "To dispatch" can't include a dispatched order's next
-  // invoice: the list doesn't say which invoices went out (the order screen does).
-  const tile = (label: string, value: number, icon: Icon, tone: string, to: string, loading: boolean) => ({ label, value, icon, tone, to, loading });
-  const unassigned = tile('Not assigned', open.filter((o) => !o.assignedTo).length, 'person-add-outline', C.warn, '/staff/orders?status=unassigned', orders.isLoading);
-  const outForDelivery = tile('Out for delivery', count('DISPATCHED'), 'car-outline', C.ok, '/staff/orders?status=DISPATCHED', orders.isLoading);
-  const deliveries = tile('My deliveries', mine.data?.length ?? 0, 'bicycle-outline', C.teal700, '/staff/deliveries', false);
-  const tiles = [
-    ...(seesOrders ? owner ? [
-      unassigned,
-      tile('To invoice', count('PLACED') + count('CONFIRMED'), 'receipt-outline', C.teal700, '/staff/orders?status=TO_INVOICE', orders.isLoading),
-      tile('To dispatch', count('PACKED'), 'paper-plane-outline', C.warn, '/staff/orders?status=PACKED', orders.isLoading),
-      outForDelivery,
-    ] : [
-      tile('Assigned to me', (handling.data ?? []).filter(isOpen).length, 'person-outline', C.teal700, '/staff/orders?status=mine', handling.isLoading),
-      unassigned,
-      outForDelivery,
-    ] : []),
-    // The owner only sees this when something has actually been handed to them to deliver.
-    ...(!owner || (mine.data?.length ?? 0) > 0 ? [deliveries] : []),
-  ];
-  const actions: { label: string; icon: Icon; to: string; show: boolean }[] = [
-    { label: 'New order', icon: 'add-circle-outline', to: '/staff/new-order', show: can('CREATE_ORDERS') },
-    { label: 'Scan a barcode', icon: 'scan-outline', to: '/staff/scan', show: true },
-    { label: 'New bill', icon: 'receipt-outline', to: '/staff/bill', show: can('CREATE_TAX_INVOICE') },
-    { label: 'Receive goods', icon: 'download-outline', to: '/staff/receive', show: can('MANAGE_STOCK') },
-  ];
-  const shown = actions.filter((a) => a.show);
+  const lists = tab === 'todo' ? todo : done;
+  const loaded = lists.every((x) => x.data);
+  const settled = lists.every((x) => x.data && !x.isPlaceholderData);
+  const error = lists.find((x) => x.error)?.error;
+  const open = todo.flatMap((x) => x.data ?? []);
+  const unassigned = open.filter((o) => !o.assignedTo).length;
+  const rows = tab === 'todo'
+    ? [...open].sort((a, b) => (unassignedFirst ? Number(!!a.assignedTo) - Number(!!b.assignedTo) : 0)
+      || urgency(a) - urgency(b)
+      || Number(!mine.has(a.id)) - Number(!mine.has(b.id))
+      || (a.surgeryDate && b.surgeryDate ? a.surgeryDate.localeCompare(b.surgeryDate) : 0)
+      || a.createdAt.getTime() - b.createdAt.getTime())
+    : done.flatMap((x) => x.data ?? []).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const refresh = () => { setPulling(true); void Promise.all([...lists.map((x) => x.refetch()), drops.refetch()]).finally(() => setPulling(false)); };
 
   return (
-    <Screen>
-      <View style={{ gap: 2 }}>
-        <Small>{greeting()}</Small>
-        <Text style={{ fontSize: 24, fontWeight: '700', color: C.navy }}>{me?.name ?? ''}</Text>
-      </View>
-
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-        {tiles.map((t) => (
-          <Pressable key={t.label} accessibilityRole="button" accessibilityLabel={`${t.label}: ${t.value}`} onPress={() => router.navigate(t.to as never)}
-            style={({ pressed }) => ({ flexBasis: '47%', flexGrow: 1, backgroundColor: pressed ? C.aqua50 : C.white, borderRadius: R.lg, borderWidth: 1, borderColor: C.line, padding: 14, gap: 6 })}>
-            <Ionicons name={t.icon} size={20} color={t.tone} />
-            <Text style={{ fontSize: 26, fontWeight: '700', color: C.ink }}>{t.loading ? '–' : t.value}</Text>
-            <Small>{t.label}</Small>
+    <View style={{ flex: 1, backgroundColor: C.canvas }}>
+      <View style={{ padding: 12, gap: 8 }}>
+        <Tabs big value={tab} onChange={setTab} options={[['todo', `To do${todo.every((x) => x.data) ? ` (${open.length})` : ''}`], ['done', 'Done']]} />
+        <TextInput accessibilityLabel="Search orders" value={search} onChangeText={setSearch} placeholder="Search order no. or customer" style={s.input} placeholderTextColor="#9aa5b1" autoCorrect={false} returnKeyType="search" />
+        {tab === 'todo' && unassigned > 0 && (
+          <Pressable accessibilityRole="button" onPress={() => setUnassignedFirst(!unassignedFirst)}
+            style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44, paddingHorizontal: 12, borderRadius: R.md, backgroundColor: C.warn50, opacity: pressed ? 0.7 : 1 })}>
+            <Ionicons name="person-add-outline" size={18} color={C.warn} />
+            <Text style={{ flex: 1, color: C.warn, fontSize: 15, fontWeight: '600' }}>{unassigned === 1 ? '1 order is not assigned' : `${unassigned} orders are not assigned`}</Text>
+            <Text style={{ color: C.warn, fontSize: 14, fontWeight: '700' }}>{unassignedFirst ? 'Undo' : 'Show first'}</Text>
           </Pressable>
-        ))}
+        )}
+        {error && <Alert>{errorText(error)}</Alert>}
+        {error && <Button variant="secondary" title="Try again" onPress={refresh} />}
       </View>
-
-      <H2>Quick actions</H2>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-        {shown.map((a) => (
-          <Pressable key={a.label} accessibilityRole="button" onPress={() => router.push(a.to as never)}
-            // Four buttons in one row squeeze the labels: two rows of two instead.
-            style={({ pressed }) => ({ flexBasis: shown.length > 3 ? '47%' : 0, flexGrow: 1, alignItems: 'center', gap: 6, paddingVertical: 14, borderRadius: R.lg, backgroundColor: pressed ? C.teal : C.teal700 })}>
-            <Ionicons name={a.icon} size={22} color={C.white} />
-            <Text style={{ color: C.white, fontWeight: '600', fontSize: 13, textAlign: 'center' }}>{a.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {seesOrders && (
-        <>
-          <Row style={{ justifyContent: 'space-between' }}>
-            <H2>Open orders</H2>
-            {open.length > 5 && <Pressable onPress={() => router.navigate('/staff/orders?status=open')}><Text style={{ color: C.teal700, fontWeight: '600' }}>See all {open.length}</Text></Pressable>}
-          </Row>
-          {orders.isLoading && <Loading />}
-          {orders.data && open.length === 0 && <Card><P muted style={{ textAlign: 'center' }}>No open orders. All caught up.</P></Card>}
-          {open.slice(0, 5).map((o) => (
-            <Pressable key={o.id} accessibilityRole="button" onPress={() => router.push(`/staff/order/${o.id}`)}>
-              <Card>
-                <Row style={{ justifyContent: 'space-between' }}><P style={{ fontWeight: '700', color: C.navy }}>{o.number}</P><OrderStatusBadge status={o.status} /></Row>
-                <P numberOfLines={1}>{o.customer.name}</P>
-                <Small>{o.units} unit{o.units === 1 ? '' : 's'} · {rupees(o.value)}{o.surgeryDate ? ` · surgery ${formatDate(o.surgeryDate)}` : ''}</Small>
-                <HandlerTag name={o.assignedTo} />
-              </Card>
+      {!loaded && !error && <Loading />}
+      <FlatList data={rows} keyExtractor={(o) => o.id} contentContainerStyle={{ padding: 12, paddingTop: 0, gap: 10 }} keyboardShouldPersistTaps="handled"
+        refreshing={pulling} onRefresh={refresh}
+        ListEmptyComponent={settled ? (
+          <Card style={{ alignItems: 'center', paddingVertical: 28 }}>
+            <Ionicons name={term ? 'search-outline' : tab === 'todo' ? 'checkmark-done-circle-outline' : 'file-tray-outline'} size={36} color={C.teal700} />
+            <P style={{ fontWeight: '700', textAlign: 'center' }}>{term ? `No orders match “${term}”` : tab === 'todo' ? 'No orders to do' : 'No delivered orders yet'}</P>
+            <Small style={{ textAlign: 'center' }}>
+              {term ? 'Check the order number or the customer’s name.' : tab === 'done' ? 'Orders show up here once they are delivered.' : can('CREATE_ORDERS') ? 'All caught up. Tap New order when a doctor calls.' : 'All caught up. New orders show up here.'}
+            </Small>
+          </Card>
+        ) : undefined}
+        renderItem={({ item: o }) => {
+          const flagged = tab === 'todo' && unassignedFirst && !o.assignedTo;
+          return (
+            <Pressable accessibilityRole="button" accessibilityLabel={`Order ${o.number}, ${o.customer.name}, ${staffStatus(o.status)}`} onPress={() => router.push(`/staff/order/${o.id}`)}>
+              {({ pressed }) => (
+                <Card style={[pressed && { backgroundColor: C.aqua50 }, flagged && { borderColor: C.warn, borderWidth: 2 }]}>
+                  <Row style={{ justifyContent: 'space-between' }}>
+                    <P style={{ fontWeight: '700', color: C.navy }}>{o.number}</P>
+                    <StaffStatusBadge status={o.status} />
+                  </Row>
+                  <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <P style={{ flex: 1 }} numberOfLines={2}>{o.customer.name}</P>
+                    <P style={{ fontWeight: '700' }}>{rupees(o.value)}</P>
+                  </Row>
+                  {stepOf(o.status) > 0 && <StepDots status={o.status} />}
+                  <Row style={{ flexWrap: 'wrap' }}>
+                    <SurgeryChip date={o.surgeryDate} done={tab === 'done'} />
+                    <HandlerTag name={o.assignedTo} you={handled.has(o.id)} open={tab === 'todo'} />
+                  </Row>
+                </Card>
+              )}
             </Pressable>
-          ))}
-        </>
+          );
+        }} />
+      {can('CREATE_ORDERS') && (
+        <View style={{ padding: 12, borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.white }}>
+          <Button title="New order" icon={<Ionicons name="add" size={22} color={C.white} />} onPress={() => router.push('/staff/new-order')} />
+        </View>
       )}
-    </Screen>
+    </View>
   );
 }

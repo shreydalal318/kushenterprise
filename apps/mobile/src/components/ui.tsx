@@ -59,15 +59,26 @@ export function KV({ k, v }: { k: string; v: ReactNode }) {
   return <Row style={{ justifyContent: 'space-between' }}><Small>{k}</Small><Text style={{ fontSize: 14, color: C.ink, fontWeight: '500' }}>{v}</Text></Row>;
 }
 
-export function Tabs<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
+export function Tabs<T extends string>({ value, options, onChange, big }: { value: T; options: [T, string][]; onChange: (v: T) => void; big?: boolean }) {
   return (
     <Row style={{ backgroundColor: C.white, borderRadius: R.md, padding: 3, borderWidth: 1, borderColor: C.line }}>
       {options.map(([k, l]) => (
-        <Pressable key={k} accessibilityRole="tab" accessibilityState={{ selected: value === k }} onPress={() => onChange(k)} style={{ flex: 1, paddingVertical: 8, borderRadius: R.sm, backgroundColor: value === k ? C.aqua100 : 'transparent' }}>
-          <Text style={{ textAlign: 'center', fontSize: 13, fontWeight: value === k ? '700' : '500', color: value === k ? C.navy : C.muted }}>{l}</Text>
+        <Pressable key={k} accessibilityRole="tab" accessibilityState={{ selected: value === k }} onPress={() => onChange(k)} style={{ flex: 1, paddingVertical: big ? 11 : 8, borderRadius: R.sm, backgroundColor: value === k ? C.aqua100 : 'transparent' }}>
+          <Text style={{ textAlign: 'center', fontSize: big ? 15 : 13, fontWeight: value === k ? '700' : '500', color: value === k ? C.navy : C.muted }}>{l}</Text>
         </Pressable>
       ))}
     </Row>
+  );
+}
+
+/** A secondary action that shouldn't look like a second main button: plain text, still a 44pt target. */
+export function LinkButton({ title, onPress, tone = 'teal', icon, disabled }: { title: string; onPress: () => void; tone?: 'teal' | 'danger' | 'muted'; icon?: ReactNode; disabled?: boolean }) {
+  const color = tone === 'danger' ? C.danger : tone === 'muted' ? C.muted : C.teal700;
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={title} onPress={onPress} disabled={disabled} hitSlop={4}
+      style={({ pressed }) => ({ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 8, opacity: disabled ? 0.5 : pressed ? 0.6 : 1 })}>
+      {icon}<Text style={{ color, fontSize: 15, fontWeight: '700' }}>{title}</Text>
+    </Pressable>
   );
 }
 

@@ -4,7 +4,7 @@ import { useOutbox } from '@/lib/outbox';
 import { usePushRegistration } from '@/lib/push';
 import { C } from '@/lib/theme';
 
-/** Staff mode, built for one hand: scan, orders, billing, receiving, stock. */
+/** Staff mode, built for one hand: orders (home), stock, receiving, barcode lookup. */
 export default function StaffLayout() {
   const { ready, me } = useAuth();
   useOutbox();
@@ -15,8 +15,8 @@ export default function StaffLayout() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="order/[id]" options={{ title: 'Order' }} />
       <Stack.Screen name="new-order" options={{ title: 'New order' }} />
-      <Stack.Screen name="invoice" options={{ title: 'Tax invoice' }} />
-      <Stack.Screen name="scan" options={{ title: 'Scan a barcode' }} />
+      <Stack.Screen name="invoice" options={{ title: 'Make invoice' }} />
+      <Stack.Screen name="scan" options={{ title: 'Barcode lookup' }} />
       <Stack.Screen name="receive" options={{ title: 'Receive goods' }} />
       <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
     </Stack>
