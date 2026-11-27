@@ -1,32 +1,27 @@
 import { Pressable, View } from 'react-native';
 import { router } from 'expo-router';
 import { formatDateTime } from '@kush/core';
-import { useAuth } from '@/lib/auth';
+import { useAuth, useCan } from '@/lib/auth';
+import { errorText } from '@/lib/format';
+import { appRoute } from '@/lib/links';
 import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
-import { Button, Card, Empty, Loading, P, Row, Screen, Small } from './ui';
-
-/** Map a web link from a notification to the matching app screen. */
-function appRoute(link: string | null, customer: boolean): string | null {
-  if (!link) return null;
-  const m = link.match(/\/(?:portal|app)\/orders\/([^/?]+)/);
-  if (m) return customer ? `/customer/order/${m[1]}` : `/staff/order/${m[1]}`;
-  if (link.startsWith('/portal/invoices') || link.startsWith('/portal/account')) return '/customer/account';
-  return null;
-}
+import { Alert, Button, Card, Empty, Loading, P, Row, Screen, Small } from './ui';
 
 export function NotificationsList() {
   const { me } = useAuth();
+  const can = useCan();
   const utils = trpc.useUtils();
   const q = trpc.notifications.list.useQuery({ limit: 100 });
   const mark = trpc.notifications.markRead.useMutation({ onSuccess: () => utils.notifications.invalidate() });
-  if (!q.data) return <Loading />;
+  if (!q.data) return q.error ? <Screen><Alert>{errorText(q.error)}</Alert><Button variant="secondary" title="Try again" loading={q.isFetching} onPress={() => void q.refetch()} /></Screen> : <Loading />;
   return (
     <Screen>
       <Button variant="secondary" title="Mark all as read" loading={mark.isPending} onPress={() => mark.mutate({})} />
+      {mark.error && <Alert>{errorText(mark.error)}</Alert>}
       {q.data.length === 0 && <Empty>No notifications yet.</Empty>}
       {q.data.map((n) => {
-        const route = appRoute(n.link, me?.role === 'CUSTOMER');
+        const route = appRoute(n.link, me?.role === 'CUSTOMER', can('VIEW_ORDERS'));
         return (
           <Pressable key={n.id} accessibilityRole="button" onPress={() => { if (!n.readAt) mark.mutate({ ids: [n.id] }); if (route) router.push(route as never); }}>
             <Card style={!n.readAt ? { borderColor: C.teal, backgroundColor: C.aqua50 } : undefined}>

@@ -38,7 +38,7 @@ export const deliveriesRouter = router({
       const ship = d.order.shippingSnapshot as Ship;
       return {
         dispatchId: d.id, method: d.method, orderId: d.order.id, orderNumber: d.order.number, customer: d.order.customer.name, address: (ship?.addressLines ?? []).join(', '),
-        person: d.deliveryPersonName, mobile: d.deliveryPersonMobile, invoice: d.invoice?.number ?? null, since: d.createdAt,
+        person: d.deliveryPersonName, personId: d.deliveryPersonId, mobile: d.deliveryPersonMobile, invoice: d.invoice?.number ?? null, since: d.createdAt,
       };
     });
   }),

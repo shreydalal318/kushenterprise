@@ -53,7 +53,7 @@ export async function createOrder(tx: Tx, input: OrderInput, actor: { id: string
   const team = [...(await orderStaffIds(tx)), ...(assignedToId ? [assignedToId] : [])].filter((id) => id !== actor.id);
   await notify(tx, { userIds: team, title: `New order ${number}`, body: `${doc.customer.name}${doc.doctor ? ` for ${doc.doctor.name}` : ''}: ${units} unit(s)${input.surgeryDate ? `, surgery ${input.surgeryDate}` : ''}`, link: `/app/orders/${o.id}`, channels: ['PUSH'] });
   if (input.source !== 'STAFF') {
-    await notifyCustomer(tx, doc.customer.id, { title: `Order ${number} received`, body: `We have your order for ${units} unit(s) and will confirm it shortly.`, link: `/portal/orders/${o.id}` });
+    await notifyCustomer(tx, doc.customer.id, { title: `Order ${number} received`, body: `We have your order for ${units} unit(s). We will message you when it is invoiced, dispatched and delivered.`, link: `/portal/orders/${o.id}` });
   }
   return { id: o.id, number, duplicate: false };
 }

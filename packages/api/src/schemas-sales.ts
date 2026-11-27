@@ -22,7 +22,8 @@ export const orderCreateInput = z.object({
 });
 
 export const orderListInput = z.object({
-  status: z.enum(ORDER_STATUSES).optional(),
+  /** TO_INVOICE = placed or confirmed: still waiting for its tax invoice. */
+  status: z.enum([...ORDER_STATUSES, 'TO_INVOICE']).optional(),
   customerId: z.string().optional(),
   assignedToId: z.string().optional(),
   from: isoDate.optional(),

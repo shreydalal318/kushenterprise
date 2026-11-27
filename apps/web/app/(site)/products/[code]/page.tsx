@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, Lock, MessageSquare } from 'lucide-react';
 import { fmtPower, LENS_TYPE_LABEL } from '@/components/site/bits';
-import { publicApi, siteUrl } from '@/lib/public-api';
+import { publicApi } from '@/lib/public-api';
 
 async function load(code: string) {
   try { return await (await publicApi()).website.product({ code: decodeURIComponent(code) }); } catch { return null; }
@@ -13,7 +13,7 @@ export async function generateMetadata({ params }: { params: Promise<{ code: str
   const p = await load((await params).code);
   if (!p) return { title: 'Product not found' };
   const desc = p.description ?? `${p.name}${p.lensType ? `, ${LENS_TYPE_LABEL[p.lensType]} IOL` : ''}${p.powers.length ? `, powers ${fmtPower(p.powers[0]!)} to ${fmtPower(p.powers.at(-1)!)} D` : ''}. Available from Kush Enterprise.`;
-  return { title: p.name, description: desc, openGraph: { title: p.name, description: desc, images: p.images[0] ? [`/api/files/${p.images[0]}`] : undefined } };
+  return { title: p.name, description: desc, openGraph: { title: p.name, description: desc } };
 }
 
 /** Group consecutive powers into ranges: +10.00 to +30.00 (0.50 D steps). */
@@ -40,7 +40,7 @@ export default async function ProductPage({ params }: { params: Promise<{ code: 
     ['Preloaded', p.preloaded == null ? null : p.preloaded ? 'Yes' : 'No'], ['Powers available', p.powers.length ? ranges(p.powers) : null],
     ['Cylinder options', p.cylinders.length ? p.cylinders.map((c) => `${c.toFixed(2)} D`).join(', ') : null], ['Add power', p.addPowers.length ? p.addPowers.map((a) => `+${a.toFixed(2)} D`).join(', ') : null],
   ].filter(([, v]) => v != null && v !== '');
-  const jsonLd = { '@context': 'https://schema.org', '@type': 'Product', name: p.name, sku: p.code, category: p.category, ...(p.brand ? { brand: { '@type': 'Brand', name: p.brand } } : {}), ...(p.description ? { description: p.description } : {}), ...(p.images[0] ? { image: `${siteUrl()}/api/files/${p.images[0]}` } : {}) };
+  const jsonLd = { '@context': 'https://schema.org', '@type': 'Product', name: p.name, sku: p.code, category: p.category, ...(p.brand ? { brand: { '@type': 'Brand', name: p.brand } } : {}), ...(p.description ? { description: p.description } : {}) };
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }} />

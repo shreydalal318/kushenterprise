@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { FlatList, Pressable, View } from 'react-native';
 import { router } from 'expo-router';
 import { formatDate, formatDateTime } from '@kush/core';
-import { Card, Loading, P, Row, Small, Tabs } from '@/components/ui';
+import { Alert, Button, Card, Loading, P, Row, Small, Tabs } from '@/components/ui';
 import { OrderStatusBadge } from '@/components/status';
-import { rupees } from '@/lib/format';
+import { errorText, rupees } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
 
@@ -15,6 +15,7 @@ export default function OrdersScreen() {
     <View style={{ flex: 1, backgroundColor: C.canvas }}>
       <View style={{ padding: 12 }}><Tabs value={status} onChange={setStatus} options={[['OPEN', 'Open'], ['DELIVERED', 'Delivered'], ['', 'All']]} /></View>
       {q.isLoading && <Loading />}
+      {q.error && !q.data && <View style={{ paddingHorizontal: 12, gap: 8 }}><Alert>{errorText(q.error)}</Alert><Button variant="secondary" title="Try again" loading={q.isFetching} onPress={() => void q.refetch()} /></View>}
       <FlatList data={q.data ?? []} keyExtractor={(o) => o.id} contentContainerStyle={{ padding: 12, paddingTop: 0, gap: 10 }} refreshing={q.isRefetching} onRefresh={() => void q.refetch()}
         ListEmptyComponent={q.data ? <P muted style={{ textAlign: 'center' }}>No orders here.</P> : undefined}
         renderItem={({ item: o }) => (

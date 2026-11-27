@@ -84,9 +84,8 @@ test.describe.serial('Phase 3 inventory & barcodes', () => {
     await expect(page.getByText('Unknown barcode', { exact: true }).first()).toBeVisible();
     await page.getByRole('button', { name: 'Link to a product…' }).click();
     const dlg = page.getByRole('dialog');
-    await dlg.getByPlaceholder('Find a product by name or code').fill(`KNF-${T}`);
-    await dlg.getByPlaceholder('Find a product by name or code').fill(`KNF-${T} · Inventory Knife ${T}`);
-    await dlg.getByRole('button', { name: 'Link barcode' }).click();
+    await dlg.getByRole('combobox', { name: 'Find product' }).fill(`KNF-${T}`);
+    await dlg.getByRole('option', { name: new RegExp(`Inventory Knife ${T}`) }).click();
     await expect(page.getByText('read via Linked manufacturer code', { exact: false })).toBeVisible();
   });
 

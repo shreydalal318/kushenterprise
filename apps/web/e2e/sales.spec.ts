@@ -74,7 +74,7 @@ test.describe.serial('Phase 4 sales', () => {
     await snap(page, '31-invoice-detail');
   });
 
-  test('order: place, confirm, invoice from the order, pack by scanning, dispatch, deliver', async ({ page }) => {
+  test('order: place, invoice from the order (confirms and packs it), dispatch, deliver', async ({ page }) => {
     await login(page, run.owner.email, run.owner.password);
     await page.goto('/app/orders/new');
     await selectByText(page, 'Customer', ctx.customer);
@@ -84,27 +84,16 @@ test.describe.serial('Phase 4 sales', () => {
     await page.getByLabel('Patient name (optional)').fill('Mr. R. Shah');
     await page.getByRole('button', { name: /Place order/ }).click();
     await page.waitForURL(/\/app\/orders\/[^/]+\?new=1/);
-    const orderUrl = page.url().split('?')[0]!;
-    await page.getByRole('button', { name: 'Mark confirmed' }).click();
-    await expect(page.getByText('Confirmed', { exact: true }).first()).toBeVisible();
+    const orderPath = new URL(page.url()).pathname;
 
-    await page.getByRole('link', { name: 'Create tax invoice' }).click();
+    // Making the invoice confirms and packs the order, then comes straight back with Dispatch open.
+    await page.getByRole('link', { name: /Make tax invoice/ }).click();
     await expect(page.getByLabel('Quantity for line 1')).toHaveValue('2');
     await page.getByRole('button', { name: /Save tax invoice/ }).click();
-    await page.waitForURL(/\/app\/invoices\/[^/]+\?new=1/);
-
-    await page.goto(orderUrl);
-    await page.getByRole('button', { name: 'Pack & verify' }).click();
-    const dlg = page.getByRole('dialog');
-    await scan(page, ctx.gelBarcode);
-    await scan(page, ctx.gelBarcode);
-    await scan(page, ctx.gelBarcode);
-    await expect(dlg.getByText(/Too many: only 2/)).toBeVisible();
-    await dlg.getByRole('button', { name: 'Mark packed' }).click();
-    await expect(dlg).toBeHidden();
-
-    await page.getByRole('button', { name: 'Mark dispatched' }).click();
+    await page.waitForURL((u) => u.pathname === orderPath);
+    await expect(page.getByText('Packed', { exact: true }).first()).toBeVisible();
     const dlg2 = page.getByRole('dialog');
+    await expect(dlg2).toBeVisible();
     // Same city as us → our own delivery staff is suggested; this one goes by courier instead.
     await expect(dlg2.getByRole('radio', { name: /Our delivery staff \(suggested\)/ })).toHaveAttribute('aria-checked', 'true');
     await dlg2.getByRole('radio', { name: /^Courier/ }).click();
@@ -182,9 +171,8 @@ test.describe.serial('Phase 4 sales', () => {
     const o = await trpc<{ id: string; number: string }>(r, 'orders.create', { customerId: c.id, lines: [{ variantId: gel.variant.id, qty: 1 }] });
     await trpc(r, 'orders.setStatus', { id: o.id, status: 'CONFIRMED' });
     await trpc(r, 'invoices.create', { customerId: c.id, orderId: o.id, date: new Date().toISOString().slice(0, 10), lines: [{ variantId: gel.variant.id, qty: 1 }] });
-    await page.goto(`/app/orders/${o.id}`);
-    await page.getByRole('button', { name: 'Mark packed' }).click();
-    await page.getByRole('button', { name: 'Mark dispatched' }).click();
+    await page.goto(`/app/orders/${o.id}`); // the invoice already packed it
+    await page.getByRole('button', { name: 'Dispatch', exact: true }).click();
     const dlg = page.getByRole('dialog');
     await dlg.getByLabel('Delivered by').selectOption({ label: new RegExp(run.owner.name) as unknown as string }).catch(async () => {
       const value = await dlg.getByLabel('Delivered by').locator('option', { hasText: run.owner.name }).first().getAttribute('value');

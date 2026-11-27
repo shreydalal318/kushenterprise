@@ -42,7 +42,7 @@ export function PoList() {
         <Table minWidth={820}>
           <THead><tr><Th>PO</Th><Th>Supplier</Th><Th>Status</Th><Th>Expected</Th><Th className="text-right">Received</Th><Th className="text-right">Value</Th></tr></THead>
           <tbody>
-            {!list.data && <LoadingRow cols={6} />}{list.data?.length === 0 && <EmptyRow cols={6}>No purchase orders here.</EmptyRow>}
+            {!list.data && <LoadingRow cols={6} error={list.error} />}{list.data?.length === 0 && <EmptyRow cols={6}>No purchase orders here.</EmptyRow>}
             {list.data?.map((p) => (
               <Tr key={p.id} className="hover:bg-aqua-50/60">
                 <Td><Link href={`/app/purchase-orders/${p.id}`} className="font-mono text-sm font-medium text-navy hover:underline">{p.number}</Link><div className="text-xs text-muted">{formatDate(p.date)}</div></Td>

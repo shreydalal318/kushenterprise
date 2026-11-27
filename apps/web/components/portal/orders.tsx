@@ -8,6 +8,7 @@ import { Alert, Card, CardBody, CardHeader, PageHeader } from '@/components/ui/c
 import { EmptyRow, LoadingRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
 import { OrderBadge } from '@/components/sales/status';
 import { cn } from '@/lib/cn';
+import { errorMessage } from '@/lib/errors';
 import { rupees } from '@/lib/format';
 import { trpc } from '@/lib/trpc';
 import { useCart } from './cart';
@@ -21,11 +22,27 @@ export function MyOrders() {
       <div role="tablist" className="mb-4 flex w-fit flex-wrap rounded-lg bg-white p-0.5 ring-1 ring-line">
         {[['', 'All'], ['OPEN', 'Open'], ['DELIVERED', 'Delivered'], ['CANCELLED', 'Cancelled']].map(([k, l]) => <button key={k} role="tab" aria-selected={status === k} onClick={() => setStatus(k!)} className={cn('h-9 rounded-md px-3 text-sm', status === k ? 'bg-aqua-100 font-semibold text-navy' : 'text-muted')}>{l}</button>)}
       </div>
-      <Card className="overflow-hidden">
+      {/* Phones: one card per order. */}
+      <ul className="flex flex-col gap-2 sm:hidden" aria-busy={!q.data}>
+        {q.error ? <li><Alert>{errorMessage(q.error)}</Alert></li> : !q.data && Array.from({ length: 3 }, (_, i) => <li key={i} className="h-20 animate-pulse rounded-xl border border-line bg-white" aria-hidden />)}
+        {q.data?.length === 0 && <li><Card className="py-10 text-center text-sm text-muted">No orders here.</Card></li>}
+        {q.data?.map((o) => (
+          <li key={o.id}>
+            <Link href={`/portal/orders/${o.id}`} className="block rounded-xl border border-line bg-white px-4 py-3 active:bg-aqua-50">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0"><p className="font-mono text-sm font-medium text-navy">{o.number}</p><p className="text-xs text-muted">{formatDateTime(o.createdAt)}</p></div>
+                <OrderBadge status={o.status} />
+              </div>
+              <p className="mt-2 flex justify-between gap-2 text-xs text-muted"><span>{o.units} unit{o.units === 1 ? '' : 's'} · <span className="font-medium text-ink">{rupees(o.value)}</span></span><span className="truncate">{[o.forDoctor, o.surgeryDate && `Surgery ${formatDate(o.surgeryDate)}`].filter(Boolean).join(' · ')}</span></p>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      <Card className="hidden overflow-hidden sm:block">
         <Table minWidth={620}>
           <THead><tr><Th>Order</Th><Th>Status</Th><Th className="text-right">Units</Th><Th className="text-right">Value</Th><Th>For</Th></tr></THead>
           <tbody>
-            {!q.data && <LoadingRow cols={5} />}{q.data?.length === 0 && <EmptyRow cols={5}>No orders here.</EmptyRow>}
+            {!q.data && <LoadingRow cols={5} error={q.error} />}{q.data?.length === 0 && <EmptyRow cols={5}>No orders here.</EmptyRow>}
             {q.data?.map((o) => (
               <Tr key={o.id}>
                 <Td><Link href={`/portal/orders/${o.id}`} className="font-mono text-sm font-medium text-navy hover:underline">{o.number}</Link><div className="text-xs text-muted">{formatDateTime(o.createdAt)}</div></Td>
@@ -51,7 +68,7 @@ export function MyOrder({ id, isNew }: { id: string; isNew: boolean }) {
     <div className="flex flex-col gap-5">
       <Link href="/portal/orders" className="flex w-fit items-center gap-1 text-sm text-teal-700 hover:underline"><ArrowLeft className="size-4" aria-hidden /> My orders</Link>
       <PageHeader title={o.number} description={<span className="flex flex-wrap items-center gap-2">Placed {formatDateTime(o.createdAt)}{o.forDoctor ? ` · for ${o.forDoctor}` : ''} <OrderBadge status={o.status} /></span>} />
-      {isNew && <Alert tone="ok">Thank you, your order is placed. We will confirm it shortly and you will be notified at each step.</Alert>}
+      {isNew && <Alert tone="ok">Thank you, your order is placed. We will let you know when it is invoiced, dispatched and delivered.</Alert>}
       {o.status === 'CANCELLED' && <Alert>This order was cancelled{o.events.find((e) => e.status === 'CANCELLED')?.note ? `: ${o.events.find((e) => e.status === 'CANCELLED')!.note}` : '.'}</Alert>}
       {o.status === 'ON_HOLD' && <Alert tone="warn">On hold{o.events.filter((e) => e.status === 'ON_HOLD').at(-1)?.note ? `: ${o.events.filter((e) => e.status === 'ON_HOLD').at(-1)!.note}` : '.'} We will contact you.</Alert>}
       <Card>
@@ -82,15 +99,24 @@ export function MyOrder({ id, isNew }: { id: string; isNew: boolean }) {
         </CardBody></Card>
       )}
       <Card className="overflow-hidden">
-        <CardHeader title="Items" description={backorder > 0 && !['PLACED', 'CANCELLED'].includes(o.status) ? `${backorder} unit(s) still to be sent` : undefined} />
-        <Table minWidth={560}>
-          <THead><tr><Th>Item</Th><Th className="text-right">Ordered</Th><Th className="text-right">Sent</Th><Th className="text-right">Rate</Th></tr></THead>
+        <CardHeader title="Items" description={backorder > 0 && o.invoices.length > 0 && o.status !== 'CANCELLED' ? `${backorder} unit(s) not billed yet (back-order)` : undefined} />
+        {/* Phones: one row per item. */}
+        <ul className="divide-y divide-line sm:hidden">
+          {o.lines.map((l) => (
+            <li key={l.id} className="px-5 py-3">
+              <div className="flex justify-between gap-3"><span className="font-medium">{l.name}</span><span className="shrink-0 text-sm">{rupees(l.rate)}</span></div>
+              <p className="text-xs text-muted">{l.label ?? ''}{l.label ? ' · ' : ''}{l.qty} ordered · <span className={cn(l.backorder > 0 && o.status !== 'PLACED' ? 'text-warn' : '')}>{l.sent} billed</span></p>
+            </li>
+          ))}
+        </ul>
+        <Table minWidth={560} className="hidden sm:block">
+          <THead><tr><Th>Item</Th><Th className="text-right">Ordered</Th><Th className="text-right">Billed</Th><Th className="text-right">Rate</Th></tr></THead>
           <tbody>{o.lines.map((l) => <Tr key={l.id}><Td><div className="font-medium">{l.name}</div><div className="text-xs text-muted">{l.label ?? ''}</div></Td><Td className="num">{l.qty}</Td><Td className={cn('num', l.backorder > 0 && o.status !== 'PLACED' ? 'text-warn' : '')}>{l.sent}</Td><Td className="num">{rupees(l.rate)}</Td></Tr>)}</tbody>
         </Table>
       </Card>
       <div className="grid gap-5 md:grid-cols-2">
         <Card><CardHeader title="Invoices" /><CardBody className="flex flex-col gap-2 text-sm">
-          {o.invoices.length === 0 && <p className="text-muted">The tax invoice appears here when the goods are dispatched.</p>}
+          {o.invoices.length === 0 && <p className="text-muted">Your tax invoice appears here as soon as it is made.</p>}
           {o.invoices.map((i) => <a key={i.id} href={`/api/documents/invoice/${i.id}`} target="_blank" rel="noreferrer" className="font-mono text-teal-700 hover:underline">{i.number} · {rupees(i.total)}</a>)}
         </CardBody></Card>
         <Card><CardHeader title="Details" /><CardBody className="flex flex-col gap-1 text-sm">

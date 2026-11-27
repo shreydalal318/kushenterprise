@@ -184,6 +184,38 @@ describe('orders → invoice → dispatch', () => {
     expect((await (await api()).orders.get({ id: o.id })).status).toBe('CONFIRMED');
   });
 
+  it('counts and lists orders by the next step: to invoice (placed or confirmed), then to dispatch (packed)', async () => {
+    const c = await api(clerk);
+    const h0 = (await c.analytics.home()).staff;
+    const o = await c.orders.create({ customerId: gj.id, lines: [{ variantId: gel.v, qty: 1 }] });
+    const ids = async (status: 'TO_INVOICE' | 'PACKED') => (await c.orders.list({ status })).map((x) => x.id);
+    const h1 = (await c.analytics.home()).staff;
+    expect([h1.toInvoice - h0.toInvoice, h1.toDispatch - h0.toDispatch]).toEqual([1, 0]);
+    expect(await ids('TO_INVOICE')).toContain(o.id);
+    await c.orders.setStatus({ id: o.id, status: 'CONFIRMED' });
+    expect(await ids('TO_INVOICE')).toContain(o.id);
+    await c.invoices.create({ customerId: gj.id, orderId: o.id, date: today, lines: [{ variantId: gel.v, qty: 1 }] });
+    const h2 = (await c.analytics.home()).staff;
+    expect([h2.toInvoice - h0.toInvoice, h2.toDispatch - h0.toDispatch]).toEqual([0, 1]);
+    expect(await ids('TO_INVOICE')).not.toContain(o.id);
+    expect(await ids('PACKED')).toContain(o.id);
+  });
+
+  it('finds items to add by name, code, power or barcode, with unexpired stock on hand', async () => {
+    const c = await api(clerk);
+    const byCode = await c.products.search({ q: lens.code.toLowerCase() });
+    expect(byCode.rows.map((r) => r.variantId)).toContain(lens.v);
+    const row = (await c.products.search({ q: `${lens.code} 21` })).rows.find((r) => r.variantId === lens.v)!;
+    expect(row).toMatchObject({ productId: lens.productId, label: '+21.00 D', trackSerial: true });
+    expect((await c.products.search({ q: `${lens.code} +21.00` })).rows.map((r) => r.variantId)).toEqual([lens.v]);
+    expect((await c.products.search({ q: `${lens.code} 25.5` })).rows).toHaveLength(0);
+    const gp = await c.products.get({ id: gel.productId });
+    const g = (await c.products.search({ q: `gel ${gp.code}` })).rows.find((r) => r.variantId === gel.v)!;
+    expect(g.inStock).toBe(await gelQty());
+    expect((await c.products.search({ q: gp.variants[0]!.barcode })).rows.map((r) => r.variantId)).toContain(gel.v);
+    expect((await c.products.search({ q: `nothing-${tag()}` })).rows).toHaveLength(0);
+  });
+
   it('tells the whole order team about a new order, but not whoever entered it', async () => {
     const packer = await makeUser('EMPLOYEE', { permissions: ['VIEW_ORDERS', 'SCAN_DISPATCH'] });
     const noOrders = await makeUser('EMPLOYEE', { permissions: [] });

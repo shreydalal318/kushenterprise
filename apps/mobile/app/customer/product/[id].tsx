@@ -4,7 +4,7 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { Alert, Button, Card, H1, H2, KV, Loading, P, Row, Screen, Small } from '@/components/ui';
 import { fmtPower, LENS_TYPE_LABEL } from '@/components/status';
 import { useCart } from '@/lib/cart';
-import { rupees } from '@/lib/format';
+import { errorCode, errorText, rupees } from '@/lib/format';
 import { C, R } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
 
@@ -31,8 +31,12 @@ export default function ProductScreen() {
     }
     return [...m.entries()];
   }, [q.data]);
-  if (q.error) return <Screen><Alert>This product is not available.</Alert></Screen>;
-  if (!q.data) return <Loading />;
+  // A saved copy still opens with no signal; only a product that is really gone says so.
+  if (!q.data) {
+    if (!q.error) return <Loading />;
+    return errorCode(q.error) === 'NOT_FOUND' ? <Screen><Alert>This product is not available.</Alert></Screen>
+      : <Screen><Alert>{errorText(q.error)}</Alert><Button variant="secondary" title="Try again" loading={q.isFetching} onPress={() => void q.refetch()} /></Screen>;
+  }
   const p = q.data;
   const total = Object.values(qty).reduce((t, n) => t + n, 0);
   const before = p.variants.reduce((t, v) => t + (cart.items[v.id] ?? 0), 0);
@@ -57,7 +61,7 @@ export default function ProductScreen() {
           {p.preloaded != null && <KV k="Preloaded" v={p.preloaded ? 'Yes' : 'No'} />}
         </Card>
       )}
-      <H2>{p.variants.length > 1 ? 'Powers and quantities' : 'Quantity'}</H2>
+      <H2>{p.variants.length < 2 ? 'Quantity' : p.isLens ? 'Powers and quantities' : 'Options and quantities'}</H2>
       <Row style={{ gap: 12 }}>{[['Available', C.ok], ['Limited', C.warn], ['On request', C.line]].map(([l, c]) => <Row key={l} style={{ gap: 4 }}><View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: c }} /><Small>{l}</Small></Row>)}</Row>
       {groups.map(([label, vs]) => (
         <View key={label || 'all'} style={{ gap: 6 }}>

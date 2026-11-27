@@ -34,6 +34,8 @@ export interface BuilderLine {
   discPct: number;
   batchId: string | null; // null = FEFO
   serials: string[];
+  /** Units still to invoice on the order this line came from (serial lines start with that many ticked when in stock). */
+  wanted?: number;
 }
 
 export interface BuilderPrefill {
@@ -79,12 +81,13 @@ export function DocBuilder({ mode, prefill }: { mode: BuilderMode; prefill?: Bui
 
   const productIds = useMemo(() => [...new Set(lines.map((l) => l.productId))].sort(), [lines]);
   const prices = trpc.sales.prices.useQuery({ customerId, productIds }, { enabled: !!customerId && productIds.length > 0, placeholderData: (p) => p });
-  const rateOf = (l: BuilderLine) => l.rate ?? prices.data?.[l.productId]?.rate ?? null;
+  // Orders always take the customer's price (the server ignores any other rate), so only invoices / proformas can override it.
+  const rateOf = (l: BuilderLine) => (mode === 'order' ? null : l.rate) ?? prices.data?.[l.productId]?.rate ?? null;
 
   const companyState = company.data?.stateCode ?? '';
   const totals = useMemo(() => {
     const ready = lines.every((l) => rateOf(l) != null);
-    if (!ready || !lines.length || !ship) return null;
+    if (mode === 'order' || !ready || !lines.length || !ship) return null;
     return computeGst(companyState || 'XX', ship.stateCode, lines.map((l) => ({ qty: l.qty, rate: rateOf(l)!, discPct: l.discPct, hsn: l.hsn, gstRate: l.gstRate })));
   }, [lines, prices.data, ship, companyState]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -149,6 +152,10 @@ export function DocBuilder({ mode, prefill }: { mode: BuilderMode; prefill?: Bui
   const m = mode === 'invoice' ? createInvoice : mode === 'proforma' ? createProforma : createOrder;
   const fe = fieldErrors(m.error);
 
+  // An order is valued like the order page shows it: quantity × the customer's rate, before GST.
+  const orderValue = mode === 'order' && lines.length && lines.every((l) => rateOf(l) != null) ? Math.round(lines.reduce((t, l) => t + l.qty * rateOf(l)!, 0) * 100) / 100 : null;
+  const total = mode === 'order' ? orderValue : totals?.total ?? null;
+
   function submit() {
     const common = { customerId, shippingAddressId: ship?.id ?? null, forDoctorId: doctorId || null };
     const after = (path: string) => () => { void utils.invalidate(); router.push(path); };
@@ -170,6 +177,8 @@ export function DocBuilder({ mode, prefill }: { mode: BuilderMode; prefill?: Bui
   const units = lines.reduce((t, l) => t + l.qty, 0);
   const serialProblems = mode === 'invoice' && lines.some((l) => l.trackSerial && l.serials.length !== l.qty);
   const zeroQty = lines.some((l) => l.qty < 1);
+  // Serial-tracked lines are only as long as the serials ticked: say which ones still need ticking (and why Save may be off).
+  const shortSerials = mode === 'invoice' ? lines.filter((l) => l.trackSerial && l.serials.length < Math.max(1, l.wanted ?? 0)) : [];
   return (
     <div className="flex flex-col gap-5">
       {mode !== 'order' && company.data && !company.data.ready && (
@@ -222,17 +231,17 @@ export function DocBuilder({ mode, prefill }: { mode: BuilderMode; prefill?: Bui
       <Card>
         <CardHeader title="Items" description={`${lines.length} line(s), ${units} unit(s)`} />
         <CardBody className="flex flex-col gap-3">
-          <ScanField ref={scan} onScan={onScan} placeholder={mode === 'invoice' ? 'Scan each box: it is added at this customer’s price' : 'Scan a box or type a code'} />
+          <ScanField ref={scan} onScan={onScan} placeholder="Find products below, or scan a barcode" />
           {msg && <Alert tone={msg.tone === 'danger' ? 'danger' : msg.tone === 'warn' ? 'warn' : 'ok'}>{msg.text}</Alert>}
           <VariantPicker onPick={(v) => { if (!customerId) { setMsg({ tone: 'danger', text: 'Choose the customer first' }); return; } void addVariant(v); }} />
         </CardBody>
         {lines.length > 0 && (
-          <Table minWidth={mode === 'invoice' ? 1060 : 820}>
-            <THead><tr><Th>Item</Th>{mode === 'invoice' && <Th>Batch / serials</Th>}<Th className="w-24">Qty</Th><Th className="text-right">Rate</Th><Th className="w-24">Disc %</Th><Th className="text-right">Amount</Th><Th className="w-10" /></tr></THead>
+          <Table minWidth={mode === 'invoice' ? 1060 : mode === 'order' ? 640 : 820}>
+            <THead><tr><Th>Item</Th>{mode === 'invoice' && <Th>Batch / serials</Th>}<Th className="w-24">Qty</Th><Th className="text-right">Rate</Th>{mode !== 'order' && <Th className="w-24">Disc %</Th>}<Th className="text-right">Amount</Th><Th className="w-10" /></tr></THead>
             <tbody>
               {lines.map((l, i) => {
                 const rate = rateOf(l);
-                const amount = rate == null ? null : Math.round(l.qty * rate * (1 - l.discPct / 100) * 100) / 100;
+                const amount = rate == null ? null : Math.round(l.qty * rate * (1 - (mode === 'order' ? 0 : l.discPct) / 100) * 100) / 100;
                 const src = prices.data?.[l.productId]?.source;
                 return (
                   <Tr key={l.key}>
@@ -240,12 +249,12 @@ export function DocBuilder({ mode, prefill }: { mode: BuilderMode; prefill?: Bui
                     {mode === 'invoice' && <Td><StockPick line={l} onChange={(p) => update(l.key, p)} /></Td>}
                     <Td><input aria-label={`Quantity for line ${i + 1}`} type="number" min={1} disabled={mode === 'invoice' && l.trackSerial} value={l.qty} onChange={(e) => update(l.key, { qty: Math.max(0, Number(e.target.value)) })} className="h-9 w-20 rounded-md border border-line px-2 text-sm disabled:bg-canvas" /></Td>
                     <Td className="num">
-                      {isOwner ? (
+                      {isOwner && mode !== 'order' ? (
                         <input aria-label={`Rate for line ${i + 1}`} type="number" step="0.01" value={l.rate ?? rate ?? ''} onChange={(e) => update(l.key, { rate: e.target.value === '' ? null : Number(e.target.value) })} className="h-9 w-28 rounded-md border border-line px-2 text-right text-sm" />
                       ) : rupees(rate)}
                       {src && src !== 'DEFAULT' && l.rate == null && <div><Badge tone="teal">{src === 'CUSTOMER' ? 'Special price' : 'Price list'}</Badge></div>}
                     </Td>
-                    <Td><input aria-label={`Discount for line ${i + 1}`} type="number" min={0} max={100} step="0.5" value={l.discPct} onChange={(e) => update(l.key, { discPct: Math.min(100, Math.max(0, Number(e.target.value))) })} className="h-9 w-20 rounded-md border border-line px-2 text-sm" /></Td>
+                    {mode !== 'order' && <Td><input aria-label={`Discount for line ${i + 1}`} type="number" min={0} max={100} step="0.5" value={l.discPct} onChange={(e) => update(l.key, { discPct: Math.min(100, Math.max(0, Number(e.target.value))) })} className="h-9 w-20 rounded-md border border-line px-2 text-sm" /></Td>}
                     <Td className="num font-semibold">{rupees(amount)}</Td>
                     <Td><button aria-label={`Remove line ${i + 1}`} className="rounded p-1.5 text-muted hover:bg-danger-50 hover:text-danger" onClick={() => setLines(lines.filter((x) => x.key !== l.key))}><Trash2 className="size-4" /></button></Td>
                   </Tr>
@@ -264,12 +273,21 @@ export function DocBuilder({ mode, prefill }: { mode: BuilderMode; prefill?: Bui
             </dl>
           </div>
         )}
+        {orderValue != null && (
+          <div className="flex flex-col items-end border-t border-line px-5 py-4 text-sm">
+            <p><span className="font-semibold">Order value</span> <span className="num ml-6 text-lg font-semibold">{rupees(orderValue)}</span></p>
+            <p className="text-xs text-muted">At this customer’s prices, before GST. GST is added on the tax invoice.</p>
+          </div>
+        )}
       </Card>
 
       {m.error && <Alert>{Object.keys(fe).length && !Object.keys(fe).some((k) => k.startsWith('lines')) ? 'Please correct the highlighted fields.' : errorMessage(m.error)}</Alert>}
       <div className="flex flex-wrap items-center justify-end gap-3">
+        {shortSerials.map((l) => { const n = Math.max(1, l.wanted ?? 0) - l.serials.length; return <span key={l.key} className="text-sm text-warn">Tick {n} serial{n === 1 ? '' : 's'} for {l.name}{l.label ? ` ${l.label}` : ''}{l.serials.length === 0 ? ' (or remove the line)' : ''}</span>; })}
+        {lines.some((l) => l.qty < 1 && !(mode === 'invoice' && l.trackSerial)) && <span className="text-sm text-warn">Each line needs a quantity of at least 1.</span>}
         {serialProblems && <span className="text-sm text-warn">Each serial-tracked item needs one serial per unit.</span>}
-        <Button size="lg" disabled={!customerId || !lines.length || serialProblems || zeroQty} loading={m.isPending} onClick={submit}>{TITLES[mode]}{totals ? ` · ${rupees(totals.total)}` : ''}</Button>
+        {/* Stays disabled after saving until the new page opens (proformas have no idempotency key, so a second click would save twice). */}
+        <Button size="lg" disabled={!customerId || !lines.length || serialProblems || zeroQty || m.isSuccess} loading={m.isPending || m.isSuccess} onClick={submit}>{TITLES[mode]}{total != null ? ` · ${rupees(total)}` : ''}</Button>
       </div>
     </div>
   );

@@ -41,7 +41,6 @@ export default function ScanLookup() {
           {hit.stock.batches.length > 0 && <View style={{ gap: 4, marginTop: 4 }}>
             {hit.stock.batches.map((b) => <Row key={`${b.batchId}-${b.location.id}`} style={{ justifyContent: 'space-between' }}><Small>{b.batchNo}{b.expiryDate ? ` · ${formatDate(b.expiryDate)}` : ''} · {b.location.name}</Small><P style={{ fontWeight: '700' }}>{b.qty}</P></Row>)}
           </View>}
-          <Small>Found by {hit.via} in {hit.ms} ms</Small>
         </Card>
       )}
     </Screen>

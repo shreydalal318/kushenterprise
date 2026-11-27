@@ -3,10 +3,11 @@ import Link from 'next/link';
 import { ArrowRight, RotateCcw } from 'lucide-react';
 import { formatDateTime } from '@kush/core';
 import { Button } from '@/components/ui/button';
-import { Card, CardBody, CardHeader, PageHeader } from '@/components/ui/card';
+import { Alert, Card, CardBody, CardHeader, PageHeader } from '@/components/ui/card';
 import { LinkButton } from '@/components/ui/link-button';
 import { OrderBadge } from '@/components/sales/status';
 import { cn } from '@/lib/cn';
+import { errorMessage } from '@/lib/errors';
 import { rupees } from '@/lib/format';
 import { trpc } from '@/lib/trpc';
 import { useCart } from './cart';
@@ -16,6 +17,7 @@ export function PortalHome() {
   const utils = trpc.useUtils();
   const cart = useCart();
   const notes = trpc.notifications.list.useQuery({ limit: 5, unreadOnly: false });
+  if (q.error) return <Alert>{errorMessage(q.error)}</Alert>;
   if (!q.data) return <p className="text-sm text-muted">Loading…</p>;
   const d = q.data;
   async function reorder(orderId: string) {
@@ -27,7 +29,7 @@ export function PortalHome() {
       <PageHeader title={`Welcome, ${d.customer.name}`} description={`Account ${d.customer.code}`} actions={<LinkButton href="/portal/catalogue">Order lenses &amp; supplies <ArrowRight className="size-4" aria-hidden /></LinkButton>} />
       <div className="grid gap-3 sm:grid-cols-3">
         <Card className="px-5 py-4"><p className="text-xs text-muted">Outstanding</p><p className={cn('text-2xl font-semibold', d.outstanding > 0 ? 'text-navy' : 'text-ok')}>{rupees(Math.max(0, d.outstanding))}</p>{d.overdue > 0 && <p className="text-xs text-danger">{rupees(d.overdue)} overdue</p>}{d.onAccount > 0 && <p className="text-xs text-muted">{rupees(d.onAccount)} advance with us</p>}</Card>
-        <Card className="px-5 py-4"><p className="text-xs text-muted">Open orders</p><p className="text-2xl font-semibold text-navy">{d.orders.filter((o) => !['DELIVERED', 'CANCELLED'].includes(o.status)).length}</p><Link href="/portal/orders" className="text-xs text-teal-700 hover:underline">See all orders</Link></Card>
+        <Card className="px-5 py-4"><p className="text-xs text-muted">Open orders</p><p className="text-2xl font-semibold text-navy">{d.openOrders}</p><Link href="/portal/orders" className="text-xs text-teal-700 hover:underline">See all orders</Link></Card>
         <Card className="px-5 py-4"><p className="text-xs text-muted">Unread notifications</p><p className="text-2xl font-semibold text-navy">{d.unread}</p><Link href="/portal/notifications" className="text-xs text-teal-700 hover:underline">Open inbox</Link></Card>
       </div>
       <div className="grid gap-5 lg:grid-cols-[1fr_360px]">

@@ -30,7 +30,7 @@ export function PriceListsScreen() {
         <Table minWidth={560}>
           <THead><tr><Th>Price list</Th><Th className="text-right">Products</Th><Th className="text-right">Customers</Th><Th>Status</Th></tr></THead>
           <tbody>
-            {!lists.data && <LoadingRow cols={4} />}{lists.data?.length === 0 && <EmptyRow cols={4}>No price lists yet.</EmptyRow>}
+            {!lists.data && <LoadingRow cols={4} error={lists.error} />}{lists.data?.length === 0 && <EmptyRow cols={4}>No price lists yet.</EmptyRow>}
             {lists.data?.map((l) => (
               <Tr key={l.id} className="hover:bg-aqua-50/60">
                 <Td><Link href={`/app/pricing/lists/${l.id}`} className="font-medium text-navy hover:underline">{l.name}</Link>{l.description && <div className="text-xs text-muted">{l.description}</div>}</Td>

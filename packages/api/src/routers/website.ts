@@ -55,11 +55,11 @@ export const websiteRouter = router({
         variants: { some: { isActive: true, deletedAt: null, ...(input?.power != null ? { powerSph: input.power } : {}) } },
       },
       orderBy: [{ category: { name: 'asc' } }, { name: 'asc' }], take: 300,
-      select: { id: true, code: true, name: true, imageIds: true, isLens: true, lensType: true, material: true, preloaded: true, category: { select: { name: true } }, brand: { select: { name: true } }, variants: { where: { isActive: true, deletedAt: null }, select: { powerSph: true } } },
+      select: { id: true, code: true, name: true, isLens: true, lensType: true, material: true, preloaded: true, category: { select: { name: true } }, brand: { select: { name: true } }, variants: { where: { isActive: true, deletedAt: null }, select: { powerSph: true } } },
     });
     return rows.map((p) => {
       const powers = p.variants.map((v) => v.powerSph).filter((x) => x != null).map((x) => num(x));
-      return { id: p.id, code: p.code, name: p.name, image: p.imageIds[0] ?? null, category: p.category.name, brand: p.brand?.name ?? null, isLens: p.isLens, lensType: p.lensType, material: p.material, preloaded: p.preloaded, powerRange: powers.length ? { min: Math.min(...powers), max: Math.max(...powers) } : null };
+      return { id: p.id, code: p.code, name: p.name, category: p.category.name, brand: p.brand?.name ?? null, isLens: p.isLens, lensType: p.lensType, material: p.material, preloaded: p.preloaded, powerRange: powers.length ? { min: Math.min(...powers), max: Math.max(...powers) } : null };
     });
   }),
 
@@ -72,7 +72,7 @@ export const websiteRouter = router({
     const n = (d: unknown) => (d == null ? null : num(d as never));
     const sph = [...new Set(p.variants.map((v) => n(v.powerSph)).filter((x): x is number => x != null))].sort((a, b) => a - b);
     return {
-      id: p.id, code: p.code, name: p.name, description: p.description, images: p.imageIds, category: p.category.name, brand: p.brand?.name ?? null, unit: p.unit,
+      id: p.id, code: p.code, name: p.name, description: p.description, category: p.category.name, brand: p.brand?.name ?? null, unit: p.unit,
       isLens: p.isLens, lensType: p.lensType, material: p.material, preloaded: p.preloaded, aConstant: n(p.aConstant), opticSizeMm: n(p.opticSizeMm), overallLenMm: n(p.overallLenMm),
       powers: sph, cylinders: [...new Set(p.variants.map((v) => n(v.cylinder)).filter((x): x is number => x != null))].sort((a, b) => a - b),
       addPowers: [...new Set(p.variants.map((v) => n(v.addPower)).filter((x): x is number => x != null))].sort((a, b) => a - b),

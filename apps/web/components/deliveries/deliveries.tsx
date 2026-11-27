@@ -15,7 +15,7 @@ import { useMe } from '@/lib/use-me';
 const maps = (address: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 
 export function Deliveries() {
-  const { can } = useMe();
+  const { can, me } = useMe();
   const mine = trpc.deliveries.mine.useQuery();
   const board = trpc.deliveries.board.useQuery(undefined, { enabled: can('VIEW_ORDERS') });
   const [deliver, setDeliver] = useState<{ orderId: string; number: string } | null>(null);
@@ -27,6 +27,8 @@ export function Deliveries() {
       <Card>
         <CardHeader title="My deliveries" description="Orders handed to you to deliver. Mark each one delivered with who received it." />
         <ul className="divide-y divide-line">
+          {mine.error ? <li role="alert" className="px-5 py-8 text-center text-sm text-danger">{errorMessage(mine.error)}</li>
+            : !mine.data && <li className="px-5 py-8 text-center text-sm text-muted">Loading your deliveries…</li>}
           {mine.data?.length === 0 && <li className="px-5 py-8 text-center text-sm text-muted">Nothing to deliver right now.</li>}
           {mine.data?.map((d) => (
             <li key={d.dispatchId} className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
@@ -46,6 +48,7 @@ export function Deliveries() {
         <Card>
           <CardHeader title="Out for delivery" description="Everything handed to our delivery staff or waiting for pickup that is not delivered yet." />
           <CardBody className="flex flex-col gap-5">
+            {board.error ? <Alert>{errorMessage(board.error)}</Alert> : !board.data && <p className="text-sm text-muted">Loading…</p>}
             {board.data?.length === 0 && <p className="text-sm text-muted">Nothing is out right now.</p>}
             {[...byPerson.entries()].map(([who, rows]) => (
               <div key={who}>
@@ -54,7 +57,7 @@ export function Deliveries() {
                   {rows.map((d) => (
                     <li key={d.dispatchId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
                       <span><Link href={`/app/orders/${d.orderId}`} className="font-mono text-teal-700 hover:underline">{d.orderNumber}</Link> · {d.customer}<span className="block text-xs text-muted">{d.address}</span></span>
-                      <span className="flex items-center gap-2 text-xs text-muted">since {formatDateTime(d.since)}<Button size="sm" variant="secondary" onClick={() => setDeliver({ orderId: d.orderId, number: d.orderNumber })}>Mark delivered</Button></span>
+                      <span className="flex items-center gap-2 text-xs text-muted">since {formatDateTime(d.since)}{(can('UPDATE_ORDER_STATUS') || (!!me && d.personId === me.id)) && <Button size="sm" variant="secondary" onClick={() => setDeliver({ orderId: d.orderId, number: d.orderNumber })}>Mark delivered</Button>}</span>
                     </li>
                   ))}
                 </ul>
@@ -72,7 +75,7 @@ function DeliverDialog({ orderId, number, onClose }: { orderId: string; number: 
   const utils = trpc.useUtils();
   const [receivedBy, setReceivedBy] = useState('');
   const [note, setNote] = useState('');
-  const m = trpc.orders.markDelivered.useMutation({ onSuccess: async () => { await Promise.all([utils.deliveries.invalidate(), utils.orders.invalidate()]); onClose(); } });
+  const m = trpc.orders.markDelivered.useMutation({ onSuccess: async () => { await Promise.all([utils.deliveries.invalidate(), utils.orders.invalidate(), utils.analytics.invalidate()]); onClose(); } });
   const fe = fieldErrors(m.error);
   return (
     <Dialog open onClose={onClose} title={`Delivered: ${number}`} description="Who received the goods? Kept as proof of delivery." size="sm"

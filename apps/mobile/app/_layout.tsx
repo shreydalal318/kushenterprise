@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { AppState, Platform } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { QueryClient } from '@tanstack/react-query';
+import { focusManager, QueryClient } from '@tanstack/react-query';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -22,6 +23,12 @@ export default function RootLayout() {
   const [qc] = useState(() => new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, gcTime: 7 * 24 * 3600_000, retry: 1, networkMode: 'offlineFirst' }, mutations: { networkMode: 'always' } } }));
   const [client] = useState(makeTrpcClient);
   const [intro, setIntro] = useState(true);
+  // React Native has no window focus event: tell react-query when the app comes back, so stale screens refetch.
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const sub = AppState.addEventListener('change', (s) => focusManager.setFocused(s === 'active'));
+    return () => sub.remove();
+  }, []);
   return (
     <SafeAreaProvider>
       <trpc.Provider client={client} queryClient={qc}>

@@ -152,14 +152,16 @@ export async function stockHealth(db: Db, today = istDateString()) {
 /** Staff home: what needs doing, counts only (no money). */
 export async function staffHome(db: Db, userId: string) {
   const today = istDateString();
-  const [mine, toDispatch, stock] = await Promise.all([
+  // The counter's two steps: make the tax invoice (placed or confirmed), then dispatch (packed = invoiced).
+  const [mine, toInvoice, toDispatch, stock] = await Promise.all([
     db.salesOrder.findMany({ where: { assignedToId: userId, status: { in: ['PLACED', 'CONFIRMED', 'PACKED', 'ON_HOLD'] } }, orderBy: { createdAt: 'asc' }, take: 20, include: { customer: { select: { name: true } }, lines: { select: { qty: true } } } }),
-    db.salesOrder.count({ where: { status: { in: ['CONFIRMED', 'PACKED'] } } }),
+    db.salesOrder.count({ where: { status: { in: ['PLACED', 'CONFIRMED'] } } }),
+    db.salesOrder.count({ where: { status: 'PACKED' } }),
     stockHealth(db, today),
   ]);
   return {
     myOrders: mine.map((o) => ({ id: o.id, number: o.number, status: o.status, customer: o.customer.name, units: o.lines.reduce((t, l) => t + l.qty, 0), surgeryDate: isoDay(o.surgeryDate), createdAt: o.createdAt })),
-    toDispatch, lowCount: stock.lowCount, outCount: stock.outCount, expiringUnits: stock.expiringUnits, expiredUnits: stock.expiredUnits, expiryWindowDays: stock.expiryWindowDays,
+    toInvoice, toDispatch, lowCount: stock.lowCount, outCount: stock.outCount, expiringUnits: stock.expiringUnits, expiredUnits: stock.expiredUnits, expiryWindowDays: stock.expiryWindowDays,
   };
 }
 

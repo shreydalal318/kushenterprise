@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Linking, View } from 'react-native';
 import { formatDate } from '@kush/core';
+import { readableError } from '@/components/errors';
 import { Alert, Button, Card, Empty, Field, Loading, P, Row, Screen, Small } from '@/components/ui';
-import { errorText, rupees } from '@/lib/format';
+import { rupees } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
 
@@ -13,7 +14,7 @@ export default function MyDeliveries() {
   const [open, setOpen] = useState<string | null>(null);
   const [receivedBy, setReceivedBy] = useState('');
   const m = trpc.orders.markDelivered.useMutation({ onSuccess: () => { setOpen(null); setReceivedBy(''); void utils.deliveries.invalidate(); } });
-  if (!q.data) return q.error ? <Screen><Alert>{errorText(q.error)}</Alert></Screen> : <Loading />;
+  if (!q.data) return q.error ? <Screen><Alert>{readableError(q.error)}</Alert></Screen> : <Loading />;
   return (
     <Screen>
       {q.data.length === 0 && <Empty>Nothing to deliver right now.</Empty>}
@@ -30,9 +31,9 @@ export default function MyDeliveries() {
           </Row>
           {open === d.orderId ? (
             <View style={{ gap: 8 }}>
-              <Field label="Received by" placeholder="e.g. Sister Mary, OT store" value={receivedBy} onChangeText={setReceivedBy} />
-              {m.error && <Alert>{errorText(m.error)}</Alert>}
-              <Button title="Confirm delivered" loading={m.isPending} onPress={() => m.mutate({ id: d.orderId, receivedBy })} />
+              <Field label="Received by" placeholder="e.g. Sister Mary, OT store" value={receivedBy} onChangeText={setReceivedBy} maxLength={80} />
+              {m.error && <Alert>{readableError(m.error)}</Alert>}
+              <Button title="Confirm delivered" loading={m.isPending} disabled={receivedBy.trim().length < 2} onPress={() => m.mutate({ id: d.orderId, receivedBy: receivedBy.trim() })} />
               <Button variant="secondary" title="Cancel" onPress={() => setOpen(null)} />
             </View>
           ) : <Button title="Delivered" onPress={() => { setOpen(d.orderId); setReceivedBy(''); m.reset(); }} />}

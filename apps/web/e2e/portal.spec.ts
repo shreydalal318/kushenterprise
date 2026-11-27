@@ -73,7 +73,7 @@ test.describe.serial('Phase 6 customer portal', () => {
     await login(page, run.owner.email, run.owner.password);
     await page.goto('/app/notifications');
     await page.getByRole('link', { name: `New order ${ctx.orderNo}` }).click();
-    await page.getByRole('button', { name: 'Mark confirmed' }).click();
+    await page.getByRole('button', { name: 'Confirm only' }).click();
     await expect(page.getByText('Confirmed', { exact: true }).first()).toBeVisible();
 
     const cust = await browser.newPage();

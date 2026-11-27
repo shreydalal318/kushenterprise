@@ -1,14 +1,16 @@
-import { useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { keepPreviousData } from '@tanstack/react-query';
 import { formatDate } from '@kush/core';
 import { Alert, Button, Loading, P, Row, s, Small } from '@/components/ui';
 import { fmtPower, LENS_TYPE_LABEL, StockBadge } from '@/components/status';
 import { useCart } from '@/lib/cart';
-import { rupees } from '@/lib/format';
+import { errorText, rupees } from '@/lib/format';
 import { discard, useOutbox } from '@/lib/outbox';
+import { useReorder } from '@/lib/reorder';
 import { C, R } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
 
@@ -21,19 +23,20 @@ export default function OrderScreen() {
   const [power, setPower] = useState('');
   const [categoryId, setCategory] = useState<string | null>(null);
   const cart = useCart();
-  const utils = trpc.useUtils();
   const outbox = useOutbox();
+  const reorder = useReorder();
   const home = trpc.portal.home.useQuery();
   const filters = trpc.portal.filters.useQuery();
-  const powerNum = power === '' || Number.isNaN(Number(power)) ? undefined : Number(power);
-  const list = trpc.portal.catalogue.useQuery({ q: q || undefined, power: powerNum, categoryId: categoryId ?? undefined });
+  // Search as the typing pauses, and keep the last results on screen until the new ones arrive.
+  const query = useDebounced(q.trim());
+  const pw = useDebounced(power.trim().replace(',', '.'));
+  const powerNum = pw === '' || Number.isNaN(Number(pw)) ? undefined : Number(pw);
+  const list = trpc.portal.catalogue.useQuery({ q: query || undefined, power: powerNum, categoryId: categoryId ?? undefined }, { placeholderData: keepPreviousData });
   const ids = Object.keys(cart.items);
   const priced = trpc.portal.cart.useQuery({ variantIds: ids }, { enabled: ids.length > 0 });
   const total = useMemo(() => (priced.data ?? []).reduce((t, l) => t + (cart.items[l.variantId] ?? 0) * l.price, 0), [priced.data, cart.items]);
-  const searching = !!q || powerNum != null || !!categoryId;
+  const searching = !!query || powerNum != null || !!categoryId;
   const recent = (home.data?.orders ?? []).slice(0, 5);
-
-  const reorder = async (orderId: string) => { cart.add(await utils.portal.reorderLines.fetch({ orderId })); router.push('/customer/cart'); };
 
   const header = (
     <View style={{ gap: 12 }}>
@@ -44,13 +47,15 @@ export default function OrderScreen() {
       {!searching && recent.length > 0 && (
         <View style={{ gap: 8 }}>
           <Text style={{ fontWeight: '700', color: C.navy, fontSize: 16 }}>Order again</Text>
+          {reorder.error && <Alert>{reorder.error}</Alert>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
             {recent.map((o) => (
               <View key={o.id} style={{ width: 200, backgroundColor: C.white, borderRadius: R.lg, borderWidth: 1, borderColor: C.line, padding: 12, gap: 4 }}>
                 <Text style={{ fontWeight: '700', color: C.navy }}>{o.number}</Text>
                 <Small>{formatDate(o.createdAt)} · {o.units} unit{o.units === 1 ? '' : 's'}</Small>
-                <Pressable accessibilityRole="button" onPress={() => void reorder(o.id)} style={{ marginTop: 6, flexDirection: 'row', gap: 6, alignItems: 'center' }}>
-                  <Ionicons name="refresh" size={16} color={C.teal700} /><Text style={{ color: C.teal700, fontWeight: '700' }}>Add to cart again</Text>
+                <Pressable accessibilityRole="button" accessibilityState={{ disabled: !!reorder.pending, busy: reorder.pending === o.id }} disabled={!!reorder.pending} onPress={() => void reorder.run(o.id)}
+                  style={{ marginTop: 6, flexDirection: 'row', gap: 6, alignItems: 'center', opacity: reorder.pending && reorder.pending !== o.id ? 0.5 : 1 }}>
+                  {reorder.pending === o.id ? <ActivityIndicator size="small" color={C.teal700} /> : <Ionicons name="refresh" size={16} color={C.teal700} />}<Text style={{ color: C.teal700, fontWeight: '700' }}>Add to cart again</Text>
                 </Pressable>
               </View>
             ))}
@@ -92,7 +97,7 @@ export default function OrderScreen() {
       </View>
 
       {list.isLoading && <Loading />}
-      {list.error && !list.data && <View style={{ padding: 16 }}><Alert>No connection and nothing saved yet. Try again when you have signal.</Alert></View>}
+      {list.error && !list.data && <View style={{ padding: 16, gap: 8 }}><Alert>{errorText(list.error)}</Alert><Button variant="secondary" title="Try again" loading={list.isFetching} onPress={() => void list.refetch()} /></View>}
       <FlatList
         data={list.data ?? []}
         keyExtractor={(p) => p.id}
@@ -124,7 +129,7 @@ export default function OrderScreen() {
                       </Row>
                 ) : (
                   <Pressable accessibilityRole="button" onPress={() => router.push(`/customer/product/${p.id}`)} style={[addBtn, { backgroundColor: C.white, borderWidth: 1, borderColor: C.teal700 }]}>
-                    <Text style={{ color: C.teal700, fontWeight: '700' }}>Choose powers</Text><Ionicons name="chevron-forward" size={16} color={C.teal700} />
+                    <Text style={{ color: C.teal700, fontWeight: '700' }}>{p.isLens ? 'Choose powers' : 'Choose option'}</Text><Ionicons name="chevron-forward" size={16} color={C.teal700} />
                   </Pressable>
                 )}
               </Row>
@@ -134,7 +139,7 @@ export default function OrderScreen() {
       />
 
       {cart.count > 0 && (
-        <Pressable accessibilityRole="button" accessibilityLabel={`View cart, ${cart.count} items`} onPress={() => router.push('/customer/cart')}
+        <Pressable accessibilityRole="button" accessibilityLabel={`View cart, ${cart.count} items`} onPress={() => router.navigate('/customer/cart')}
           style={({ pressed }) => ({ position: 'absolute', left: 16, right: 16, bottom: 12, backgroundColor: pressed ? C.teal : C.teal700, borderRadius: R.lg, paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', elevation: 4, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } })}>
           <View>
             <Text style={{ color: C.white, fontWeight: '700' }}>{cart.count} item{cart.count === 1 ? '' : 's'}{priced.data ? ` · ${rupees(total)}` : ''}</Text>
@@ -145,6 +150,12 @@ export default function OrderScreen() {
       )}
     </SafeAreaView>
   );
+}
+
+function useDebounced<T>(value: T, ms = 300) {
+  const [v, setV] = useState(value);
+  useEffect(() => { const t = setTimeout(() => setV(value), ms); return () => clearTimeout(t); }, [value, ms]);
+  return v;
 }
 
 const addBtn = { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, backgroundColor: C.teal700, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 };

@@ -10,7 +10,7 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
   const { order, next } = await searchParams;
   return (
     <>
-      <PageHeader title="New tax invoice" description="Choose the customer, then scan each box. Prices are the customer’s own; stock comes from the scanned batch or the earliest expiry." />
+      <PageHeader title="New tax invoice" description="Choose the customer, then find each product (or scan its barcode). Prices are the customer’s own; stock comes from the batch you pick or the earliest expiry." />
       <BuilderFromOrder mode="invoice" orderId={order ?? null} thenDispatch={next === 'dispatch'} />
     </>
   );

@@ -32,7 +32,7 @@ export function PaymentsScreen() {
           <Table minWidth={760}>
             <THead><tr><Th>Receipt</Th><Th>Date</Th><Th>Customer</Th><Th>Mode</Th><Th className="text-right">Amount</Th><Th>Applied to</Th><Th className="text-right">On account</Th></tr></THead>
             <tbody>
-              {!list.data && <LoadingRow cols={7} />}{list.data?.length === 0 && <EmptyRow cols={7}>No payments yet.</EmptyRow>}
+              {!list.data && <LoadingRow cols={7} error={list.error} />}{list.data?.length === 0 && <EmptyRow cols={7}>No payments yet.</EmptyRow>}
               {list.data?.map((p) => (
                 <Tr key={p.id}>
                   <Td className="font-mono text-sm">{p.number}</Td><Td>{formatDate(p.date)}</Td>
@@ -49,7 +49,7 @@ export function PaymentsScreen() {
           <Table minWidth={860}>
             <THead><tr><Th>Customer</Th><Th className="text-right">Outstanding</Th><Th className="text-right">Overdue</Th>{AGEING_BUCKETS.map((b) => <Th key={b} className="text-right">{b} days</Th>)}</tr></THead>
             <tbody>
-              {!rec.data && <LoadingRow cols={7} />}{rec.data?.length === 0 && <EmptyRow cols={7}>Nothing outstanding.</EmptyRow>}
+              {!rec.data && <LoadingRow cols={7} error={rec.error} />}{rec.data?.length === 0 && <EmptyRow cols={7}>Nothing outstanding.</EmptyRow>}
               {rec.data?.map((r) => (
                 <Tr key={r.customerId}>
                   <Td><Link className="font-medium text-navy hover:underline" href={`/app/ledger/${r.customerId}`}>{r.name}</Link><div className="text-xs text-muted">{r.code}{r.creditLimit ? ` · limit ${rupees(r.creditLimit)}` : ''}</div></Td>

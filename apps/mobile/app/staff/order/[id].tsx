@@ -3,11 +3,11 @@ import { Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { DISPATCH_METHOD_LABEL, DISPATCH_METHODS, formatDate, formatDateTime, istDateString, nextStatuses, ORDER_STATUS_LABEL, type DispatchMethod, type OrderStatus } from '@kush/core';
+import { readableError } from '@/components/errors';
 import { Alert, Button, Card, Field, H2, KV, Loading, P, Row, Screen, Small } from '@/components/ui';
 import { OrderStatusBadge } from '@/components/status';
 import { LinkedPos, OrderFromSupplier, StockNote } from '@/components/order-sourcing';
-import { useCan } from '@/lib/auth';
-import { errorText } from '@/lib/format';
+import { useAuth, useCan } from '@/lib/auth';
 import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
 
@@ -15,18 +15,21 @@ import { trpc } from '@/lib/trpc';
 export default function StaffOrder() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const can = useCan();
+  const { me } = useAuth();
   const utils = trpc.useUtils();
   const q = trpc.orders.get.useQuery({ id: id! });
   const setStatus = trpc.orders.setStatus.useMutation({ onSuccess: () => utils.orders.invalidate() });
-  const [mode, setMode] = useState<null | 'dispatch' | 'note' | 'deliver' | 'source'>(null);
+  const [mode, setModeState] = useState<null | 'dispatch' | 'note' | 'deliver' | 'source'>(null);
   const sq = trpc.orders.shortfall.useQuery({ id: id! });
   const [noteFor, setNoteFor] = useState<OrderStatus | null>(null);
   const [note, setNote] = useState('');
   const [d, setD] = useState({ method: '' as '' | DispatchMethod, courier: '', docketNo: '', vehicleNo: '', dispatchDate: istDateString(), deliveryPersonId: '', deliveryPersonName: '', deliveryPersonMobile: '' });
   const staff = trpc.orders.staff.useQuery();
   const [receivedBy, setReceivedBy] = useState('');
-  const deliver = trpc.orders.markDelivered.useMutation({ onSuccess: () => { void utils.orders.invalidate(); void utils.deliveries.invalidate(); setMode(null); } });
-  if (!q.data) return q.error ? <Screen><Alert>{errorText(q.error)}</Alert></Screen> : <Loading />;
+  const deliver = trpc.orders.markDelivered.useMutation({ onSuccess: () => { void utils.orders.invalidate(); void utils.deliveries.invalidate(); setModeState(null); } });
+  // Opening or closing a card starts without the last card's error.
+  const setMode = (m: typeof mode) => { setStatus.reset(); deliver.reset(); setModeState(m); };
+  if (!q.data) return q.error ? <Screen><Alert>{readableError(q.error)}</Alert></Screen> : <Loading />;
   const o = q.data;
   const next = nextStatuses(o.status);
   const stock = new Map((sq.data?.lines ?? []).map((l) => [l.variantId, l]));
@@ -34,12 +37,20 @@ export default function StaffOrder() {
   const isOpen = !['CANCELLED', 'DELIVERED'].includes(o.status);
   const backorder = o.lines.reduce((t, l) => t + l.backorder, 0);
   const hasInvoice = o.invoices.some((i) => i.status === 'ISSUED');
-
+  // A back-order invoice raised after the order went out still has to be dispatched.
+  const toSend = o.invoices.find((i) => i.status === 'ISSUED' && !o.dispatches.some((x) => x.invoiceId === i.id));
+  const canDispatch = can('UPDATE_ORDER_STATUS') && ((o.status === 'PACKED' && hasInvoice) || (o.status === 'DISPATCHED' && !!toSend));
+  // The person it was handed to may mark it delivered without the status permission (the API allows it).
+  const canDeliver = o.status === 'DISPATCHED' && (can('UPDATE_ORDER_STATUS') || o.dispatches.some((x) => x.deliveryPersonId === me?.id && !x.deliveredAt));
+  // Invoiced goods are packed: an invoiced order on hold can only go back to Packed.
+  const resumeTo = o.status === 'ON_HOLD' ? next.filter((x) => x !== 'CANCELLED' && (!hasInvoice || x === 'PACKED')) : [];
+  const busy = setStatus.isPending;
 
   function go(s: OrderStatus) {
+    if (busy) return;
     if (s === 'DISPATCHED') { setD((x) => ({ ...x, method: x.method || (o.suggestedDispatch as DispatchMethod) })); return setMode('dispatch'); }
-    if (s === 'DELIVERED') return setMode('deliver');
-    if (s === 'CANCELLED' || s === 'ON_HOLD') { setNoteFor(s); setMode('note'); return; }
+    if (s === 'DELIVERED') { setReceivedBy(''); return setMode('deliver'); }
+    if (s === 'CANCELLED' || s === 'ON_HOLD') { setNoteFor(s); setNote(''); setMode('note'); return; }
     setStatus.mutate({ id: o.id, status: s });
   }
   return (
@@ -55,29 +66,30 @@ export default function StaffOrder() {
             <View style={{ flex: 1 }}><P>{l.variant.product.name}</P><Small>{l.variant.label ?? l.variant.sku}</Small>{isOpen && <StockNote line={stock.get(l.variant.id)} />}</View>
             <View style={{ alignItems: 'flex-end' }}>
               <P style={{ fontWeight: '700' }}>{l.qty}</P>
-              {l.backorder > 0 && o.status !== 'PLACED' && <Small style={{ color: C.warn }}>{l.backorder} to send</Small>}
+              {isOpen && l.backorder > 0 && o.status !== 'PLACED' && <Small style={{ color: C.warn }}>{l.backorder} to invoice</Small>}
             </View>
           </Row>
         ))}
       </Card>
-      {setStatus.error && <Alert>{errorText(setStatus.error)}</Alert>}
       {isOpen && toOrder > 0 && mode !== 'source' && <Alert tone="warn">{toOrder} unit(s) on this order are not in stock.</Alert>}
       {mode === null && isOpen && backorder > 0 && sq.data && can('CREATE_PURCHASE_ORDERS') && <Button variant={toOrder > 0 ? 'primary' : 'secondary'} title="Order from supplier" onPress={() => setMode('source')} />}
       {mode === 'source' && sq.data && <OrderFromSupplier s={sq.data} onClose={() => setMode(null)} />}
       {mode === null && isOpen && (
         <View style={{ gap: 8 }}>
           {/* The main path: Make tax invoice (also confirms and packs) -> Dispatch -> Delivered. */}
-          {backorder > 0 && ['PLACED', 'CONFIRMED', 'PACKED'].includes(o.status) && can('CREATE_TAX_INVOICE') && (
-            <Button title={hasInvoice ? 'Invoice the remaining items' : 'Make tax invoice'} variant={hasInvoice && o.status === 'PACKED' ? 'secondary' : 'primary'} onPress={() => router.push(`/staff/bill?orderId=${o.id}`)} />
+          {setStatus.error && <Alert>{readableError(setStatus.error)}</Alert>}
+          {backorder > 0 && ['PLACED', 'CONFIRMED', 'PACKED', 'DISPATCHED'].includes(o.status) && can('CREATE_TAX_INVOICE') && (
+            <Button title={hasInvoice ? 'Invoice the remaining items' : 'Make tax invoice'} variant={canDispatch || canDeliver ? 'secondary' : 'primary'} onPress={() => router.push(`/staff/invoice?orderId=${o.id}`)} />
           )}
-          {o.status === 'PACKED' && hasInvoice && can('UPDATE_ORDER_STATUS') && <Button title="Dispatch" onPress={() => go('DISPATCHED')} />}
-          {o.status === 'DISPATCHED' && can('UPDATE_ORDER_STATUS') && <Button title="Mark delivered" onPress={() => go('DELIVERED')} />}
+          {canDispatch && <Button title={o.status === 'DISPATCHED' && toSend ? `Dispatch invoice ${toSend.number}` : 'Dispatch'} onPress={() => go('DISPATCHED')} />}
+          {canDeliver && <Button title="Mark delivered" variant={canDispatch ? 'secondary' : 'primary'} onPress={() => go('DELIVERED')} />}
           {can('UPDATE_ORDER_STATUS') && (
             <Row style={{ gap: 8, flexWrap: 'wrap' }}>
-              {o.status === 'PLACED' && <Button variant="secondary" title="Confirm only" loading={setStatus.isPending && setStatus.variables?.status === 'CONFIRMED'} onPress={() => go('CONFIRMED')} />}
-              {o.status === 'ON_HOLD' && next.filter((x) => x !== 'CANCELLED').map((x) => <Button key={x} variant="secondary" title={`Resume (${ORDER_STATUS_LABEL[x].toLowerCase()})`} onPress={() => go(x)} />)}
-              {next.includes('ON_HOLD') && <Button variant="secondary" title="Put on hold" onPress={() => go('ON_HOLD')} />}
-              {next.includes('CANCELLED') && <Button variant="danger" title="Cancel order" onPress={() => go('CANCELLED')} />}
+              {o.status === 'PLACED' && <Button variant="secondary" title="Confirm only" loading={busy && setStatus.variables?.status === 'CONFIRMED'} disabled={busy} onPress={() => go('CONFIRMED')} />}
+              {resumeTo.map((x) => <Button key={x} variant="secondary" title={`Resume (${ORDER_STATUS_LABEL[x].toLowerCase()})`} loading={busy && setStatus.variables?.status === x} disabled={busy} onPress={() => go(x)} />)}
+              {next.includes('ON_HOLD') && <Button variant="secondary" title="Put on hold" disabled={busy} onPress={() => go('ON_HOLD')} />}
+              {/* The server refuses to cancel an order with an issued invoice; that invoice is cancelled first (web). */}
+              {next.includes('CANCELLED') && !hasInvoice && <Button variant="danger" title="Cancel order" disabled={busy} onPress={() => go('CANCELLED')} />}
             </Row>
           )}
         </View>
@@ -85,7 +97,7 @@ export default function StaffOrder() {
       {mode === 'dispatch' && (
         <Card>
           <H2>How is it going out?</H2>
-          {!o.invoices.some((i) => i.status === 'ISSUED') && <Alert tone="warn">Make the tax invoice first.</Alert>}
+          {!hasInvoice ? <Alert tone="warn">Make the tax invoice first.</Alert> : toSend && <Small>Goes out with invoice {toSend.number}</Small>}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {DISPATCH_METHODS.map((k) => (
               <Pressable key={k} accessibilityRole="radio" accessibilityState={{ selected: d.method === k }} onPress={() => setD({ ...d, method: k })}
@@ -115,28 +127,30 @@ export default function StaffOrder() {
           )}
           {d.method === 'PICKUP' && <Small>The customer is told it is ready to collect.</Small>}
           <Field label="Date" value={d.dispatchDate} onChangeText={(v) => setD({ ...d, dispatchDate: v })} />
-          <Button title={d.method === 'PICKUP' ? 'Mark ready for pickup' : 'Mark dispatched'} loading={setStatus.isPending} disabled={!d.method}
+          {setStatus.error && <Alert>{readableError(setStatus.error)}</Alert>}
+          <Button title={d.method === 'PICKUP' ? 'Mark ready for pickup' : 'Mark dispatched'} loading={busy} disabled={!d.method}
             onPress={() => setStatus.mutate({ id: o.id, status: 'DISPATCHED', dispatch: {
-              method: d.method as DispatchMethod, dispatchDate: d.dispatchDate, vehicleNo: d.vehicleNo || null, courier: d.courier || null, docketNo: d.docketNo || null,
+              method: d.method as DispatchMethod, dispatchDate: d.dispatchDate, invoiceId: toSend?.id, vehicleNo: d.vehicleNo || null, courier: d.courier || null, docketNo: d.docketNo || null,
               deliveryPersonId: d.method === 'OWN_DELIVERY' && d.deliveryPersonId && d.deliveryPersonId !== 'OTHER' ? d.deliveryPersonId : null,
               deliveryPersonName: d.deliveryPersonId === 'OTHER' ? d.deliveryPersonName : null, deliveryPersonMobile: d.deliveryPersonId === 'OTHER' ? d.deliveryPersonMobile : null,
-            } }, { onSuccess: () => setMode(null) })} />
+            } }, { onSuccess: () => setModeState(null) })} />
           <Button variant="secondary" title="Back" onPress={() => setMode(null)} />
         </Card>
       )}
       {mode === 'deliver' && (
         <Card>
           <H2>Proof of delivery</H2>
-          <Field label="Received by" placeholder="e.g. Sister Mary, OT store" value={receivedBy} onChangeText={setReceivedBy} />
-          {deliver.error && <Alert>{errorText(deliver.error)}</Alert>}
-          <Button title="Mark delivered" loading={deliver.isPending} onPress={() => deliver.mutate({ id: o.id, receivedBy })} />
+          <Field label="Received by" placeholder="e.g. Sister Mary, OT store" value={receivedBy} onChangeText={setReceivedBy} maxLength={80} />
+          {deliver.error && <Alert>{readableError(deliver.error)}</Alert>}
+          <Button title="Mark delivered" loading={deliver.isPending} disabled={receivedBy.trim().length < 2} onPress={() => deliver.mutate({ id: o.id, receivedBy: receivedBy.trim() })} />
           <Button variant="secondary" title="Back" onPress={() => setMode(null)} />
         </Card>
       )}
       {mode === 'note' && noteFor && (
         <Card>
-          <Field label={noteFor === 'CANCELLED' ? 'Why is the order cancelled?' : 'Why is it on hold?'} value={note} onChangeText={setNote} />
-          <Button variant={noteFor === 'CANCELLED' ? 'danger' : 'primary'} title={noteFor === 'CANCELLED' ? 'Cancel order' : 'Put on hold'} disabled={!note.trim()} onPress={() => setStatus.mutate({ id: o.id, status: noteFor, note }, { onSuccess: () => { setMode(null); setNote(''); } })} />
+          <Field label={noteFor === 'CANCELLED' ? 'Why is the order cancelled?' : 'Why is it on hold?'} value={note} onChangeText={setNote} maxLength={300} />
+          {setStatus.error && <Alert>{readableError(setStatus.error)}</Alert>}
+          <Button variant={noteFor === 'CANCELLED' ? 'danger' : 'primary'} title={noteFor === 'CANCELLED' ? 'Cancel order' : 'Put on hold'} loading={busy} disabled={!note.trim()} onPress={() => setStatus.mutate({ id: o.id, status: noteFor, note: note.trim() }, { onSuccess: () => { setModeState(null); setNote(''); } })} />
           <Button variant="secondary" title="Back" onPress={() => setMode(null)} />
         </Card>
       )}

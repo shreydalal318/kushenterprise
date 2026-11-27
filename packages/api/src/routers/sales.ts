@@ -57,7 +57,7 @@ export const ordersRouter = router({
   list: permissionProcedure('VIEW_ORDERS').input(orderListInput).query(async ({ ctx, input }) => {
     const rows = await ctx.db.salesOrder.findMany({
       where: {
-        ...(input?.status ? { status: input.status } : {}),
+        ...(input?.status === 'TO_INVOICE' ? { status: { in: ['PLACED', 'CONFIRMED'] } } : input?.status ? { status: input.status } : {}),
         ...(input?.customerId ? { customerId: input.customerId } : {}),
         ...(input?.assignedToId ? { assignedToId: input.assignedToId } : {}),
         ...(input?.q ? { OR: [{ number: { contains: input.q, mode: 'insensitive' } }, { customer: { name: { contains: input.q, mode: 'insensitive' } } }] } : {}),
@@ -129,7 +129,7 @@ export const ordersRouter = router({
   verifyPacked: permissionProcedure('SCAN_DISPATCH').input(z.object({ id: z.string(), scanned: z.array(z.object({ variantId: z.string(), qty: z.number().int().min(1) })).max(500) })).mutation(({ ctx, input }) =>
     ctx.db.$transaction((tx) => verifyPacked(tx, input.id, input.scanned, ctx.user, ctx.ip))),
 
-  /** Per item: still to send, in stock, short, already on order from a supplier for this order. */
+  /** Per item: still to invoice, in stock, short, already on order from a supplier for this order. */
   shortfall: permissionProcedure('VIEW_ORDERS').input(z.object({ id: z.string() })).query(({ ctx, input }) => orderShortfall(ctx.db, input.id)),
   staff: permissionProcedure('VIEW_ORDERS').query(({ ctx }) => ctx.db.user.findMany({ where: { role: { in: ['OWNER', 'EMPLOYEE'] }, isActive: true }, select: { id: true, name: true, mobile: true }, orderBy: { name: 'asc' } })),
 });

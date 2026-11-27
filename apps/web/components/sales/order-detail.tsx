@@ -21,22 +21,35 @@ import { PoBadge } from '@/components/purchasing/po-status';
 
 type Order = RouterOutputs['orders']['get'];
 
-export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; isNew: boolean; openDispatch?: boolean }) {
-  const { can } = useMe();
-  const router = useRouter();
+/** Packed with its invoice, or already out with a later (back-order) invoice that has not gone yet. */
+function dispatchable(o: Order) {
+  const sent = new Set(o.dispatches.map((d) => d.invoiceId));
+  const issued = o.invoices.filter((i) => i.status === 'ISSUED');
+  return (o.status === 'PACKED' && issued.length > 0) || (o.status === 'DISPATCHED' && issued.some((i) => !sent.has(i.id)));
+}
+
+/** A status change also moves the deliveries board and the dashboard counts. */
+function useRefreshAfterStatus() {
   const utils = trpc.useUtils();
+  return () => Promise.all([utils.orders.invalidate(), utils.deliveries.invalidate(), utils.analytics.invalidate()]);
+}
+
+export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; isNew: boolean; openDispatch?: boolean }) {
+  const { can, me, loading: meLoading } = useMe();
+  const router = useRouter();
+  const refresh = useRefreshAfterStatus();
   // Always refetch on arrival: coming back from raising an invoice, the cached order doesn't have it yet.
   const q = trpc.orders.get.useQuery({ id }, { refetchOnMount: 'always' });
-  const setStatus = trpc.orders.setStatus.useMutation({ onSuccess: () => utils.orders.invalidate() });
+  const setStatus = trpc.orders.setStatus.useMutation({ onSuccess: refresh });
   const [dispatchOpen, setDispatchOpen] = useState(false);
-  // Back from "Create tax invoice" in the Dispatch dialog: reopen it once the fresh order has the invoice.
+  // Back from "Make tax invoice": open the Dispatch dialog once the fresh order has the invoice.
   const autoOpened = useRef(false);
   useEffect(() => {
-    if (!openDispatch || autoOpened.current || !q.data || q.isFetching) return;
+    if (!openDispatch || autoOpened.current || !q.data || q.isFetching || meLoading) return;
     autoOpened.current = true;
-    if (q.data.status === 'PACKED' && q.data.invoices.some((i) => i.status === 'ISSUED')) setDispatchOpen(true);
+    if (can('UPDATE_ORDER_STATUS') && dispatchable(q.data)) setDispatchOpen(true);
     router.replace(`/app/orders/${id}`, { scroll: false });
-  }, [openDispatch, q.data, q.isFetching]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [openDispatch, q.data, q.isFetching, meLoading]); // eslint-disable-line react-hooks/exhaustive-deps
   const [deliverOpen, setDeliverOpen] = useState(false);
   const [sourceOpen, setSourceOpen] = useState(false);
   const sq = trpc.orders.shortfall.useQuery({ id });
@@ -46,6 +59,9 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
   const next = nextStatuses(o.status);
   const backorder = o.lines.reduce((t, l) => t + l.backorder, 0);
   const hasInvoice = o.invoices.some((i) => i.status === 'ISSUED');
+  const canDispatch = dispatchable(o);
+  // The person the order was handed to may mark it delivered without the order-status permission.
+  const canDeliver = can('UPDATE_ORDER_STATUS') || (!!me && o.dispatches.some((d) => d.deliveryPersonId === me.id && !d.deliveredAt));
   const stock = new Map((sq.data?.lines ?? []).map((l) => [l.variantId, l]));
   const toOrder = (sq.data?.lines ?? []).reduce((t, l) => t + l.toOrder, 0);
   const linkedPos = [...new Map((sq.data?.lines ?? []).flatMap((l) => l.purchaseOrders).map((p) => [p.id, p])).values()];
@@ -66,7 +82,7 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
       <PageHeader title={o.number}
         description={<span className="flex flex-wrap items-center gap-2">{o.customer.name}{o.forDoctor ? ` · for ${o.forDoctor.name}` : ''} <OrderBadge status={o.status} /></span>}
         actions={<div className="flex flex-wrap gap-2">
-          {o.status !== 'CANCELLED' && can('CREATE_PROFORMA') && <LinkButton variant="secondary" href={`/app/proforma/new?order=${o.id}`}><FileText className="size-4" aria-hidden /> Proforma</LinkButton>}
+          {open && backorder > 0 && can('CREATE_PROFORMA') && <LinkButton variant="secondary" href={`/app/proforma/new?order=${o.id}`}><FileText className="size-4" aria-hidden /> Proforma</LinkButton>}
           {open && backorder > 0 && can('CREATE_PURCHASE_ORDERS') && sq.data && <Button variant={toOrder > 0 ? 'primary' : 'secondary'} onClick={() => setSourceOpen(true)}><Truck className="size-4" aria-hidden /> Order from supplier</Button>}
         </div>} />
       {isNew && <Alert tone="ok">Order placed.</Alert>}
@@ -77,15 +93,16 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
         {/* The main path: Make tax invoice (also confirms and packs) → Dispatch → Delivered. */}
         <CardHeader title="Status" actions={open && (
           <div className="flex flex-wrap gap-2">
-            {backorder > 0 && ['PLACED', 'CONFIRMED', 'PACKED'].includes(o.status) && can('CREATE_TAX_INVOICE') && (
-              <LinkButton href={`/app/invoices/new?order=${o.id}&next=dispatch`} variant={hasInvoice && o.status === 'PACKED' ? 'secondary' : 'primary'} className="h-8 px-3"><Receipt className="size-4" aria-hidden /> {hasInvoice ? 'Invoice the rest' : 'Make tax invoice'}</LinkButton>
+            {backorder > 0 && ['PLACED', 'CONFIRMED', 'PACKED', 'DISPATCHED'].includes(o.status) && can('CREATE_TAX_INVOICE') && (
+              <LinkButton href={`/app/invoices/new?order=${o.id}&next=dispatch`} variant={hasInvoice ? 'secondary' : 'primary'} className="h-8 px-3"><Receipt className="size-4" aria-hidden /> {hasInvoice ? 'Invoice the rest' : 'Make tax invoice'}</LinkButton>
             )}
-            {can('UPDATE_ORDER_STATUS') && o.status === 'PACKED' && hasInvoice && <Button size="sm" onClick={() => go('DISPATCHED')}><Truck className="size-4" aria-hidden /> Dispatch</Button>}
-            {can('UPDATE_ORDER_STATUS') && o.status === 'DISPATCHED' && <Button size="sm" onClick={() => go('DELIVERED')}>Mark delivered</Button>}
+            {can('UPDATE_ORDER_STATUS') && canDispatch && <Button size="sm" onClick={() => go('DISPATCHED')}><Truck className="size-4" aria-hidden /> Dispatch</Button>}
+            {canDeliver && o.status === 'DISPATCHED' && <Button size="sm" variant={canDispatch ? 'secondary' : 'primary'} onClick={() => go('DELIVERED')}>Mark delivered</Button>}
             {can('UPDATE_ORDER_STATUS') && o.status === 'PLACED' && <Button size="sm" variant="secondary" loading={setStatus.isPending && setStatus.variables?.status === 'CONFIRMED'} onClick={() => go('CONFIRMED')}>Confirm only</Button>}
-            {can('UPDATE_ORDER_STATUS') && o.status === 'ON_HOLD' && next.filter((s) => s !== 'CANCELLED').map((s) => <Button key={s} size="sm" variant="secondary" onClick={() => go(s)}>Resume ({ORDER_STATUS_LABEL[s].toLowerCase()})</Button>)}
+            {/* Invoiced goods are already picked, so an invoiced order on hold can only go back to Packed. */}
+            {can('UPDATE_ORDER_STATUS') && o.status === 'ON_HOLD' && next.filter((s) => s !== 'CANCELLED' && (!hasInvoice || s === 'PACKED')).map((s) => <Button key={s} size="sm" variant="secondary" onClick={() => go(s)}>Resume ({ORDER_STATUS_LABEL[s].toLowerCase()})</Button>)}
             {can('UPDATE_ORDER_STATUS') && next.includes('ON_HOLD') && <Button size="sm" variant="secondary" onClick={() => go('ON_HOLD')}>Put on hold</Button>}
-            {can('UPDATE_ORDER_STATUS') && next.includes('CANCELLED') && <Button size="sm" variant="danger" onClick={() => go('CANCELLED')}>Cancel order</Button>}
+            {can('UPDATE_ORDER_STATUS') && next.includes('CANCELLED') && !hasInvoice && <Button size="sm" variant="danger" onClick={() => go('CANCELLED')}>Cancel order</Button>}
           </div>
         )} />
         <CardBody>
@@ -110,7 +127,7 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
 
       <div className="grid gap-5 xl:grid-cols-[1fr_340px]">
         <Card className="overflow-hidden">
-          <CardHeader title="Items" description={backorder > 0 && o.invoices.length ? `${backorder} unit(s) still to send (back-order)` : undefined} />
+          <CardHeader title="Items" description={backorder > 0 && hasInvoice ? `${backorder} unit(s) still to invoice (back-order)` : undefined} />
           {/* Phones: one row per item instead of a 7-column table. */}
           <ul className="divide-y divide-line sm:hidden">
             {o.lines.map((l) => {
@@ -120,7 +137,7 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
                   <div className="flex justify-between gap-3"><span className="font-medium">{l.variant.product.name}</span><span className="shrink-0 font-medium">{rupees(l.amount)}</span></div>
                   <p className="text-xs text-muted">{l.variant.label ?? l.variant.sku} · {l.qty} × {rupees(l.rate)}</p>
                   <p className="mt-1 flex flex-wrap gap-x-3 text-xs">
-                    <span className={l.backorder > 0 ? 'font-semibold text-warn' : 'text-ok'}>{l.backorder > 0 ? `${l.backorder} to send` : 'All sent'}</span>
+                    <span className={l.backorder > 0 ? 'font-semibold text-warn' : 'text-ok'}>{l.backorder > 0 ? `${l.backorder} to invoice` : 'All invoiced'}</span>
                     {l.qtyDispatched > 0 && <span className="text-muted">{l.qtyDispatched} invoiced</span>}
                     {st && l.backorder > 0 && <span className={st.short > 0 ? 'font-semibold text-danger' : 'text-muted'}>{st.available} in stock{st.short > 0 ? ` · short ${st.short}` : ''}{st.onOrder > 0 ? ` · ${st.onOrder} on PO` : ''}</span>}
                   </p>
@@ -129,7 +146,7 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
             })}
           </ul>
           <Table minWidth={720} className="hidden sm:block">
-            <THead><tr><Th>Item</Th><Th className="text-right">Ordered</Th><Th className="text-right">Invoiced</Th><Th className="text-right">To send</Th><Th className="text-right">In stock</Th><Th className="text-right">Rate</Th><Th className="text-right">Amount</Th></tr></THead>
+            <THead><tr><Th>Item</Th><Th className="text-right">Ordered</Th><Th className="text-right">Invoiced</Th><Th className="text-right">To invoice</Th><Th className="text-right">In stock</Th><Th className="text-right">Rate</Th><Th className="text-right">Amount</Th></tr></THead>
             <tbody>
               {o.lines.map((l) => (
                 <Tr key={l.id}>
@@ -206,13 +223,14 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
 
 function DispatchDialog({ o, refreshing, onClose }: { o: Order; refreshing: boolean; onClose: () => void }) {
   const { can } = useMe();
-  const utils = trpc.useUtils();
+  const refresh = useRefreshAfterStatus();
   const staff = trpc.orders.staff.useQuery();
   const invoices = o.invoices.filter((i) => i.status === 'ISSUED');
+  const sent = new Set(o.dispatches.map((d) => d.invoiceId));
   const [v, setV] = useState({ method: o.suggestedDispatch as DispatchMethod, courier: '', docketNo: '', vehicleNo: '', dispatchDate: istDateString(), invoiceId: '', deliveryPersonId: '', deliveryPersonName: '', deliveryPersonMobile: '' });
-  // Defaults to the latest invoice, including one that arrives after the dialog opened.
-  const invoiceId = v.invoiceId || invoices.at(-1)?.id || '';
-  const m = trpc.orders.setStatus.useMutation({ onSuccess: async () => { await utils.orders.invalidate(); onClose(); } });
+  // Defaults to the newest invoice not dispatched yet, including one that arrives after the dialog opened.
+  const invoiceId = v.invoiceId || invoices.filter((i) => !sent.has(i.id)).at(-1)?.id || invoices.at(-1)?.id || '';
+  const m = trpc.orders.setStatus.useMutation({ onSuccess: async () => { await refresh(); onClose(); } });
   const other = v.deliveryPersonId === 'OTHER';
   function save() {
     m.mutate({ id: o.id, status: 'DISPATCHED', dispatch: {
@@ -242,7 +260,7 @@ function DispatchDialog({ o, refreshing, onClose }: { o: Order; refreshing: bool
             </button>
           ))}
         </div>
-        {invoices.length > 1 && <SelectField label="Invoice" value={invoiceId} onChange={(e) => setV({ ...v, invoiceId: e.target.value })}>{invoices.map((i) => <option key={i.id} value={i.id}>{i.number}</option>)}</SelectField>}
+        {invoices.length > 1 && <SelectField label="Invoice" value={invoiceId} onChange={(e) => setV({ ...v, invoiceId: e.target.value })}>{invoices.map((i) => <option key={i.id} value={i.id}>{i.number}{sent.has(i.id) ? ' (already dispatched)' : ''}</option>)}</SelectField>}
         {v.method === 'OWN_DELIVERY' && (
           <>
             <SelectField label="Delivered by" value={v.deliveryPersonId} onChange={(e) => setV({ ...v, deliveryPersonId: e.target.value })} hint="Staff in the list see this delivery in their app and mark it delivered there.">
@@ -271,10 +289,10 @@ function DispatchDialog({ o, refreshing, onClose }: { o: Order; refreshing: bool
 
 /** Proof of delivery: who received the goods. */
 function DeliverDialog({ o, onClose }: { o: Order; onClose: () => void }) {
-  const utils = trpc.useUtils();
+  const refresh = useRefreshAfterStatus();
   const [receivedBy, setReceivedBy] = useState('');
   const [note, setNote] = useState('');
-  const m = trpc.orders.markDelivered.useMutation({ onSuccess: async () => { await utils.orders.invalidate(); onClose(); } });
+  const m = trpc.orders.markDelivered.useMutation({ onSuccess: async () => { await refresh(); onClose(); } });
   const fe = fieldErrors(m.error);
   return (
     <Dialog open onClose={onClose} title="Mark delivered" description="Who received the goods? This is kept as proof of delivery and shown to the customer." size="sm"

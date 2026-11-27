@@ -195,7 +195,7 @@ function ReportsTab({ r }: { r: Range }) {
         <Table minWidth={980}>
           <THead><tr><Th>Date</Th><Th>Document</Th><Th>Customer</Th><Th>GSTIN</Th><Th className="text-right">Taxable</Th><Th className="text-right">CGST</Th><Th className="text-right">SGST</Th><Th className="text-right">IGST</Th><Th className="text-right">Total</Th></tr></THead>
           <tbody>
-            {!reg.data && <LoadingRow cols={9} />}{reg.data?.rows.length === 0 && <EmptyRow cols={9}>No documents in this period.</EmptyRow>}
+            {!reg.data && <LoadingRow cols={9} error={reg.error} />}{reg.data?.rows.length === 0 && <EmptyRow cols={9}>No documents in this period.</EmptyRow>}
             {reg.data?.rows.map((x) => <Tr key={x.number} className={x.status.startsWith('Cancelled') ? 'text-muted line-through' : ''}><Td>{dayLabel(x.date)}</Td><Td className="font-mono text-sm">{x.number}<div className="font-sans text-xs text-muted">{x.kind}</div></Td><Td className="text-sm">{x.customer}</Td><Td className="font-mono text-xs">{x.gstin}</Td><Td className="num">{rupees(x.taxable)}</Td><Td className="num">{rupees(x.cgst)}</Td><Td className="num">{rupees(x.sgst)}</Td><Td className="num">{rupees(x.igst)}</Td><Td className="num font-semibold">{rupees(x.total)}</Td></Tr>)}
             {reg.data && reg.data.rows.length > 0 && <Tr className="bg-canvas font-semibold"><Td colSpan={4}>Total</Td><Td className="num">{rupees(reg.data.totals.taxable)}</Td><Td className="num">{rupees(reg.data.totals.cgst)}</Td><Td className="num">{rupees(reg.data.totals.sgst)}</Td><Td className="num">{rupees(reg.data.totals.igst)}</Td><Td className="num">{rupees(reg.data.totals.total)}</Td></Tr>}
           </tbody>

@@ -1,13 +1,14 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
+import { keepPreviousData } from '@tanstack/react-query';
 import { Download, FileDown } from 'lucide-react';
 import { AGEING_BUCKETS, CHANNEL_LABEL, formatDate, formatDateTime, NOTIFICATION_CHANNELS_FOR_CUSTOMER, type CustomerChannel } from '@kush/core';
 import { SignOutButton } from '@/components/app/sign-out-button';
 import { Button } from '@/components/ui/button';
 import { Alert, Badge, Card, CardBody, CardHeader, PageHeader } from '@/components/ui/card';
 import { Checkbox, TextAreaField } from '@/components/ui/field';
-import { EmptyRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
+import { EmptyRow, LoadingRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
 import { PaymentBadge } from '@/components/sales/status';
 import { ShareButton } from '@/components/sales/share-button';
 import { cn } from '@/lib/cn';
@@ -29,11 +30,41 @@ export function MyInvoices() {
       <div role="tablist" className="mb-4 flex w-fit rounded-lg bg-white p-0.5 ring-1 ring-line">
         {([['invoices', 'Tax invoices'], ['proformas', 'Proformas'], ['credit', 'Credit notes']] as const).map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={cn('h-9 rounded-md px-3 text-sm', tab === k ? 'bg-aqua-100 font-semibold text-navy' : 'text-muted')}>{l}</button>)}
       </div>
-      <Card className="overflow-hidden">
+      {/* Phones: one row per document instead of a wide table. */}
+      <Card className="sm:hidden">
+        <ul className="divide-y divide-line">
+          {q.error ? <li role="alert" className="px-5 py-8 text-center text-sm text-danger">{errorMessage(q.error)}</li> : !q.data && <li className="px-5 py-8 text-center text-sm text-muted">Loading…</li>}
+          {tab === 'invoices' && q.data?.invoices.length === 0 && <li className="px-5 py-8 text-center text-sm text-muted">No invoices yet.</li>}
+          {tab === 'invoices' && q.data?.invoices.map((i) => (
+            <li key={i.id} className="flex flex-col gap-1.5 px-5 py-3">
+              <div className="flex items-start justify-between gap-2"><div><p className="font-mono text-sm">{i.number}</p><p className="text-xs text-muted">{i.date ? formatDate(i.date) : ''}{i.dueDate ? ` · due ${formatDate(i.dueDate)}` : ''}</p></div><PaymentBadge status={i.status} /></div>
+              <p className="text-sm">{rupees(i.total)}{i.due ? <span className="font-semibold"> · {rupees(i.due)} due</span> : ''}</p>
+              <DocLinks kind="invoice" id={i.id} />
+            </li>
+          ))}
+          {tab === 'proformas' && q.data?.proformas.length === 0 && <li className="px-5 py-8 text-center text-sm text-muted">No proformas.</li>}
+          {tab === 'proformas' && q.data?.proformas.map((p) => (
+            <li key={p.id} className="flex flex-col gap-1.5 px-5 py-3">
+              <div className="flex items-start justify-between gap-2"><div><p className="font-mono text-sm">{p.number}</p><p className="text-xs text-muted">{p.date ? formatDate(p.date) : ''}{p.validUntil ? ` · valid until ${formatDate(p.validUntil)}` : ''}</p></div><Badge tone={p.status === 'CONVERTED' ? 'ok' : p.status === 'CANCELLED' ? 'danger' : 'teal'}>{p.status.toLowerCase()}</Badge></div>
+              <p className="text-sm">{rupees(p.total)}</p>
+              <DocLinks kind="proforma" id={p.id} />
+            </li>
+          ))}
+          {tab === 'credit' && q.data?.creditNotes.length === 0 && <li className="px-5 py-8 text-center text-sm text-muted">No credit notes.</li>}
+          {tab === 'credit' && q.data?.creditNotes.map((c) => (
+            <li key={c.id} className="flex flex-col gap-1.5 px-5 py-3">
+              <div className="flex items-start justify-between gap-2"><div><p className="font-mono text-sm">{c.number}</p><p className="text-xs text-muted">{c.date ? formatDate(c.date) : ''}{c.invoice ? ` · against ${c.invoice}` : ''}</p></div><span className="text-sm">{rupees(c.total)}</span></div>
+              <DocLinks kind="credit-note" id={c.id} />
+            </li>
+          ))}
+        </ul>
+      </Card>
+      <Card className="hidden overflow-hidden sm:block">
         {tab === 'invoices' && (
           <Table minWidth={680}>
             <THead><tr><Th>Invoice</Th><Th>Due date</Th><Th className="text-right">Total</Th><Th className="text-right">Due</Th><Th>Status</Th><Th /></tr></THead>
             <tbody>
+              {!q.data && <LoadingRow cols={6} error={q.error} />}
               {q.data?.invoices.length === 0 && <EmptyRow cols={6}>No invoices yet.</EmptyRow>}
               {q.data?.invoices.map((i) => <Tr key={i.id}><Td className="font-mono text-sm">{i.number}<div className="font-sans text-xs text-muted">{i.date ? formatDate(i.date) : ''}</div></Td><Td>{i.dueDate ? formatDate(i.dueDate) : ''}</Td><Td className="num">{rupees(i.total)}</Td><Td className="num font-semibold">{i.due ? rupees(i.due) : '—'}</Td><Td><PaymentBadge status={i.status} /></Td><Td><DocLinks kind="invoice" id={i.id} /></Td></Tr>)}
             </tbody>
@@ -43,6 +74,7 @@ export function MyInvoices() {
           <Table minWidth={560}>
             <THead><tr><Th>Proforma</Th><Th>Valid until</Th><Th className="text-right">Total</Th><Th>Status</Th><Th /></tr></THead>
             <tbody>
+              {!q.data && <LoadingRow cols={5} error={q.error} />}
               {q.data?.proformas.length === 0 && <EmptyRow cols={5}>No proformas.</EmptyRow>}
               {q.data?.proformas.map((p) => <Tr key={p.id}><Td className="font-mono text-sm">{p.number}<div className="font-sans text-xs text-muted">{p.date ? formatDate(p.date) : ''}</div></Td><Td>{p.validUntil ? formatDate(p.validUntil) : '—'}</Td><Td className="num">{rupees(p.total)}</Td><Td><Badge tone={p.status === 'CONVERTED' ? 'ok' : p.status === 'CANCELLED' ? 'danger' : 'teal'}>{p.status.toLowerCase()}</Badge></Td><Td><DocLinks kind="proforma" id={p.id} /></Td></Tr>)}
             </tbody>
@@ -52,6 +84,7 @@ export function MyInvoices() {
           <Table minWidth={520}>
             <THead><tr><Th>Credit note</Th><Th>Against</Th><Th className="text-right">Amount</Th><Th /></tr></THead>
             <tbody>
+              {!q.data && <LoadingRow cols={4} error={q.error} />}
               {q.data?.creditNotes.length === 0 && <EmptyRow cols={4}>No credit notes.</EmptyRow>}
               {q.data?.creditNotes.map((c) => <Tr key={c.id}><Td className="font-mono text-sm">{c.number}<div className="font-sans text-xs text-muted">{c.date ? formatDate(c.date) : ''}</div></Td><Td className="font-mono text-sm">{c.invoice ?? '—'}</Td><Td className="num">{rupees(c.total)}</Td><Td><DocLinks kind="credit-note" id={c.id} /></Td></Tr>)}
             </tbody>
@@ -67,7 +100,8 @@ const KIND: Record<string, string> = { INVOICE: 'Invoice', PAYMENT: 'Payment', C
 export function MyAccount({ customerId }: { customerId: string }) {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const q = trpc.portal.ledger.useQuery({ from: from || undefined, to: to || undefined });
+  const q = trpc.portal.ledger.useQuery({ from: from || undefined, to: to || undefined }, { placeholderData: keepPreviousData });
+  if (q.error && !q.data) return <Alert>{errorMessage(q.error)}</Alert>;
   if (!q.data) return <p className="text-sm text-muted">Loading…</p>;
   const d = q.data;
   const qs = new URLSearchParams({ ...(from ? { from } : {}), ...(to ? { to } : {}) }).toString();
@@ -80,8 +114,20 @@ export function MyAccount({ customerId }: { customerId: string }) {
         {AGEING_BUCKETS.map((b) => <Card key={b} className="px-4 py-3"><p className="text-xs text-muted">{b} days</p><p className="text-lg font-semibold">{rupees(d.ageing[b])}</p></Card>)}
       </div>
       <Card className="overflow-hidden">
-        <CardHeader title="Statement" actions={<div className="flex gap-2"><input aria-label="From date" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 rounded-lg border border-line px-2 text-sm" /><input aria-label="To date" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9 rounded-lg border border-line px-2 text-sm" /></div>} />
-        <Table minWidth={680}>
+        <CardHeader title="Statement" actions={<div className="flex flex-wrap gap-2"><input aria-label="From date" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 rounded-lg border border-line px-2 text-sm" /><input aria-label="To date" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9 rounded-lg border border-line px-2 text-sm" /></div>} />
+        {/* Phones: date and document on one line, amount and running balance under it. */}
+        <ul className="divide-y divide-line text-sm sm:hidden">
+          <li className="flex justify-between bg-canvas px-5 py-2.5 font-medium"><span>Opening balance</span><span className="font-semibold">{rupees(d.opening)}</span></li>
+          {d.rows.length === 0 && <li className="px-5 py-8 text-center text-muted">No entries in this period.</li>}
+          {d.rows.map((e) => (
+            <li key={`${e.type}-${e.id}`} className={cn('px-5 py-2.5', e.type === 'CANCELLED_INVOICE' && 'text-muted')}>
+              <div className="flex justify-between gap-2"><span>{KIND[e.type]} <span className="font-mono">{e.number}</span></span><span className="shrink-0 text-xs text-muted">{formatDate(e.date)}</span></div>
+              <div className="flex justify-between gap-2 text-xs"><span>{e.debit ? rupees(e.debit) : ''}{e.credit ? <span className="text-ok">{rupees(e.credit)} received</span> : ''}</span><span>Balance <strong>{rupees(e.balance)}</strong></span></div>
+            </li>
+          ))}
+          <li className="flex justify-between bg-canvas px-5 py-2.5 font-medium"><span>Closing balance</span><span className="font-semibold">{rupees(d.closing)}</span></li>
+        </ul>
+        <Table minWidth={680} className="hidden sm:block">
           <THead><tr><Th>Date</Th><Th>Document</Th><Th className="text-right">Debit</Th><Th className="text-right">Credit</Th><Th className="text-right">Balance</Th></tr></THead>
           <tbody>
             <Tr className="bg-canvas"><Td colSpan={4} className="font-medium">Opening balance</Td><Td className="num font-semibold">{rupees(d.opening)}</Td></Tr>
@@ -128,6 +174,7 @@ export function MyProfile() {
   const req = trpc.portal.requestChange.useMutation({ onSuccess: () => setMsg('') });
   const channels = trpc.portal.setNotifyChannels.useMutation({ onSuccess: () => utils.portal.profile.invalidate() });
   const fe = fieldErrors(req.error);
+  if (q.error) return <Alert>{errorMessage(q.error)}</Alert>;
   if (!q.data) return <p className="text-sm text-muted">Loading…</p>;
   const p = q.data;
   const kv = (k: string, v: unknown) => (v ? <div><dt className="text-xs text-muted">{k}</dt><dd className="text-sm">{String(v)}</dd></div> : null);

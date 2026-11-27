@@ -1,15 +1,24 @@
 'use client';
 import Link from 'next/link';
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Boxes, Clock, PackageCheck, Truck } from 'lucide-react';
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, Boxes, Clock, PackageCheck, Receipt, Truck } from 'lucide-react';
 import { formatDate, ORDER_STATUS_LABEL, type OrderStatus } from '@kush/core';
-import { Badge, Card, CardBody, CardHeader } from '@/components/ui/card';
+import { Alert, Badge, Card, CardBody, CardHeader } from '@/components/ui/card';
 import { OrderBadge } from '@/components/sales/status';
 import { cn } from '@/lib/cn';
+import { errorMessage } from '@/lib/errors';
 import { rupees } from '@/lib/format';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
 import { AgeingBar, dayLabel, LineChart } from './charts';
 
 type Home = RouterOutputs['analytics']['home'];
+
+/** Raising the tax invoice also confirms and packs an order, so Placed and Confirmed are one step. */
+const WAITING: { label: string; status: string; statuses: OrderStatus[] }[] = [
+  { label: 'To invoice', status: 'TO_INVOICE', statuses: ['PLACED', 'CONFIRMED'] },
+  { label: 'To dispatch', status: 'PACKED', statuses: ['PACKED'] },
+  { label: 'Out for delivery', status: 'DISPATCHED', statuses: ['DISPATCHED'] },
+  { label: 'On hold', status: 'ON_HOLD', statuses: ['ON_HOLD'] },
+];
 
 function Delta({ now, before }: { now: number; before: number }) {
   if (!before) return null;
@@ -43,10 +52,10 @@ function OwnerView({ d }: { d: NonNullable<Home['owner']> }) {
           </CardBody>
         </Card>
         <Card>
-          <CardHeader title="Orders waiting" />
+          <CardHeader title="Orders waiting" description="Make the tax invoice, then dispatch." />
           <ul className="divide-y divide-line">
-            {(['PLACED', 'CONFIRMED', 'PACKED', 'DISPATCHED', 'ON_HOLD'] as OrderStatus[]).map((s) => (
-              <li key={s}><Link href={`/app/orders?status=${s}`} className="flex items-center justify-between px-5 py-2.5 hover:bg-aqua-50"><OrderBadge status={s} /><span className="text-lg font-semibold tabular-nums">{d.pendingOrders[s] ?? 0}</span></Link></li>
+            {WAITING.map((w) => (
+              <li key={w.status}><Link href={`/app/orders?status=${w.status}`} className="flex items-center justify-between px-5 py-2.5 text-sm hover:bg-aqua-50"><span className="font-medium text-navy">{w.label}</span><span className="text-lg font-semibold tabular-nums">{w.statuses.reduce((t, s) => t + (d.pendingOrders[s] ?? 0), 0)}</span></Link></li>
             ))}
           </ul>
         </Card>
@@ -94,7 +103,8 @@ function StaffView({ s }: { s: Home['staff'] }) {
         </ul>
       </Card>
       <div className="flex flex-col gap-3">
-        <Card className="flex items-center gap-3 px-4 py-3"><Truck className="size-6 text-teal-700" aria-hidden /><div><p className="text-xs text-muted">To pack / dispatch</p><p className="text-xl font-semibold">{s.toDispatch}</p></div></Card>
+        <Link href="/app/orders?status=TO_INVOICE" className="rounded-xl hover:ring-1 hover:ring-teal"><Card className="flex items-center gap-3 px-4 py-3"><Receipt className="size-6 text-teal-700" aria-hidden /><div><p className="text-xs text-muted">To invoice</p><p className="text-xl font-semibold">{s.toInvoice}</p></div></Card></Link>
+        <Link href="/app/orders?status=PACKED" className="rounded-xl hover:ring-1 hover:ring-teal"><Card className="flex items-center gap-3 px-4 py-3"><Truck className="size-6 text-teal-700" aria-hidden /><div><p className="text-xs text-muted">To dispatch</p><p className="text-xl font-semibold">{s.toDispatch}</p></div></Card></Link>
         <Card className="flex items-center gap-3 px-4 py-3"><Boxes className="size-6 text-warn" aria-hidden /><div><p className="text-xs text-muted">Low / out of stock</p><p className="text-xl font-semibold">{s.lowCount} / {s.outCount}</p></div></Card>
         <Card className="flex items-center gap-3 px-4 py-3"><Clock className="size-6 text-danger" aria-hidden /><div><p className="text-xs text-muted">Expiring within {s.expiryWindowDays} days</p><p className="text-xl font-semibold">{s.expiringUnits} unit(s)</p>{s.expiredUnits > 0 && <p className="text-xs text-danger">{s.expiredUnits} already expired</p>}</div></Card>
         <Card className="flex items-center gap-3 px-4 py-3"><PackageCheck className="size-6 text-ok" aria-hidden /><Link href="/app/scan" className="text-sm font-semibold text-teal-700 hover:underline">Scan to look up an item →</Link></Card>
@@ -105,6 +115,7 @@ function StaffView({ s }: { s: Home['staff'] }) {
 
 export function Dashboard() {
   const q = trpc.analytics.home.useQuery(undefined, { refetchInterval: 5 * 60_000 });
+  if (q.error) return <Alert>{errorMessage(q.error)}</Alert>;
   if (!q.data) return <p className="text-sm text-muted">Loading…</p>;
   return q.data.kind === 'owner' && q.data.owner ? (
     <div className="flex flex-col gap-8"><OwnerView d={q.data.owner} />{q.data.staff.myOrders.length > 0 && <StaffView s={q.data.staff} />}</div>

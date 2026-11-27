@@ -93,7 +93,8 @@ export function ReceiveForm() {
   function submit() {
     const payload = lines.map((l) => ({ variantId: l.variantId, batchNo: l.batchNo, expiryDate: l.expiryDate, serialNos: serialList(l.serials), qty: Number(l.qty), rate: canRate ? l.rate : undefined }));
     const common = { date: head.date, locationId: head.locationId || undefined, note: head.note };
-    const done = (r: { id: string }) => { void utils.inventory.invalidate(); router.push(`/app/stock/receipts/${r.id}?new=1`); };
+    // Received goods also change purchase orders (received / short) and orders' shortfall.
+    const done = (r: { id: string }) => { void Promise.all([utils.inventory.invalidate(), utils.purchaseOrders.invalidate(), utils.orders.invalidate()]); router.push(`/app/stock/receipts/${r.id}?new=1`); };
     if (opening) open.mutate({ ...common, lines: payload as never }, { onSuccess: done });
     else grn.mutate({ ...common, supplierId: head.supplierId, poId: po?.id ?? null, supplierInvoiceNo: head.supplierInvoiceNo, supplierInvoiceDate: head.supplierInvoiceDate, lines: payload as never }, { onSuccess: done });
   }
@@ -157,7 +158,7 @@ export function ReceiveForm() {
         <CardBody className="flex flex-col gap-3">
           <ScanField ref={scan} onScan={onScan} placeholder="Scan the barcode on the box (GS1 DataMatrix, EAN or the maker's code)" />
           {msg && <Alert tone={msg.tone === 'danger' ? 'danger' : msg.tone === 'warn' ? 'warn' : 'ok'}>{msg.text}</Alert>}
-          <div className="flex items-center gap-3 text-xs text-muted"><span className="h-px flex-1 bg-line" />or add by hand<span className="h-px flex-1 bg-line" /></div>
+          <div className="flex items-center gap-3 text-xs text-muted"><span className="h-px flex-1 bg-line" />or find the product<span className="h-px flex-1 bg-line" /></div>
           <VariantPicker onPick={(v) => addLine(v)} />
         </CardBody>
         {lines.length > 0 && (
@@ -196,7 +197,8 @@ export function ReceiveForm() {
       {m.error && <Alert>{Object.keys(fe).length && !Object.keys(fe).some((k) => k.startsWith('lines.')) ? 'Please correct the highlighted fields.' : errorMessage(m.error)}</Alert>}
       <div className="flex items-center justify-end gap-3">
         {!canRate && <span className="text-xs text-muted">Purchase rates are taken from the product cost.</span>}
-        <Button size="lg" disabled={!lines.length} loading={m.isPending} onClick={submit}>{opening ? 'Save opening stock' : 'Save goods receipt'} ({totalUnits} units)</Button>
+        {/* No idempotency key on receipts: stay disabled after saving until the receipt page opens, so it can't be saved twice. */}
+        <Button size="lg" disabled={!lines.length || m.isSuccess} loading={m.isPending || m.isSuccess} onClick={submit}>{opening ? 'Save opening stock' : 'Save goods receipt'} ({totalUnits} units)</Button>
       </div>
       {unknown && <MapBarcodeDialog code={unknown} onClose={() => { setUnknown(null); scan.current?.focus(); }} onMapped={() => { const c = unknown; setUnknown(null); void onScan(c); }} />}
     </div>

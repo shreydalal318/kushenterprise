@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { istDateString, LENS_TYPES, NOTIFICATION_CHANNELS_FOR_CUSTOMER, ORDER_SORT_RANK, paymentStatus, round2, stateByCode } from '@kush/core';
+import { istDateString, LENS_TYPES, NOTIFICATION_CHANNELS_FOR_CUSTOMER, ORDER_SORT_RANK, paymentStatus, round2, stateByCode, type OrderStatus } from '@kush/core';
 import type { NotificationChannel } from '@kush/db';
 import { z } from 'zod';
 import { notify, staffForCustomer } from '../notify';
@@ -30,6 +30,9 @@ const catalogueInput = z.object({
   power: z.coerce.number().min(-30).max(60).optional(),
 }).optional();
 
+/** Not yet delivered or cancelled. */
+const OPEN_STATUSES: OrderStatus[] = ['PLACED', 'CONFIRMED', 'PACKED', 'ON_HOLD', 'DISPATCHED'];
+
 const placeOrderInput = z.object({
   forDoctorId: z.string().nullable().optional(),
   shippingAddressId: z.string().nullable().optional(),
@@ -43,16 +46,17 @@ const placeOrderInput = z.object({
 export const portalRouter = router({
   /** Home: recent orders, what is owed, unread notifications. */
   home: customerProcedure.query(async ({ ctx }) => {
-    const [customer, orders, ledger, unread] = await Promise.all([
+    const [customer, orders, openOrders, ledger, unread] = await Promise.all([
       ctx.db.customer.findUniqueOrThrow({ where: { id: ctx.customerId }, select: { name: true, code: true, type: true } }),
       ctx.db.salesOrder.findMany({ where: { customerId: ctx.customerId }, orderBy: { createdAt: 'desc' }, take: 5, include: { lines: { select: { qty: true, qtyDispatched: true } } } }),
+      ctx.db.salesOrder.count({ where: { customerId: ctx.customerId, status: { in: OPEN_STATUSES } } }),
       customerLedger(ctx.db, ctx.customerId),
       ctx.db.notification.count({ where: { userId: ctx.user.id, channel: 'IN_APP', readAt: null } }),
     ]);
     return {
       customer,
       orders: orders.map((o) => ({ id: o.id, number: o.number, status: o.status, createdAt: o.createdAt, units: o.lines.reduce((t, l) => t + l.qty, 0) })),
-      outstanding: ledger.outstanding, overdue: ledger.overdue, onAccount: ledger.onAccount, unread,
+      openOrders, outstanding: ledger.outstanding, overdue: ledger.overdue, onAccount: ledger.onAccount, unread,
     };
   }),
 
@@ -77,7 +81,7 @@ export const portalRouter = router({
       },
       orderBy: [{ category: { name: 'asc' } }, { name: 'asc' }],
       select: {
-        id: true, code: true, name: true, imageIds: true, mrp: true, unit: true, isLens: true, lensType: true, material: true, preloaded: true, reorderLevel: true,
+        id: true, code: true, name: true, mrp: true, unit: true, isLens: true, lensType: true, material: true, preloaded: true, reorderLevel: true,
         category: { select: { name: true } }, brand: { select: { name: true } },
         variants: { where: { isActive: true, deletedAt: null }, select: { id: true, powerSph: true, reorderLevel: true } },
       },
@@ -91,7 +95,7 @@ export const portalRouter = router({
       const qty = p.variants.reduce((t, v) => t + (stock.get(v.id) ?? 0), 0);
       const anyAvailable = p.variants.some((v) => badgeOf(stock.get(v.id) ?? 0, reorderLevelOf({ reorderLevel: v.reorderLevel, product: p }, s.defaultReorderLevel)) === 'AVAILABLE');
       return {
-        id: p.id, code: p.code, name: p.name, image: p.imageIds[0] ?? null, category: p.category.name, brand: p.brand?.name ?? null,
+        id: p.id, code: p.code, name: p.name, category: p.category.name, brand: p.brand?.name ?? null,
         isLens: p.isLens, lensType: p.lensType, material: p.material, preloaded: p.preloaded, unit: p.unit,
         price: prices.get(p.id)!.rate, mrp: num(p.mrp), variantCount: p.variants.length,
         // Lets the app add a single-variant item straight from the list.
@@ -113,7 +117,7 @@ export const portalRouter = router({
     const price = (await resolveCustomerPrices(ctx.db, ctx.customerId, [p.id])).get(p.id)!;
     const stock = await stockByVariant(ctx.db, p.variants.map((v) => v.id));
     return {
-      id: p.id, code: p.code, name: p.name, description: p.description, images: p.imageIds, category: p.category.name, brand: p.brand?.name ?? null, unit: p.unit,
+      id: p.id, code: p.code, name: p.name, description: p.description, category: p.category.name, brand: p.brand?.name ?? null, unit: p.unit,
       isLens: p.isLens, lensType: p.lensType, material: p.material, preloaded: p.preloaded,
       aConstant: p.aConstant == null ? null : num(p.aConstant), opticSizeMm: p.opticSizeMm == null ? null : num(p.opticSizeMm), overallLenMm: p.overallLenMm == null ? null : num(p.overallLenMm),
       price: price.rate, priceSource: price.source === 'DEFAULT' ? null : 'YOUR_RATE', mrp: num(p.mrp), gstRate: num(p.gstRate),
@@ -126,9 +130,9 @@ export const portalRouter = router({
 
   /** Prices and names for the cart (the client keeps only variant ids and quantities). */
   cart: customerProcedure.input(z.object({ variantIds: z.array(z.string()).max(200) })).query(async ({ ctx, input }) => {
-    const variants = await ctx.db.productVariant.findMany({ where: { id: { in: input.variantIds }, isActive: true, deletedAt: null, product: { isActive: true } }, include: { product: { select: { id: true, name: true, gstRate: true, unit: true, imageIds: true } } } });
+    const variants = await ctx.db.productVariant.findMany({ where: { id: { in: input.variantIds }, isActive: true, deletedAt: null, product: { isActive: true } }, include: { product: { select: { id: true, name: true, gstRate: true, unit: true } } } });
     const prices = await resolveCustomerPrices(ctx.db, ctx.customerId, [...new Set(variants.map((v) => v.productId))]);
-    return variants.map((v) => ({ variantId: v.id, productId: v.productId, name: v.product.name, label: v.label, unit: v.product.unit, image: v.product.imageIds[0] ?? null, price: prices.get(v.productId)!.rate, gstRate: num(v.product.gstRate) }));
+    return variants.map((v) => ({ variantId: v.id, productId: v.productId, name: v.product.name, label: v.label, unit: v.product.unit, price: prices.get(v.productId)!.rate, gstRate: num(v.product.gstRate) }));
   }),
 
   /** Delivery addresses and linked doctors for checkout. */
@@ -154,7 +158,7 @@ export const portalRouter = router({
 
   orders: customerProcedure.input(z.object({ status: z.string().optional() }).optional()).query(async ({ ctx, input }) => {
     const rows = await ctx.db.salesOrder.findMany({
-      where: { customerId: ctx.customerId, ...(input?.status === 'OPEN' ? { status: { in: ['PLACED', 'CONFIRMED', 'PACKED', 'ON_HOLD', 'DISPATCHED'] } } : input?.status ? { status: input.status as never } : {}) },
+      where: { customerId: ctx.customerId, ...(input?.status === 'OPEN' ? { status: { in: OPEN_STATUSES } } : input?.status ? { status: input.status as never } : {}) },
       orderBy: { createdAt: 'desc' }, take: 200,
       include: { lines: { select: { qty: true, qtyDispatched: true, rate: true } }, forDoctor: { select: { name: true } } },
     });

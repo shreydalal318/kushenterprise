@@ -22,7 +22,7 @@ export function ReceiptList() {
         <Table minWidth={720}>
           <THead><tr><Th>Number</Th><Th>Date</Th><Th>From</Th><Th>Supplier invoice</Th><Th className="text-right">Lines</Th><Th className="text-right">Units</Th><Th>By</Th></tr></THead>
           <tbody>
-            {!q.data && <LoadingRow cols={7} />}{q.data?.length === 0 && <EmptyRow cols={7}>No receipts yet.</EmptyRow>}
+            {!q.data && <LoadingRow cols={7} error={q.error} />}{q.data?.length === 0 && <EmptyRow cols={7}>No receipts yet.</EmptyRow>}
             {q.data?.map((r) => (
               <Tr key={r.id} className="hover:bg-aqua-50/60">
                 <Td><Link href={`/app/stock/receipts/${r.id}`} className="font-mono text-sm font-medium text-navy hover:underline">{r.number}</Link></Td>

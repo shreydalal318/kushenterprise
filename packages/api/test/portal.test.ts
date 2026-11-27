@@ -81,11 +81,19 @@ describe('customer portal', () => {
     expect(order.lines.find((l) => l.variantId === lens.v20)!.rate.toNumber()).toBe(2750);
     expect(await prisma.notification.count({ where: { userId: owner.id, title: `New order ${o.number}`, channel: 'IN_APP' } })).toBe(1);
     expect(await prisma.notification.count({ where: { userId: owner.id, title: `New order ${o.number}`, channel: 'PUSH' } })).toBe(1);
-    expect(await prisma.notification.count({ where: { userId: customerUser.id, title: `Order ${o.number} received`, channel: 'IN_APP' } })).toBe(1);
+    const received = await prisma.notification.findFirstOrThrow({ where: { userId: customerUser.id, title: `Order ${o.number} received`, channel: 'IN_APP' } });
+    expect(received.body).toMatch(/invoiced, dispatched and delivered/);
 
     const m = await mobileApi(customerUser.id);
     const mo = await m.portal.placeOrder({ clientRequestId: `cr-${tag()}`, lines: [{ variantId: lens.v21, qty: 1 }] });
     expect((await prisma.salesOrder.findUniqueOrThrow({ where: { id: mo.id } })).source).toBe('MOBILE_APP');
+
+    // Home counts every open order, not just the five recent ones it lists.
+    for (let i = 0; i < 5; i++) await c.portal.placeOrder({ clientRequestId: `cr-${tag()}`, lines: [{ variantId: lens.v20, qty: 1 }] });
+    const home = await c.portal.home();
+    expect(home.orders).toHaveLength(5);
+    expect(home.openOrders).toBe((await c.portal.orders({ status: 'OPEN' })).length);
+    expect(home.openOrders).toBeGreaterThan(5);
 
     const view = await c.portal.order({ id: o.id });
     expect(view.lines).toHaveLength(2);

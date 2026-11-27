@@ -1,5 +1,6 @@
 import type { ReactNode, ThHTMLAttributes, TdHTMLAttributes } from 'react';
 import { cn } from '@/lib/cn';
+import { errorMessage } from '@/lib/errors';
 
 export function Table({ children, minWidth = 720, className }: { children: ReactNode; minWidth?: number; className?: string }) {
   return (
@@ -16,8 +17,9 @@ export const Td = ({ className, ...p }: TdHTMLAttributes<HTMLTableCellElement>) 
 export const Tr = ({ className, children, ...p }: { className?: string; children: ReactNode } & React.HTMLAttributes<HTMLTableRowElement>) => (
   <tr className={cn('border-t border-line', className)} {...p}>{children}</tr>
 );
-/** Placeholder rows while a list loads, so an empty table never reads as "nothing here". */
-export function LoadingRow({ cols, rows = 3 }: { cols: number; rows?: number }) {
+/** Placeholder rows while a list loads, so an empty table never reads as "nothing here". Pass the query's error so a failed load says so instead of loading forever. */
+export function LoadingRow({ cols, rows = 3, error }: { cols: number; rows?: number; error?: unknown }) {
+  if (error) return <tr><td colSpan={cols} role="alert" className="px-5 py-8 text-center text-sm text-danger">{errorMessage(error)}</td></tr>;
   return (
     <>
       {Array.from({ length: rows }, (_, i) => (

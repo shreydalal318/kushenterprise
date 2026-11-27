@@ -1,6 +1,7 @@
 import { Pressable, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { formatDate } from '@kush/core';
 import { OrderStatusBadge } from '@/components/status';
 import { Card, H2, Loading, P, Row, Screen, Small } from '@/components/ui';
 import { useAuth, useCan } from '@/lib/auth';
@@ -26,12 +27,13 @@ export default function StaffHome() {
   const count = (s: string) => list.filter((o) => o.status === s).length;
   const open = list.filter((o) => !['DELIVERED', 'CANCELLED'].includes(o.status));
 
-  const tiles: { label: string; value: number; icon: Icon; tone: string; to: string }[] = [
+  // Each tile opens the Orders tab filtered to it. "To dispatch" can't include a dispatched order's next
+  // invoice: the list doesn't say which invoices went out (the order screen does).
+  const tiles: { label: string; value: number; icon: Icon; tone: string; to: string; orders?: boolean }[] = [
     ...(seesOrders ? [
-      { label: 'New orders', value: count('PLACED'), icon: 'sparkles-outline' as Icon, tone: C.teal700, to: '/staff/orders' },
-      { label: 'To pack', value: count('CONFIRMED'), icon: 'cube-outline' as Icon, tone: C.navy, to: '/staff/orders' },
-      { label: 'Ready to dispatch', value: count('PACKED'), icon: 'paper-plane-outline' as Icon, tone: C.warn, to: '/staff/orders' },
-      { label: 'Out for delivery', value: count('DISPATCHED'), icon: 'car-outline' as Icon, tone: C.ok, to: '/staff/orders' },
+      { label: 'To invoice', value: count('PLACED') + count('CONFIRMED'), icon: 'receipt-outline' as Icon, tone: C.teal700, to: '/staff/orders?status=TO_INVOICE', orders: true },
+      { label: 'To dispatch', value: count('PACKED'), icon: 'paper-plane-outline' as Icon, tone: C.warn, to: '/staff/orders?status=PACKED', orders: true },
+      { label: 'Out for delivery', value: count('DISPATCHED'), icon: 'car-outline' as Icon, tone: C.ok, to: '/staff/orders?status=DISPATCHED', orders: true },
     ] : []),
     { label: 'My deliveries', value: mine.data?.length ?? 0, icon: 'bicycle-outline', tone: C.teal700, to: '/staff/deliveries' },
   ];
@@ -50,10 +52,10 @@ export default function StaffHome() {
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
         {tiles.map((t) => (
-          <Pressable key={t.label} accessibilityRole="button" accessibilityLabel={`${t.label}: ${t.value}`} onPress={() => router.push(t.to as never)}
+          <Pressable key={t.label} accessibilityRole="button" accessibilityLabel={`${t.label}: ${t.value}`} onPress={() => router.navigate(t.to as never)}
             style={({ pressed }) => ({ flexBasis: '47%', flexGrow: 1, backgroundColor: pressed ? C.aqua50 : C.white, borderRadius: R.lg, borderWidth: 1, borderColor: C.line, padding: 14, gap: 6 })}>
             <Ionicons name={t.icon} size={20} color={t.tone} />
-            <Text style={{ fontSize: 26, fontWeight: '700', color: C.ink }}>{seesOrders && orders.isLoading && t.to === '/staff/orders' ? '–' : t.value}</Text>
+            <Text style={{ fontSize: 26, fontWeight: '700', color: C.ink }}>{t.orders && orders.isLoading ? '–' : t.value}</Text>
             <Small>{t.label}</Small>
           </Pressable>
         ))}
@@ -74,7 +76,7 @@ export default function StaffHome() {
         <>
           <Row style={{ justifyContent: 'space-between' }}>
             <H2>Open orders</H2>
-            {open.length > 5 && <Pressable onPress={() => router.push('/staff/orders')}><Text style={{ color: C.teal700, fontWeight: '600' }}>See all {open.length}</Text></Pressable>}
+            {open.length > 5 && <Pressable onPress={() => router.navigate('/staff/orders?status=open')}><Text style={{ color: C.teal700, fontWeight: '600' }}>See all {open.length}</Text></Pressable>}
           </Row>
           {orders.isLoading && <Loading />}
           {orders.data && open.length === 0 && <Card><P muted style={{ textAlign: 'center' }}>No open orders. All caught up.</P></Card>}
@@ -83,7 +85,7 @@ export default function StaffHome() {
               <Card>
                 <Row style={{ justifyContent: 'space-between' }}><P style={{ fontWeight: '700', color: C.navy }}>{o.number}</P><OrderStatusBadge status={o.status} /></Row>
                 <P numberOfLines={1}>{o.customer.name}</P>
-                <Small>{o.units} unit{o.units === 1 ? '' : 's'} · {rupees(o.value)}{o.surgeryDate ? ` · surgery ${o.surgeryDate.toString().slice(0, 10)}` : ''}</Small>
+                <Small>{o.units} unit{o.units === 1 ? '' : 's'} · {rupees(o.value)}{o.surgeryDate ? ` · surgery ${formatDate(o.surgeryDate)}` : ''}</Small>
               </Card>
             </Pressable>
           ))}

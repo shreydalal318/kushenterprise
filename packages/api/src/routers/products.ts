@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { can, expandPowerRange, variantLabel, variantSku, type Principal } from '@kush/core';
+import { can, expandPowerRange, istDateString, variantLabel, variantSku, type Principal } from '@kush/core';
 import { Prisma, type Tx } from '@kush/db';
 import { z } from 'zod';
 import {
@@ -134,6 +134,46 @@ export const productsRouter = router({
       variantCount: s.get(p.id)?._count._all ?? 0,
       powerMin: numOrNull(s.get(p.id)?._min.powerSph), powerMax: numOrNull(s.get(p.id)?._max.powerSph),
     }));
+  }),
+
+  /**
+   * Find items to add to an order, invoice or receipt: every word must match the name, code, model,
+   * brand, SKU, power label or barcode; a number also matches the power ("21.5", "+21.50", "-3").
+   * Many items carry no barcode, so this is the main way to add them. Stock is unexpired units on hand.
+   */
+  search: staffProcedure.input(z.object({ q: z.string().trim().min(1).max(100), limit: z.number().int().min(1).max(50).default(30) })).query(async ({ ctx, input }) => {
+    const words = input.q.split(/\s+/).filter(Boolean).slice(0, 6);
+    const where: Prisma.ProductVariantWhereInput = {
+      isActive: true, deletedAt: null, product: { isActive: true, deletedAt: null },
+      AND: words.map((w) => {
+        const power = /^[+-]?\d{1,2}(\.\d{1,2})?$/.test(w) ? Number(w) : null;
+        const text: Prisma.ProductVariantWhereInput[] = [
+          { product: { name: { contains: w, mode: 'insensitive' } } }, { product: { code: { contains: w, mode: 'insensitive' } } },
+          { product: { model: { contains: w, mode: 'insensitive' } } }, { product: { brand: { name: { contains: w, mode: 'insensitive' } } } },
+          { sku: { contains: w, mode: 'insensitive' } }, { label: { contains: w, mode: 'insensitive' } }, { barcode: w }, { gtin: w }, { aliases: { some: { code: w } } },
+        ];
+        return { OR: power == null ? text : [...text, { powerSph: power }] };
+      }),
+    };
+    const rows = await ctx.db.productVariant.findMany({
+      where, take: input.limit + 1,
+      orderBy: [{ product: { name: 'asc' } }, { powerSph: 'asc' }, { cylinder: 'asc' }, { addPower: 'asc' }],
+      select: { id: true, sku: true, label: true, product: { select: { id: true, code: true, name: true, unit: true, trackSerial: true, trackBatch: true, trackExpiry: true } } },
+    });
+    const shown = rows.slice(0, input.limit);
+    const today = new Date(`${istDateString()}T00:00:00Z`);
+    const stock = await ctx.db.stockBalance.groupBy({
+      by: ['variantId'], _sum: { qty: true },
+      where: { variantId: { in: shown.map((v) => v.id) }, qty: { gt: 0 }, OR: [{ batch: { expiryDate: null } }, { batch: { expiryDate: { gte: today } } }] },
+    });
+    const qty = new Map(stock.map((r) => [r.variantId, r._sum.qty ?? 0]));
+    return {
+      more: rows.length > input.limit,
+      rows: shown.map((v) => ({
+        variantId: v.id, productId: v.product.id, code: v.product.code, productName: v.product.name, label: v.label, sku: v.sku, unit: v.product.unit,
+        trackSerial: v.product.trackSerial, trackBatch: v.product.trackBatch, trackExpiry: v.product.trackExpiry, inStock: qty.get(v.id) ?? 0,
+      })),
+    };
   }),
 
   get: staffProcedure.input(z.object({ id: z.string() })).query(async ({ ctx, input }) => {
@@ -280,11 +320,4 @@ export const productsRouter = router({
     return { ok: true };
   }),
 
-  /** Attach / detach uploaded images (the upload itself is a route handler). */
-  setImages: permissionProcedure('MANAGE_PRODUCTS').input(z.object({ id: z.string(), imageIds: z.array(z.string()).max(12) })).mutation(async ({ ctx, input }) => {
-    const found = await ctx.db.fileAsset.count({ where: { id: { in: input.imageIds }, purpose: 'product-image' } });
-    if (found !== input.imageIds.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Unknown image' });
-    await ctx.db.product.update({ where: { id: input.id }, data: { imageIds: input.imageIds } });
-    return { ok: true };
-  }),
 });

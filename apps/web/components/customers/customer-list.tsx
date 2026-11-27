@@ -41,7 +41,7 @@ export function CustomerList() {
         <Table minWidth={820}>
           <THead><tr><Th>Customer</Th><Th>Type</Th><Th>City</Th><Th>Assigned to</Th><Th>Pricing</Th><Th className="text-right">Logins</Th></tr></THead>
           <tbody>
-            {!list.data && <LoadingRow cols={6} />}{list.data?.length === 0 && <EmptyRow cols={6}>No customers match.</EmptyRow>}
+            {!list.data && <LoadingRow cols={6} error={list.error} />}{list.data?.length === 0 && <EmptyRow cols={6}>No customers match.</EmptyRow>}
             {list.data?.map((c) => (
               <Tr key={c.id} className="hover:bg-aqua-50/60">
                 <Td>

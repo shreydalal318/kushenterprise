@@ -20,6 +20,9 @@ export default function AccountScreen() {
   const req = trpc.portal.requestChange.useMutation({ onSuccess: () => setMsg('') });
   const [err, setErr] = useState<string | null>(null);
   const pdf = (path: string, name: string) => { setErr(null); openPdf(path, name).catch((e) => setErr(errorText(e))); };
+  const failed = (q: { error: unknown; isFetching: boolean; refetch: () => unknown }) => (
+    <><Alert>{errorText(q.error)}</Alert><Button variant="secondary" title="Try again" loading={q.isFetching} onPress={() => void q.refetch()} /></>
+  );
   return (
     <Screen>
       <Tabs value={tab} onChange={setTab} options={[['balance', 'Balance'], ['invoices', 'Invoices'], ['profile', 'Profile']]} />
@@ -43,7 +46,7 @@ export default function AccountScreen() {
             </Card>
           ))}
         </>
-      ) : <Loading />)}
+      ) : ledger.error ? failed(ledger) : <Loading />)}
       {tab === 'invoices' && (docs.data ? (
         <>
           {docs.data.invoices.map((i) => (
@@ -58,7 +61,7 @@ export default function AccountScreen() {
           ))}
           {!docs.data.invoices.length && !docs.data.proformas.length && <Small>No invoices yet.</Small>}
         </>
-      ) : <Loading />)}
+      ) : docs.error ? failed(docs) : <Loading />)}
       {tab === 'profile' && (profile.data ? (
         <>
           <Card>
@@ -69,12 +72,12 @@ export default function AccountScreen() {
             {profile.data.contact && <KV k="Your contact" v={`${profile.data.contact.name}${profile.data.contact.mobile ? ` · ${profile.data.contact.mobile}` : ''}`} />}
           </Card>
           <Card>{profile.data.addresses.map((a) => <View key={a.id}><Small>{a.kind === 'BILLING' ? 'Billing' : 'Delivery'}{a.isDefault ? ' (default)' : ''}</Small><P>{a.text}</P></View>)}</Card>
-          <Field label="Ask for a change (address, GSTIN, contact…)" value={msg} onChangeText={setMsg} multiline />
+          <Field label="Ask for a change (address, GSTIN, contact…)" value={msg} onChangeText={setMsg} multiline placeholder="At least 10 characters" />
           {req.isSuccess && <Alert tone="ok">Sent. We will update your account and let you know.</Alert>}
           {req.error && <Alert>{errorText(req.error)}</Alert>}
-          <Button variant="secondary" title="Send request" loading={req.isPending} onPress={() => req.mutate({ message: msg })} />
+          <Button variant="secondary" title="Send request" loading={req.isPending} disabled={msg.trim().length < 10} onPress={() => req.mutate({ message: msg })} />
         </>
-      ) : <Loading />)}
+      ) : profile.error ? failed(profile) : <Loading />)}
       <Button variant="danger" title="Sign out" onPress={() => void signOut().then(() => router.replace('/login'))} />
     </Screen>
   );

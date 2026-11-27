@@ -3,9 +3,10 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { PackagePlus, Search } from 'lucide-react';
 import { formatDate, type StockStatus } from '@kush/core';
-import { Badge, Card, PageHeader } from '@/components/ui/card';
+import { Alert, Badge, Card, PageHeader } from '@/components/ui/card';
 import { LinkButton } from '@/components/ui/link-button';
 import { EmptyRow, LoadingRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
+import { errorMessage } from '@/lib/errors';
 import { rupees } from '@/lib/format';
 import { trpc } from '@/lib/trpc';
 import { useMe } from '@/lib/use-me';
@@ -47,11 +48,34 @@ export function StockOverview() {
         <label className="flex items-center gap-2 px-1 text-sm text-muted"><input type="checkbox" className="accent-teal-700" checked={onlyInStock} onChange={(e) => setOnlyInStock(e.target.checked)} /> Only items in stock</label>
         {showValue && total != null && <span className="ml-auto self-center text-sm text-muted">Value at cost: <strong className="text-ink">{rupees(total)}</strong></span>}
       </div>
-      <Card className="overflow-hidden">
+      {/* Phones: one card per product. */}
+      <ul className="flex flex-col gap-2 sm:hidden" aria-busy={!rows.data}>
+        {rows.error ? <li><Alert>{errorMessage(rows.error)}</Alert></li> : !rows.data && Array.from({ length: 4 }, (_, i) => <li key={i} className="h-20 animate-pulse rounded-xl border border-line bg-white" aria-hidden />)}
+        {rows.data?.length === 0 && <li><Card className="py-10 text-center text-sm text-muted">Nothing matches.</Card></li>}
+        {rows.data?.map((r) => (
+          <li key={r.productId}>
+            <Link href={`/app/stock/product/${r.productId}`} className="block rounded-xl border border-line bg-white px-4 py-3 active:bg-aqua-50">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0"><p className="font-medium text-navy">{r.name}</p><p className="text-xs text-muted">{r.code} · {r.category}</p></div>
+                <p className="shrink-0 text-right text-base font-semibold">{r.qty} <span className="text-xs font-normal text-muted">{r.unit}</span></p>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-1 text-xs text-muted">
+                <StockBadge status={r.status} />
+                {r.isLens && <span>{r.variantsInStock} of {r.variantCount} powers in stock</span>}
+                {r.lowCount > 0 && <Badge tone="warn">{r.lowCount} low</Badge>}
+                {r.outCount > 0 && r.qty > 0 && <Badge tone="danger">{r.outCount} out</Badge>}
+                {r.expiringCount > 0 && <Badge tone="teal">Expiry {formatDate(r.nearestExpiry)}</Badge>}
+                {showValue && <span className="ml-auto">{rupees(r.value)}</span>}
+              </div>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      <Card className="hidden overflow-hidden sm:block">
         <Table minWidth={820}>
           <THead><tr><Th>Product</Th><Th className="text-right">On hand</Th><Th>Powers / variants</Th><Th>Alerts</Th><Th>Status</Th>{showValue && <Th className="text-right">Value</Th>}</tr></THead>
           <tbody>
-            {!rows.data && <LoadingRow cols={6} />}{rows.data?.length === 0 && <EmptyRow cols={6}>Nothing matches.</EmptyRow>}
+            {!rows.data && <LoadingRow cols={6} error={rows.error} />}{rows.data?.length === 0 && <EmptyRow cols={6}>Nothing matches.</EmptyRow>}
             {rows.data?.map((r) => (
               <Tr key={r.productId} className="hover:bg-aqua-50/60">
                 <Td><Link href={`/app/stock/product/${r.productId}`} className="font-medium text-navy hover:underline">{r.name}</Link><div className="text-xs text-muted">{r.code} · {r.category}</div></Td>
