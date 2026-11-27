@@ -26,6 +26,8 @@ export const orderListInput = z.object({
   status: z.enum([...ORDER_STATUSES, 'TO_INVOICE']).optional(),
   customerId: z.string().optional(),
   assignedToId: z.string().optional(),
+  /** Orders nobody has been chosen to handle yet. */
+  unassigned: z.boolean().optional(),
   from: isoDate.optional(),
   to: isoDate.optional(),
   q: z.string().trim().max(60).optional(),

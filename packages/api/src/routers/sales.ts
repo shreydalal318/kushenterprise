@@ -14,7 +14,8 @@ import { getSettings } from '../services/settings';
 import { createCreditNote } from '../services/sales/credit-notes';
 import { cancelInvoice, createInvoice } from '../services/sales/invoices';
 import { customerLedger, receivables } from '../services/sales/ledger';
-import { changeOrderStatus, createOrder, verifyPacked } from '../services/sales/orders';
+import { assertHandler, changeOrderStatus, createOrder, verifyPacked } from '../services/sales/orders';
+import { notify } from '../notify';
 import { allocatePayment, deletePayment, recordPayment } from '../services/sales/payments';
 import { convertProforma, createProforma } from '../services/sales/proformas';
 import { anyPermissionProcedure, ownerProcedure, permissionProcedure, router, staffProcedure } from '../trpc';
@@ -59,7 +60,7 @@ export const ordersRouter = router({
       where: {
         ...(input?.status === 'TO_INVOICE' ? { status: { in: ['PLACED', 'CONFIRMED'] } } : input?.status ? { status: input.status } : {}),
         ...(input?.customerId ? { customerId: input.customerId } : {}),
-        ...(input?.assignedToId ? { assignedToId: input.assignedToId } : {}),
+        ...(input?.unassigned ? { assignedToId: null } : input?.assignedToId ? { assignedToId: input.assignedToId } : {}),
         ...(input?.q ? { OR: [{ number: { contains: input.q, mode: 'insensitive' } }, { customer: { name: { contains: input.q, mode: 'insensitive' } } }] } : {}),
         createdAt: input?.from || input?.to ? { gte: input.from ? new Date(`${input.from}T00:00:00+05:30`) : undefined, lte: input.to ? new Date(`${input.to}T23:59:59+05:30`) : undefined } : undefined,
       },
@@ -109,8 +110,13 @@ export const ordersRouter = router({
   setStatus: permissionProcedure('UPDATE_ORDER_STATUS').input(orderStatusInput).mutation(({ ctx, input }) =>
     ctx.db.$transaction((tx) => changeOrderStatus(tx, input, ctx.user, ctx.ip))),
 
-  assign: permissionProcedure('UPDATE_ORDER_STATUS').input(z.object({ id: z.string(), assignedToId: z.string().nullable() })).mutation(async ({ ctx, input }) => {
-    const o = await ctx.db.salesOrder.update({ where: { id: input.id }, data: { assignedToId: input.assignedToId }, include: { assignedTo: { select: { name: true } } } });
+  /** Choose (or change) who handles the order: whoever can enter orders or move them along. */
+  assign: anyPermissionProcedure('CREATE_ORDERS', 'UPDATE_ORDER_STATUS').input(z.object({ id: z.string(), assignedToId: z.string().nullable() })).mutation(async ({ ctx, input }) => {
+    if (input.assignedToId) await assertHandler(ctx.db, input.assignedToId);
+    const o = await ctx.db.salesOrder.update({ where: { id: input.id }, data: { assignedToId: input.assignedToId }, include: { assignedTo: { select: { name: true } }, customer: { select: { name: true } } } });
+    if (input.assignedToId && input.assignedToId !== ctx.user.id) {
+      await notify(ctx.db, { userIds: [input.assignedToId], title: `You're handling ${o.number}`, body: `${o.customer.name} · assigned by ${ctx.user.name}`, link: `/app/orders/${o.id}`, channels: ['PUSH'] });
+    }
     await logActivity(ctx.db, { actorId: ctx.user.id, action: 'order.assign', entityType: 'SalesOrder', entityId: o.id, ip: ctx.ip, summary: `${o.number} assigned to ${o.assignedTo?.name ?? 'nobody'}` });
     return { ok: true };
   }),
@@ -131,7 +137,7 @@ export const ordersRouter = router({
 
   /** Per item: still to invoice, in stock, short, already on order from a supplier for this order. */
   shortfall: permissionProcedure('VIEW_ORDERS').input(z.object({ id: z.string() })).query(({ ctx, input }) => orderShortfall(ctx.db, input.id)),
-  staff: permissionProcedure('VIEW_ORDERS').query(({ ctx }) => ctx.db.user.findMany({ where: { role: { in: ['OWNER', 'EMPLOYEE'] }, isActive: true }, select: { id: true, name: true, mobile: true }, orderBy: { name: 'asc' } })),
+  staff: permissionProcedure('VIEW_ORDERS').query(({ ctx }) => ctx.db.user.findMany({ where: { role: { in: ['OWNER', 'EMPLOYEE'] }, isActive: true }, select: { id: true, name: true, mobile: true, role: true }, orderBy: { name: 'asc' } })),
 });
 
 // ------------------------------------------------------------------ proformas

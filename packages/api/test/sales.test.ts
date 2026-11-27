@@ -216,6 +216,23 @@ describe('orders → invoice → dispatch', () => {
     expect((await c.products.search({ q: `nothing-${tag()}` })).rows).toHaveLength(0);
   });
 
+  it('lets whoever enters an order choose an employee to handle it, and tells them', async () => {
+    const handler = await makeUser('EMPLOYEE', { permissions: ['VIEW_ORDERS'] });
+    const c = await api(clerk);
+    const o = await c.orders.create({ customerId: gj.id, lines: [{ variantId: gel.v, qty: 1 }], assignedToId: handler.id });
+    expect((await c.orders.get({ id: o.id })).assignedTo?.id).toBe(handler.id);
+    expect(await prisma.notification.count({ where: { userId: handler.id, title: `You're handling ${o.number}`, channel: 'IN_APP' } })).toBe(1);
+    await expect(c.orders.create({ customerId: gj.id, lines: [{ variantId: gel.v, qty: 1 }], assignedToId: owner.id })).rejects.toThrow(/active employee/);
+
+    const open = await c.orders.create({ customerId: gj.id, lines: [{ variantId: gel.v, qty: 1 }] });
+    expect((await c.orders.get({ id: open.id })).assignedTo).toBeNull();
+    expect((await c.orders.list({ unassigned: true })).some((x) => x.id === open.id)).toBe(true);
+    await c.orders.assign({ id: open.id, assignedToId: handler.id }); // the clerk can enter orders, so can assign
+    expect(await prisma.notification.count({ where: { userId: handler.id, title: `You're handling ${open.number}` } })).toBeGreaterThan(0);
+    expect((await c.orders.list({ unassigned: true })).some((x) => x.id === open.id)).toBe(false);
+    await expect(c.orders.assign({ id: open.id, assignedToId: owner.id })).rejects.toThrow(/active employee/);
+  });
+
   it('tells the whole order team about a new order, but not whoever entered it', async () => {
     const packer = await makeUser('EMPLOYEE', { permissions: ['VIEW_ORDERS', 'SCAN_DISPATCH'] });
     const noOrders = await makeUser('EMPLOYEE', { permissions: [] });

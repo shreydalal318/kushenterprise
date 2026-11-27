@@ -36,7 +36,9 @@ export async function createOrder(tx: Tx, input: OrderInput, actor: { id: string
   const prices = await resolveCustomerPrices(tx, input.customerId, [...new Set(variants.map((v) => v.productId))]);
   const today = new Date().toISOString().slice(0, 10);
   const number = await nextDocNumber(tx, 'SALES_ORDER', today);
-  const assignedToId = input.assignedToId ?? doc.customer.assignedEmployeeId ?? null;
+  // Whoever enters the order chooses who handles it; orders customers place themselves start unassigned.
+  const assignedToId = input.source === 'STAFF' ? input.assignedToId ?? null : null;
+  if (assignedToId) await assertHandler(tx, assignedToId);
   const o = await tx.salesOrder.create({
     data: {
       number, customerId: doc.customer.id, forDoctorId: doc.doctor?.id ?? null, status: 'PLACED', source: input.source,
@@ -50,8 +52,10 @@ export async function createOrder(tx: Tx, input: OrderInput, actor: { id: string
   await logActivity(tx, { actorId: actor.id, action: 'order.create', entityType: 'SalesOrder', entityId: o.id, ip, summary: `Order ${number} for ${doc.customer.name}${doc.doctor ? ` (for ${doc.doctor.name})` : ''}: ${input.lines.length} line(s)` });
   const units = input.lines.reduce((t, l) => t + l.qty, 0);
   // Every order, from a customer or entered at the counter, goes to the whole order team (except whoever entered it).
-  const team = [...(await orderStaffIds(tx)), ...(assignedToId ? [assignedToId] : [])].filter((id) => id !== actor.id);
-  await notify(tx, { userIds: team, title: `New order ${number}`, body: `${doc.customer.name}${doc.doctor ? ` for ${doc.doctor.name}` : ''}: ${units} unit(s)${input.surgeryDate ? `, surgery ${input.surgeryDate}` : ''}`, link: `/app/orders/${o.id}`, channels: ['PUSH'] });
+  const summary = `${doc.customer.name}${doc.doctor ? ` for ${doc.doctor.name}` : ''}: ${units} unit(s)${input.surgeryDate ? `, surgery ${input.surgeryDate}` : ''}`;
+  const team = (await orderStaffIds(tx)).filter((id) => id !== actor.id && id !== assignedToId);
+  await notify(tx, { userIds: team, title: `New order ${number}`, body: assignedToId ? summary : `${summary} · not assigned yet`, link: `/app/orders/${o.id}`, channels: ['PUSH'] });
+  if (assignedToId && assignedToId !== actor.id) await notify(tx, { userIds: [assignedToId], title: `You're handling ${number}`, body: summary, link: `/app/orders/${o.id}`, channels: ['PUSH'] });
   if (input.source !== 'STAFF') {
     await notifyCustomer(tx, doc.customer.id, { title: `Order ${number} received`, body: `We have your order for ${units} unit(s). We will message you when it is invoiced, dispatched and delivered.`, link: `/portal/orders/${o.id}` });
   }
@@ -78,6 +82,12 @@ function dispatchedThrough(method: DispatchMethod, d: { courier?: string | null;
 }
 
 /** Move an order along Placed → Confirmed → Packed → Dispatched → Delivered (hold / cancel aside). */
+/** Orders are handled by employees (the owner oversees them all). */
+export async function assertHandler(tx: Tx, userId: string) {
+  const u = await tx.user.findFirst({ where: { id: userId, role: 'EMPLOYEE', isActive: true }, select: { id: true } });
+  if (!u) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose an active employee to handle the order' });
+}
+
 export async function changeOrderStatus(tx: Tx, input: StatusInput, actor: { id: string }, ip?: string | null) {
   const o = await tx.salesOrder.findUnique({ where: { id: input.id }, include: { lines: true, invoices: { where: { status: 'ISSUED' }, select: { id: true } } } });
   if (!o) throw new TRPCError({ code: 'NOT_FOUND' });
