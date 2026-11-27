@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { Alert, Button, Card, H1, H2, KV, Loading, P, Row, Screen, Small } from '@/components/ui';
@@ -8,7 +8,7 @@ import { rupees } from '@/lib/format';
 import { C, R } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
 
-const DOT: Record<string, string> = { AVAILABLE: C.ok, LIMITED: C.warn, ON_REQUEST: C.line };
+const DOT: Record<string, string> = { AVAILABLE: C.ok, LIMITED: C.warn, ON_REQUEST: C.muted };
 
 /** Power grid: tap + / − under each power, then add them all to the cart. */
 export default function ProductScreen() {
@@ -16,7 +16,13 @@ export default function ProductScreen() {
   const q = trpc.portal.product.useQuery({ id: id! });
   const cart = useCart();
   const [qty, setQty] = useState<Record<string, number>>({});
-  const [added, setAdded] = useState(0);
+  // Opens showing what is already in the cart for this product, so it can be adjusted.
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    if (!q.data || loaded) return;
+    setQty(Object.fromEntries(q.data.variants.map((v) => [v.id, cart.items[v.id] ?? 0]).filter(([, n]) => (n as number) > 0)));
+    setLoaded(true);
+  }, [q.data]); // eslint-disable-line react-hooks/exhaustive-deps
   const groups = useMemo(() => {
     const m = new Map<string, NonNullable<typeof q.data>['variants']>();
     for (const v of q.data?.variants ?? []) {
@@ -29,13 +35,14 @@ export default function ProductScreen() {
   if (!q.data) return <Loading />;
   const p = q.data;
   const total = Object.values(qty).reduce((t, n) => t + n, 0);
+  const before = p.variants.reduce((t, v) => t + (cart.items[v.id] ?? 0), 0);
   const bump = (vid: string, d: number) => setQty((x) => ({ ...x, [vid]: Math.max(0, Math.min(500, (x[vid] ?? 0) + d)) }));
+  const save = () => { cart.setMany(Object.fromEntries(p.variants.map((v) => [v.id, qty[v.id] ?? 0]))); router.back(); };
   return (
-    <Screen footer={<>
-      {added > 0 && !total && <Alert tone="ok">Added {added} unit(s) to your cart.</Alert>}
-      <Button title={total ? `Add ${total} to cart · ${rupees(total * p.price)}` : added ? 'Go to cart' : 'Choose quantities'} disabled={!total && !added}
-        onPress={() => { if (!total) { router.push('/customer/cart'); return; } cart.add(Object.entries(qty).map(([variantId, n]) => ({ variantId, qty: n }))); setAdded(total); setQty({}); }} />
-    </>}>
+    <Screen footer={
+      <Button title={total ? `${before ? 'Update cart' : 'Add to cart'} · ${total} ${p.unit} · ${rupees(total * p.price)}` : before ? 'Remove from cart' : 'Tap + to choose quantities'}
+        disabled={!total && !before} variant={!total && before ? 'danger' : 'primary'} onPress={save} />
+    }>
       <Stack.Screen options={{ title: p.code }} />
       <Small>{[p.brand, p.category].filter(Boolean).join(' · ')}</Small>
       <H1>{p.name}</H1>

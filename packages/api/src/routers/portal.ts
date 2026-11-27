@@ -94,6 +94,8 @@ export const portalRouter = router({
         id: p.id, code: p.code, name: p.name, image: p.imageIds[0] ?? null, category: p.category.name, brand: p.brand?.name ?? null,
         isLens: p.isLens, lensType: p.lensType, material: p.material, preloaded: p.preloaded, unit: p.unit,
         price: prices.get(p.id)!.rate, mrp: num(p.mrp), variantCount: p.variants.length,
+        // Lets the app add a single-variant item straight from the list.
+        variantId: p.variants.length === 1 ? p.variants[0]!.id : null,
         powerRange: powers.length ? { min: Math.min(...powers), max: Math.max(...powers) } : null,
         stock: (qty <= 0 ? 'ON_REQUEST' : anyAvailable ? 'AVAILABLE' : 'LIMITED') as StockBadge,
       };

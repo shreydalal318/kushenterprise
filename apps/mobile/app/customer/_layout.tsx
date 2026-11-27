@@ -16,7 +16,7 @@ export default function CustomerLayout() {
     <CartProvider userId={me?.id ?? 'pending'}>
       <Stack screenOptions={{ headerTintColor: C.navy, headerTitleStyle: { fontWeight: '700' }, contentStyle: { backgroundColor: C.canvas } }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="product/[id]" options={{ title: 'Product' }} />
+        <Stack.Screen name="product/[id]" options={{ title: 'Choose quantity', presentation: 'modal' }} />
         <Stack.Screen name="order/[id]" options={{ title: 'Order' }} />
         <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
       </Stack>

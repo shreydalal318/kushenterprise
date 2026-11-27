@@ -75,7 +75,6 @@ export default function AccountScreen() {
           <Button variant="secondary" title="Send request" loading={req.isPending} onPress={() => req.mutate({ message: msg })} />
         </>
       ) : <Loading />)}
-      <Button variant="secondary" title="Notifications" onPress={() => router.push('/customer/notifications')} />
       <Button variant="danger" title="Sign out" onPress={() => void signOut().then(() => router.replace('/login'))} />
     </Screen>
   );

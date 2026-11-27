@@ -34,7 +34,7 @@ export default function CartScreen() {
       const r = await place.mutateAsync(input);
       cart.clear(); requestId.current = newRequestId('app');
       await utils.portal.invalidate();
-      router.replace(`/customer/order/${r.id}`);
+      router.replace(`/customer/order/${r.id}?placed=1`);
     } catch (e) {
       if (!isNetworkError(e)) return;
       // No signal: keep the order on the phone and send it automatically later (same request id → no duplicate).
@@ -44,9 +44,9 @@ export default function CartScreen() {
   }
 
   if (queued) return <Screen><Alert tone="warn">No connection. Your order is saved on this phone and will be sent automatically when you are back online.</Alert><Button title="Back to home" onPress={() => { setQueued(false); router.replace('/customer'); }} /></Screen>;
-  if (!ids.length) return <Screen><Empty>Your cart is empty.</Empty><Button title="Browse the catalogue" onPress={() => router.push('/customer/catalogue')} /></Screen>;
+  if (!ids.length) return <Screen><Empty>Your cart is empty.</Empty><Button title="Start ordering" onPress={() => router.navigate('/customer')} /></Screen>;
   return (
-    <Screen>
+    <Screen footer={<Button title={rows.length ? `Place order · ${rupees(subtotal)}` : 'Place order'} loading={place.isPending} disabled={!surgeryOk} onPress={() => void submit()} />}>
       {rows.map((l) => (
         <Card key={l.variantId}>
           <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -63,6 +63,9 @@ export default function CartScreen() {
           </Row>
         </Card>
       ))}
+      <Pressable accessibilityRole="button" onPress={() => router.navigate('/customer')} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 4 }}>
+        <Ionicons name="add-circle-outline" size={18} color={C.teal700} /><Text style={{ color: C.teal700, fontWeight: '700' }}>Add more items</Text>
+      </Pressable>
       <Card><KV k="Items (before GST)" v={rupees(subtotal)} /><Small>GST is added on the tax invoice when your order is dispatched.</Small></Card>
       <H2>Delivery</H2>
       <Card>
@@ -85,7 +88,6 @@ export default function CartScreen() {
       <Field label="Surgery date (optional, YYYY-MM-DD)" value={surgery} onChangeText={setSurgery} placeholder="2026-12-01" error={surgeryOk ? null : 'Use YYYY-MM-DD'} />
       <Field label="Note for us (optional)" value={note} onChangeText={setNote} multiline style={{ minHeight: 70, borderWidth: 1, borderColor: C.line, borderRadius: R.md, padding: 10, backgroundColor: C.white }} />
       {place.error && !isNetworkError(place.error) && <Alert>{errorText(place.error)}</Alert>}
-      <Button title="Place order" loading={place.isPending} disabled={!surgeryOk} onPress={() => void submit()} />
     </Screen>
   );
 }

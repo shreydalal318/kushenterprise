@@ -2,22 +2,27 @@ import { useState } from 'react';
 import { TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { Alert, Badge, Button, Card, H2, P, Row, s, Screen, Small } from '@/components/ui';
-import { useAuth } from '@/lib/auth';
+import { useAuth, useCan } from '@/lib/auth';
 import { discard, useOutbox } from '@/lib/outbox';
 import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
 
 const STATUS: Record<string, [string, 'ok' | 'warn' | 'danger' | 'teal']> = { IN_STOCK: ['In stock', 'ok'], LOW_STOCK: ['Low', 'warn'], OUT_OF_STOCK: ['Out', 'danger'], EXPIRING_SOON: ['Expiring soon', 'teal'] };
 
-/** Stock check, offline queue, notifications and account. */
+/** Scan and receive, stock check, offline queue, notifications and account. */
 export default function More() {
   const { me, signOut } = useAuth();
+  const can = useCan();
   const [q, setQ] = useState('');
   const stock = trpc.inventory.overview.useQuery({ q: q || undefined }, { enabled: q.length >= 2 });
   const unread = trpc.notifications.unreadCount.useQuery();
   const outbox = useOutbox();
   return (
     <Screen>
+      <Row style={{ gap: 10 }}>
+        <Button style={{ flex: 1 }} variant="secondary" title="Scan a barcode" onPress={() => router.push('/staff/scan')} />
+        {can('MANAGE_STOCK') && <Button style={{ flex: 1 }} variant="secondary" title="Receive goods" onPress={() => router.push('/staff/receive')} />}
+      </Row>
       <H2>Stock check</H2>
       <TextInput accessibilityLabel="Search stock" value={q} onChangeText={setQ} placeholder="Product name or code" style={s.input} placeholderTextColor="#9aa5b1" />
       {stock.data?.slice(0, 20).map((r) => (

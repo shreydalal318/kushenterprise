@@ -11,7 +11,7 @@ import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
 
 export default function OrderScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, placed } = useLocalSearchParams<{ id: string; placed?: string }>();
   const q = trpc.portal.order.useQuery({ id: id! });
   const utils = trpc.useUtils();
   const cart = useCart();
@@ -23,6 +23,7 @@ export default function OrderScreen() {
   return (
     <Screen>
       <Stack.Screen options={{ title: o.number }} />
+      {!!placed && <Alert tone="ok">Order placed. We will confirm it shortly; every update shows here and in your notifications.</Alert>}
       <Row style={{ justifyContent: 'space-between' }}><Small>Placed {formatDateTime(o.createdAt)}</Small><OrderStatusBadge status={o.status} /></Row>
       {(o.status === 'ON_HOLD' || o.status === 'CANCELLED') && <Alert tone={o.status === 'ON_HOLD' ? 'warn' : 'danger'}>{o.status === 'ON_HOLD' ? 'On hold' : 'Cancelled'}{held?.note ? `: ${held.note}` : '.'}</Alert>}
       <Card>

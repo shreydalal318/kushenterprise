@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 type Cart = Record<string, number>;
-interface CartApi { items: Cart; count: number; set: (variantId: string, qty: number) => void; add: (l: { variantId: string; qty: number }[]) => void; clear: () => void }
+interface CartApi { items: Cart; count: number; set: (variantId: string, qty: number) => void; add: (l: { variantId: string; qty: number }[]) => void; setMany: (q: Record<string, number>) => void; clear: () => void }
 const Ctx = createContext<CartApi | null>(null);
 
 /** Customer cart: variant id → quantity, saved on the phone (prices are always fetched fresh). */
@@ -15,6 +15,8 @@ export function CartProvider({ userId, children }: { userId: string; children: R
     return {
       items, count: Object.values(items).reduce((t, n) => t + n, 0),
       set: (id, q) => { const n = { ...items }; if (q > 0) n[id] = Math.min(500, q); else delete n[id]; save(n); },
+      // Several quantities at once (a lens power grid); 0 removes the line.
+      setMany: (qs) => { const n = { ...items }; for (const [id, q] of Object.entries(qs)) { if (q > 0) n[id] = Math.min(500, q); else delete n[id]; } save(n); },
       add: (ls) => { const n = { ...items }; for (const l of ls) if (l.qty > 0) n[l.variantId] = Math.min(500, (n[l.variantId] ?? 0) + l.qty); save(n); },
       clear: () => save({}),
     };
