@@ -1,9 +1,8 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { DISPATCH_METHOD_LABEL, DISPATCH_METHODS, formatDate, formatDateTime, istDateString, nextStatuses, ORDER_STATUS_LABEL, type DispatchMethod, type OrderStatus } from '@kush/core';
-import { Scanner } from '@/components/scanner';
 import { Alert, Button, Card, Field, H2, KV, Loading, P, Row, Screen, Small } from '@/components/ui';
 import { OrderStatusBadge } from '@/components/status';
 import { LinkedPos, OrderFromSupplier, StockNote } from '@/components/order-sourcing';
@@ -12,15 +11,14 @@ import { errorText } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
 
-/** Order detail for staff: stock and sourcing, status steps, scan-to-pack, dispatch details. */
+/** Order detail for staff: stock and sourcing, then Make tax invoice -> Dispatch -> Delivered. */
 export default function StaffOrder() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const can = useCan();
   const utils = trpc.useUtils();
   const q = trpc.orders.get.useQuery({ id: id! });
   const setStatus = trpc.orders.setStatus.useMutation({ onSuccess: () => utils.orders.invalidate() });
-  const verify = trpc.orders.verifyPacked.useMutation({ onSuccess: (r) => { if (r.ok) void utils.orders.invalidate(); } });
-  const [mode, setMode] = useState<null | 'pack' | 'dispatch' | 'note' | 'deliver' | 'source'>(null);
+  const [mode, setMode] = useState<null | 'dispatch' | 'note' | 'deliver' | 'source'>(null);
   const sq = trpc.orders.shortfall.useQuery({ id: id! });
   const [noteFor, setNoteFor] = useState<OrderStatus | null>(null);
   const [note, setNote] = useState('');
@@ -28,9 +26,6 @@ export default function StaffOrder() {
   const staff = trpc.orders.staff.useQuery();
   const [receivedBy, setReceivedBy] = useState('');
   const deliver = trpc.orders.markDelivered.useMutation({ onSuccess: () => { void utils.orders.invalidate(); void utils.deliveries.invalidate(); setMode(null); } });
-  const counts = useRef<Record<string, number>>({});
-  const [packed, setPacked] = useState<Record<string, number>>({});
-  const [packMsg, setPackMsg] = useState<string | null>(null);
   if (!q.data) return q.error ? <Screen><Alert>{errorText(q.error)}</Alert></Screen> : <Loading />;
   const o = q.data;
   const next = nextStatuses(o.status);
@@ -38,18 +33,8 @@ export default function StaffOrder() {
   const toOrder = (sq.data?.lines ?? []).reduce((t, l) => t + l.toOrder, 0);
   const isOpen = !['CANCELLED', 'DELIVERED'].includes(o.status);
   const backorder = o.lines.reduce((t, l) => t + l.backorder, 0);
+  const hasInvoice = o.invoices.some((i) => i.status === 'ISSUED');
 
-  async function onPackScan(code: string) {
-    const r = await utils.scan.resolve.fetch({ code }, { staleTime: 0 }).catch(() => null);
-    if (!r?.found) { setPackMsg(`Unknown barcode ${code}`); return; }
-    const line = o.lines.find((l) => l.variant.id === r.variant.id);
-    if (!line) { setPackMsg(`${r.product.name} ${r.variant.label ?? ''} is NOT on this order`); return; }
-    const n = (counts.current[line.variant.id] ?? 0) + 1;
-    if (n > line.qty) { setPackMsg(`Too many: only ${line.qty} ordered`); return; }
-    counts.current = { ...counts.current, [line.variant.id]: n };
-    setPacked(counts.current); setPackMsg(null);
-  }
-  const allPacked = o.lines.every((l) => (packed[l.variant.id] ?? 0) >= l.qty);
 
   function go(s: OrderStatus) {
     if (s === 'DISPATCHED') { setD((x) => ({ ...x, method: x.method || (o.suggestedDispatch as DispatchMethod) })); return setMode('dispatch'); }
@@ -67,9 +52,9 @@ export default function StaffOrder() {
       <Card>
         {o.lines.map((l) => (
           <Row key={l.id} style={{ justifyContent: 'space-between' }}>
-            <View style={{ flex: 1 }}><P>{l.variant.product.name}</P><Small>{l.variant.label ?? l.variant.sku}</Small>{isOpen && mode !== 'pack' && <StockNote line={stock.get(l.variant.id)} />}</View>
+            <View style={{ flex: 1 }}><P>{l.variant.product.name}</P><Small>{l.variant.label ?? l.variant.sku}</Small>{isOpen && <StockNote line={stock.get(l.variant.id)} />}</View>
             <View style={{ alignItems: 'flex-end' }}>
-              <P style={{ fontWeight: '700' }}>{mode === 'pack' ? `${packed[l.variant.id] ?? 0} / ${l.qty}` : l.qty}</P>
+              <P style={{ fontWeight: '700' }}>{l.qty}</P>
               {l.backorder > 0 && o.status !== 'PLACED' && <Small style={{ color: C.warn }}>{l.backorder} to send</Small>}
             </View>
           </Row>
@@ -79,26 +64,28 @@ export default function StaffOrder() {
       {isOpen && toOrder > 0 && mode !== 'source' && <Alert tone="warn">{toOrder} unit(s) on this order are not in stock.</Alert>}
       {mode === null && isOpen && backorder > 0 && sq.data && can('CREATE_PURCHASE_ORDERS') && <Button variant={toOrder > 0 ? 'primary' : 'secondary'} title="Order from supplier" onPress={() => setMode('source')} />}
       {mode === 'source' && sq.data && <OrderFromSupplier s={sq.data} onClose={() => setMode(null)} />}
-      {mode === null && can('UPDATE_ORDER_STATUS') && next.length > 0 && (
+      {mode === null && isOpen && (
         <View style={{ gap: 8 }}>
-          {can('SCAN_DISPATCH') && ['PLACED', 'CONFIRMED'].includes(o.status) && <Button title="Pack & verify by scanning" onPress={() => setMode('pack')} />}
-          {next.map((s) => <Button key={s} variant={s === 'CANCELLED' ? 'danger' : 'secondary'} loading={setStatus.isPending && setStatus.variables?.status === s} title={s === 'ON_HOLD' ? 'Put on hold' : s === 'CANCELLED' ? 'Cancel order' : `Mark ${ORDER_STATUS_LABEL[s].toLowerCase()}`} onPress={() => go(s)} />)}
+          {/* The main path: Make tax invoice (also confirms and packs) -> Dispatch -> Delivered. */}
+          {backorder > 0 && ['PLACED', 'CONFIRMED', 'PACKED'].includes(o.status) && can('CREATE_TAX_INVOICE') && (
+            <Button title={hasInvoice ? 'Invoice the remaining items' : 'Make tax invoice'} variant={hasInvoice && o.status === 'PACKED' ? 'secondary' : 'primary'} onPress={() => router.push(`/staff/bill?orderId=${o.id}`)} />
+          )}
+          {o.status === 'PACKED' && hasInvoice && can('UPDATE_ORDER_STATUS') && <Button title="Dispatch" onPress={() => go('DISPATCHED')} />}
+          {o.status === 'DISPATCHED' && can('UPDATE_ORDER_STATUS') && <Button title="Mark delivered" onPress={() => go('DELIVERED')} />}
+          {can('UPDATE_ORDER_STATUS') && (
+            <Row style={{ gap: 8, flexWrap: 'wrap' }}>
+              {o.status === 'PLACED' && <Button variant="secondary" title="Confirm only" loading={setStatus.isPending && setStatus.variables?.status === 'CONFIRMED'} onPress={() => go('CONFIRMED')} />}
+              {o.status === 'ON_HOLD' && next.filter((x) => x !== 'CANCELLED').map((x) => <Button key={x} variant="secondary" title={`Resume (${ORDER_STATUS_LABEL[x].toLowerCase()})`} onPress={() => go(x)} />)}
+              {next.includes('ON_HOLD') && <Button variant="secondary" title="Put on hold" onPress={() => go('ON_HOLD')} />}
+              {next.includes('CANCELLED') && <Button variant="danger" title="Cancel order" onPress={() => go('CANCELLED')} />}
+            </Row>
+          )}
         </View>
-      )}
-      {mode === 'pack' && (
-        <Card>
-          <H2>Scan each box into the parcel</H2>
-          <Scanner onScan={onPackScan} height={200} />
-          {packMsg && <Alert>{packMsg}</Alert>}
-          {verify.data && !verify.data.ok && <Alert>{verify.data.problems.join('; ')}</Alert>}
-          <Button title="Mark packed" disabled={!allPacked} loading={verify.isPending} onPress={() => verify.mutate({ id: o.id, scanned: Object.entries(packed).map(([variantId, qty]) => ({ variantId, qty })) }, { onSuccess: (r) => { if (r.ok) setMode(null); } })} />
-          <Button variant="secondary" title="Close" onPress={() => setMode(null)} />
-        </Card>
       )}
       {mode === 'dispatch' && (
         <Card>
           <H2>How is it going out?</H2>
-          {!o.invoices.some((i) => i.status === 'ISSUED') && <Alert tone="warn">Raise the tax invoice first (Bill tab or web).</Alert>}
+          {!o.invoices.some((i) => i.status === 'ISSUED') && <Alert tone="warn">Make the tax invoice first.</Alert>}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {DISPATCH_METHODS.map((k) => (
               <Pressable key={k} accessibilityRole="radio" accessibilityState={{ selected: d.method === k }} onPress={() => setD({ ...d, method: k })}
