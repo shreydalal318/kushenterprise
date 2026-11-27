@@ -159,6 +159,11 @@ export async function cancelInvoice(tx: Tx, id: string, reason: string, actor: {
   if (inv.allocations.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Payments are applied to this invoice; remove them first' });
   if (inv.creditNotes.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'A credit note exists for this invoice; it cannot be cancelled' });
   await tx.invoice.update({ where: { id }, data: { status: 'CANCELLED', cancelReason: reason, cancelledAt: new Date(), cancelledById: actor.id } });
+  // The order's only invoice cancelled: it is no longer packed for dispatch.
+  if (inv.orderId && !(await tx.invoice.count({ where: { orderId: inv.orderId, status: 'ISSUED' } }))) {
+    const ord = await tx.salesOrder.findUnique({ where: { id: inv.orderId }, select: { status: true } });
+    if (ord?.status === 'PACKED') await tx.salesOrder.update({ where: { id: inv.orderId }, data: { status: 'CONFIRMED', events: { create: { status: 'CONFIRMED', byUserId: actor.id, note: `Invoice ${inv.number} cancelled` } } } });
+  }
   const movements = await tx.stockMovement.findMany({ where: { refType: 'Invoice', refId: id, type: 'SALE' } });
   for (const m of movements) {
     const v = await loadVariant(tx, m.variantId);

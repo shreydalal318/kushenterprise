@@ -81,7 +81,11 @@ function dispatchedThrough(method: DispatchMethod, d: { courier?: string | null;
 export async function changeOrderStatus(tx: Tx, input: StatusInput, actor: { id: string }, ip?: string | null) {
   const o = await tx.salesOrder.findUnique({ where: { id: input.id }, include: { lines: true, invoices: { where: { status: 'ISSUED' }, select: { id: true } } } });
   if (!o) throw new TRPCError({ code: 'NOT_FOUND' });
-  if (!canMoveTo(o.status, input.status)) throw new TRPCError({ code: 'BAD_REQUEST', message: `An order that is ${ORDER_STATUS_LABEL[o.status].toLowerCase()} cannot be marked ${ORDER_STATUS_LABEL[input.status].toLowerCase()}` });
+  // A back-order shipment: the order is already out and a later invoice hasn't been dispatched yet.
+  const sent = new Set((await tx.dispatch.findMany({ where: { orderId: o.id }, select: { invoiceId: true } })).map((d) => d.invoiceId));
+  const undispatched = o.invoices.filter((i) => !sent.has(i.id));
+  const redispatch = o.status === 'DISPATCHED' && input.status === 'DISPATCHED' && undispatched.length > 0;
+  if (!redispatch && !canMoveTo(o.status, input.status)) throw new TRPCError({ code: 'BAD_REQUEST', message: `An order that is ${ORDER_STATUS_LABEL[o.status].toLowerCase()} cannot be marked ${ORDER_STATUS_LABEL[input.status].toLowerCase()}` });
   if (input.status === 'CANCELLED' && o.invoices.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'This order has invoices; cancel those first' });
   let deliveredWith: string | null = null; // "Ramesh (98250 12345)" for the customer's message
   if (input.status === 'DISPATCHED') {
@@ -100,7 +104,7 @@ export async function changeOrderStatus(tx: Tx, input: StatusInput, actor: { id:
       else throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose who is delivering it' });
     }
     if (person) deliveredWith = `${person.name}${person.mobile ? ` (${person.mobile})` : ''}`;
-    const invoiceId = dsp.invoiceId ?? o.invoices[o.invoices.length - 1]!.id;
+    const invoiceId = dsp.invoiceId ?? (undispatched.at(-1) ?? o.invoices.at(-1))!.id;
     const exists = await tx.dispatch.findUnique({ where: { invoiceId } });
     const data = {
       orderId: o.id, invoiceId, method, courier: method === 'COURIER' || method === 'TRANSPORT' ? dsp.courier ?? null : null, docketNo: method === 'COURIER' || method === 'TRANSPORT' ? dsp.docketNo ?? null : null,
@@ -112,7 +116,7 @@ export async function changeOrderStatus(tx: Tx, input: StatusInput, actor: { id:
     await tx.invoice.update({ where: { id: invoiceId }, data: { dispatchedThrough: dispatchedThrough(method, dsp, person?.name ?? null), dispatchDocNo: data.docketNo } });
     if (person?.id && person.id !== actor.id) {
       const ship = (o.shippingSnapshot ?? {}) as { name?: string; addressLines?: string[] };
-      await notify(tx, { userIds: [person.id], title: `Delivery: ${o.number}`, body: `${ship.name ?? ''}, ${(ship.addressLines ?? []).join(', ')}`, link: `/app/orders/${o.id}`, channels: ['PUSH'] });
+      await notify(tx, { userIds: [person.id], title: `Delivery: ${o.number}`, body: `${ship.name ?? ''}, ${(ship.addressLines ?? []).join(', ')}`, link: '/app/deliveries', channels: ['PUSH'] });
     }
   }
   if (input.status === 'DELIVERED') {

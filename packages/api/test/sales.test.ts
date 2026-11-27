@@ -163,6 +163,27 @@ describe('orders → invoice → dispatch', () => {
     expect((await c.orders.get({ id: o.id })).status).toBe('DISPATCHED');
   });
 
+  it('dispatches a back-order shipment once its invoice is made', async () => {
+    const c = await api(clerk);
+    const pickup = { dispatchDate: today, method: 'PICKUP' as const };
+    const o = await c.orders.create({ customerId: gj.id, lines: [{ variantId: gel.v, qty: 3 }] });
+    await c.invoices.create({ customerId: gj.id, orderId: o.id, date: today, lines: [{ variantId: gel.v, qty: 2 }] });
+    await c.orders.setStatus({ id: o.id, status: 'DISPATCHED', dispatch: pickup });
+    await expect(c.orders.setStatus({ id: o.id, status: 'DISPATCHED', dispatch: pickup })).rejects.toThrow(/cannot be marked/); // nothing new to send
+    const second = await c.invoices.create({ customerId: gj.id, orderId: o.id, date: today, lines: [{ variantId: gel.v, qty: 1 }] });
+    await c.orders.setStatus({ id: o.id, status: 'DISPATCHED', dispatch: pickup });
+    const d = await c.orders.get({ id: o.id });
+    expect(d.dispatches).toHaveLength(2);
+    expect(d.dispatches.map((x) => x.invoiceId)).toContain(second.id);
+  });
+
+  it('puts the order back to Confirmed when its only invoice is cancelled', async () => {
+    const o = await (await api(clerk)).orders.create({ customerId: gj.id, lines: [{ variantId: gel.v, qty: 1 }] });
+    const inv = await (await api(clerk)).invoices.create({ customerId: gj.id, orderId: o.id, date: today, lines: [{ variantId: gel.v, qty: 1 }] });
+    await (await api()).invoices.cancel({ id: inv.id, reason: 'Wrong customer' });
+    expect((await (await api()).orders.get({ id: o.id })).status).toBe('CONFIRMED');
+  });
+
   it('tells the whole order team about a new order, but not whoever entered it', async () => {
     const packer = await makeUser('EMPLOYEE', { permissions: ['VIEW_ORDERS', 'SCAN_DISPATCH'] });
     const noOrders = await makeUser('EMPLOYEE', { permissions: [] });

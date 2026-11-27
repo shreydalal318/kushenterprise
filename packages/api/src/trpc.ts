@@ -53,8 +53,11 @@ function zodSummary(err: ZodError) {
 const t = initTRPC.context<Context>().create({
   transformer: superjson,
   errorFormatter({ shape, error }) {
+    // Unexpected failures (database, bugs) get a plain message in production; the detail stays in the server log.
+    const masked = error.code === 'INTERNAL_SERVER_ERROR' && process.env.NODE_ENV === 'production';
     return {
       ...shape,
+      message: masked ? 'Something went wrong on our side. Please try again.' : shape.message,
       data: {
         ...shape.data,
         // Field errors keyed by full path ("billingAddress.pincode", "rows.3.rate"), first message each.
