@@ -111,7 +111,7 @@ export async function createInvoice(tx: Tx, input: InvoiceInput, actor: { id: st
     if (b.alloc.serialNos.length) await tx.serialUnit.updateMany({ where: { batchId: b.alloc.batchId, serialNo: { in: b.alloc.serialNos } }, data: { invoiceLineId: line.id } });
   }
 
-  if (input.orderId) await applyToOrder(tx, input.orderId, built.map((b) => ({ variantId: b.variant.id, qty: b.alloc.qty })), +1);
+  if (input.orderId) await applyToOrder(tx, input.orderId, built.map((b) => ({ variantId: b.variant.id, qty: b.alloc.qty })), +1, actor.id);
   if (input.proformaId) await tx.proforma.update({ where: { id: input.proformaId }, data: { status: 'CONVERTED' } });
 
   await logActivity(tx, {
@@ -123,7 +123,7 @@ export async function createInvoice(tx: Tx, input: InvoiceInput, actor: { id: st
 }
 
 /** Add (+1) or remove (−1) invoiced quantities on the order lines (back-order tracking). */
-async function applyToOrder(tx: Tx, orderId: string, items: { variantId: string; qty: number }[], sign: 1 | -1) {
+async function applyToOrder(tx: Tx, orderId: string, items: { variantId: string; qty: number }[], sign: 1 | -1, actorId?: string) {
   const order = await tx.salesOrder.findUnique({ where: { id: orderId }, include: { lines: true } });
   if (!order) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Order not found' });
   if (order.status === 'CANCELLED' && sign > 0) throw new TRPCError({ code: 'BAD_REQUEST', message: 'That order is cancelled' });
@@ -139,6 +139,15 @@ async function applyToOrder(tx: Tx, orderId: string, items: { variantId: string;
         left -= take;
       }
     }
+  }
+  // Raising the invoice is also confirming and packing the order (the goods are picked for it),
+  // so the counter goes straight from invoice to dispatch without separate status steps.
+  if (sign > 0 && actorId && (order.status === 'PLACED' || order.status === 'CONFIRMED')) {
+    const steps = order.status === 'PLACED' ? (['CONFIRMED', 'PACKED'] as const) : (['PACKED'] as const);
+    await tx.salesOrder.update({
+      where: { id: orderId },
+      data: { status: 'PACKED', events: { create: steps.map((status) => ({ status, byUserId: actorId, note: 'With the tax invoice' })) } },
+    });
   }
 }
 

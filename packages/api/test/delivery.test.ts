@@ -17,7 +17,6 @@ async function invoicedOrder(qty = 2) {
   const o = await a.orders.create({ customerId: cust, lines: [{ variantId: gel, qty }] });
   await a.orders.setStatus({ id: o.id, status: 'CONFIRMED' });
   await a.invoices.create({ customerId: cust, orderId: o.id, date: today, lines: [{ variantId: gel, qty }] });
-  await a.orders.setStatus({ id: o.id, status: 'PACKED' });
   return o.id;
 }
 

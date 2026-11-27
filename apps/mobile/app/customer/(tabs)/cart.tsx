@@ -34,7 +34,9 @@ export default function CartScreen() {
       const r = await place.mutateAsync(input);
       cart.clear(); requestId.current = newRequestId('app');
       await utils.portal.invalidate();
-      router.replace(`/customer/order/${r.id}?placed=1`);
+      // Back from the order goes to the Order screen, not the now-empty cart.
+      router.navigate('/customer');
+      router.push(`/customer/order/${r.id}?placed=1`);
     } catch (e) {
       if (!isNetworkError(e)) return;
       // No signal: keep the order on the phone and send it automatically later (same request id → no duplicate).

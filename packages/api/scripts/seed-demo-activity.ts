@@ -134,7 +134,6 @@ async function seedSales() {
     await move(o.id, 'CONFIRMED');
     const invLines = picked; // the serials picked for the order go out on its invoice
     await api.invoices.create({ customerId: cust(customer), orderId: o.id, date: today, clientRequestId: `demo-order-inv-${seq}`, lines: invLines.map((l) => ({ ...l, discPct: 0 })) });
-    await move(o.id, 'PACKED');
     await move(o.id, 'DISPATCHED', { dispatch: { courier, docketNo: `D${Math.floor(1e8 + Math.random() * 9e8)}`, dispatchDate: today } });
     if (status === 'DELIVERED') await move(o.id, 'DELIVERED');
   }
@@ -232,7 +231,6 @@ async function seedDeliveries() {
     const o = await api.orders.create({ customerId: cust(customer), lines: picked.map((l) => ({ variantId: l.variantId, qty: l.qty })), assignedToId: staff?.id ?? null, clientRequestId: `demo-dlv-${++n}` });
     await api.orders.setStatus({ id: o.id, status: 'CONFIRMED' });
     await api.invoices.create({ customerId: cust(customer), orderId: o.id, date: today, clientRequestId: `demo-dlv-inv-${n}`, lines: picked.map((l) => ({ ...l, discPct: 0 })) });
-    await api.orders.setStatus({ id: o.id, status: 'PACKED' });
     await api.orders.setStatus({ id: o.id, status: 'DISPATCHED', dispatch: { dispatchDate: today, ...dispatch } });
     return o;
   };

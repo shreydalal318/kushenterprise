@@ -152,6 +152,17 @@ describe('orders → invoice → dispatch', () => {
     await expect(v.payments.record({ customerId: gj.id, date: today, amount: 1, mode: 'CASH' })).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
+  it('treats raising the invoice as confirming and packing the order', async () => {
+    const c = await api(clerk);
+    const o = await c.orders.create({ customerId: gj.id, lines: [{ variantId: gel.v, qty: 2 }] });
+    await c.invoices.create({ customerId: gj.id, orderId: o.id, date: today, lines: [{ variantId: gel.v, qty: 2 }] });
+    const after = await c.orders.get({ id: o.id });
+    expect(after.status).toBe('PACKED');
+    expect(after.events.map((e) => e.status)).toEqual(['PLACED', 'CONFIRMED', 'PACKED']);
+    await c.orders.setStatus({ id: o.id, status: 'DISPATCHED', dispatch: { dispatchDate: today, method: 'PICKUP' } });
+    expect((await c.orders.get({ id: o.id })).status).toBe('DISPATCHED');
+  });
+
   it('tells the whole order team about a new order, but not whoever entered it', async () => {
     const packer = await makeUser('EMPLOYEE', { permissions: ['VIEW_ORDERS', 'SCAN_DISPATCH'] });
     const noOrders = await makeUser('EMPLOYEE', { permissions: [] });
