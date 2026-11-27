@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "splash": { "image": "./assets/splash.png", "resizeMode": "contain", "backgroundColor": "#ffffff" },
+    "splash": { "backgroundColor": "#ffffff" },
     "ios": {
       "bundleIdentifier": "com.kushenterprise.app",
       "supportsTablet": true,
@@ -15,7 +15,7 @@
     },
     "android": {
       "package": "com.kushenterprise.app",
-      "adaptiveIcon": { "foregroundImage": "./assets/icon.png", "backgroundColor": "#ffffff" },
+      "adaptiveIcon": { "foregroundImage": "./assets/adaptive-icon.png", "backgroundColor": "#ffffff" },
       "permissions": ["android.permission.CAMERA"]
     },
     "web": { "bundler": "metro", "output": "single", "favicon": "./assets/icon.png" },

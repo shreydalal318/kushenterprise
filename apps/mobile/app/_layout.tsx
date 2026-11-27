@@ -6,6 +6,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { IntroSplash } from '@/components/intro-splash';
 import { AuthProvider } from '@/lib/auth';
 import { C } from '@/lib/theme';
 import { makeTrpcClient, trpc } from '@/lib/trpc';
@@ -20,6 +21,7 @@ const CACHED = new Set(['portal.catalogue', 'portal.filters', 'portal.product', 
 export default function RootLayout() {
   const [qc] = useState(() => new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, gcTime: 7 * 24 * 3600_000, retry: 1, networkMode: 'offlineFirst' }, mutations: { networkMode: 'always' } } }));
   const [client] = useState(makeTrpcClient);
+  const [intro, setIntro] = useState(true);
   return (
     <SafeAreaProvider>
       <trpc.Provider client={client} queryClient={qc}>
@@ -39,6 +41,7 @@ export default function RootLayout() {
           </AuthProvider>
         </PersistQueryClientProvider>
       </trpc.Provider>
+      {intro && <IntroSplash onDone={() => setIntro(false)} />}
     </SafeAreaProvider>
   );
 }
