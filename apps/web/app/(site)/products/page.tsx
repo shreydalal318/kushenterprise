@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ImageOff, Lock, Search } from 'lucide-react';
+import { Lock, Search } from 'lucide-react';
 import { LENS_TYPES } from '@kush/core';
 import { fmtPower, LENS_TYPE_LABEL } from '@/components/site/bits';
 import { publicApi } from '@/lib/public-api';
@@ -36,11 +36,7 @@ export default async function Products({ searchParams }: { searchParams: Promise
         {rows.map((p) => (
           <li key={p.id}>
             <Link href={`/products/${encodeURIComponent(p.code)}`} className="group flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-white transition hover:border-teal hover:shadow-sm">
-              <div className="grid h-40 place-items-center bg-canvas">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                {p.image ? <img src={`/api/files/${p.image}`} alt="" className="h-36 w-auto object-contain" /> : <ImageOff className="size-8 text-line" aria-hidden />}
-              </div>
-              <div className="flex flex-1 flex-col gap-1 p-4">
+              <div className="flex flex-1 flex-col gap-1 p-5">
                 <p className="text-xs text-muted">{[p.brand ?? p.category, p.lensType && LENS_TYPE_LABEL[p.lensType], p.preloaded && 'Preloaded'].filter(Boolean).join(' · ')}</p>
                 <h2 className="font-semibold leading-snug text-navy group-hover:underline">{p.name}</h2>
                 {p.powerRange && <p className="text-sm text-muted">Powers {fmtPower(p.powerRange.min)} to {fmtPower(p.powerRange.max)} D</p>}

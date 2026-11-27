@@ -31,6 +31,7 @@ export function CartCheckout() {
   const shipping = info.data?.addresses.filter((a) => a.kind === 'SHIPPING') ?? [];
   const billing = info.data?.addresses.find((a) => a.kind === 'BILLING');
 
+  if (!cart.ready || (ids.length > 0 && !lines.data && !lines.error)) return (<><PageHeader title="Cart" /><p className="text-sm text-muted">Loading your cart…</p></>);
   if (!ids.length) return (<><PageHeader title="Cart" /><Card><CardBody className="py-12 text-center text-sm text-muted">Your cart is empty. <Link className="text-teal-700 hover:underline" href="/portal/catalogue">Browse the catalogue</Link>.</CardBody></Card></>);
   return (
     <div className="flex flex-col gap-5">

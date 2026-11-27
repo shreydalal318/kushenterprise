@@ -3,6 +3,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Download, FileDown } from 'lucide-react';
 import { AGEING_BUCKETS, CHANNEL_LABEL, formatDate, formatDateTime, NOTIFICATION_CHANNELS_FOR_CUSTOMER, type CustomerChannel } from '@kush/core';
+import { SignOutButton } from '@/components/app/sign-out-button';
 import { Button } from '@/components/ui/button';
 import { Alert, Badge, Card, CardBody, CardHeader, PageHeader } from '@/components/ui/card';
 import { Checkbox, TextAreaField } from '@/components/ui/field';
@@ -132,7 +133,8 @@ export function MyProfile() {
   const kv = (k: string, v: unknown) => (v ? <div><dt className="text-xs text-muted">{k}</dt><dd className="text-sm">{String(v)}</dd></div> : null);
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader title="Profile" description={`${p.name} · ${p.code}`} />
+      <PageHeader title="Profile & settings" description={`${p.name} · ${p.code}`}
+        actions={<SignOutButton className="h-10 rounded-lg border border-line bg-white px-4 font-semibold text-ink hover:bg-aqua-50" />} />
       <div className="grid gap-5 lg:grid-cols-2">
         <Card><CardHeader title="Registration" /><CardBody><dl className="grid grid-cols-2 gap-3">
           {kv('Type', p.type.toLowerCase())}{kv('GSTIN', p.gstin)}{kv('PAN', p.pan)}{kv('Drug licence', p.drugLicenceNo)}{kv('Contact person', p.contactPerson)}{kv('Phone', p.mobile)}{kv('Email', p.email)}{kv('Hospital', p.hospital)}{kv('Payment terms', `${p.paymentTermsDays} days`)}{kv('Credit limit', p.creditLimit ? rupees(p.creditLimit) : null)}

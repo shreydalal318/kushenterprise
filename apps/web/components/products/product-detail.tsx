@@ -9,7 +9,6 @@ import { rupees } from '@/lib/format';
 import { trpc } from '@/lib/trpc';
 import { useMe } from '@/lib/use-me';
 import { PriceHistory } from '@/components/pricing/price-history';
-import { ImagesCard } from './images-card';
 import { ProductForm } from './product-form';
 import { VariantsCard } from './variants-card';
 
@@ -34,7 +33,6 @@ export function ProductDetail({ id, created }: { id: string; created?: string })
       {created !== undefined && <Alert tone="ok">Product created{Number(created) > 0 ? ` with ${created} power variants` : ''}.</Alert>}
       <VariantsCard product={p} editable={editable} />
       <ProductForm key={p.updatedAt.toString()} product={p} />
-      <ImagesCard productId={p.id} imageIds={p.imageIds} editable={editable} />
       {p.supplierLinks.length > 0 && (
         <Card>
           <CardHeader title="Supplied by" />

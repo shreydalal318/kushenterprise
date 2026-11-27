@@ -5,7 +5,7 @@ import { Plus, Search } from 'lucide-react';
 import { stateByCode } from '@kush/core';
 import { Badge, Card, PageHeader } from '@/components/ui/card';
 import { LinkButton } from '@/components/ui/link-button';
-import { EmptyRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
+import { EmptyRow, LoadingRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
 import { trpc } from '@/lib/trpc';
 import { useMe } from '@/lib/use-me';
 
@@ -26,7 +26,7 @@ export function SupplierList() {
         <Table minWidth={720}>
           <THead><tr><Th>Supplier</Th><Th>State</Th><Th>GSTIN</Th><Th>Contact</Th><Th className="text-right">Terms</Th><Th className="text-right">Products</Th></tr></THead>
           <tbody>
-            {list.data?.length === 0 && <EmptyRow cols={6}>No suppliers yet.</EmptyRow>}
+            {!list.data && <LoadingRow cols={6} />}{list.data?.length === 0 && <EmptyRow cols={6}>No suppliers yet.</EmptyRow>}
             {list.data?.map((s) => (
               <Tr key={s.id} className="hover:bg-aqua-50/60">
                 <Td><Link href={`/app/suppliers/${s.id}`} className="font-medium text-navy hover:underline">{s.name}</Link><div className="text-xs text-muted">{s.code}{!s.isActive && <Badge tone="danger" className="ml-2">Inactive</Badge>}</div></Td>

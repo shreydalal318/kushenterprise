@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, Card, CardBody, CardHeader, PageHeader } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { SelectField, TextField } from '@/components/ui/field';
-import { EmptyRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
+import { EmptyRow, LoadingRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
 import { cn } from '@/lib/cn';
 import { errorMessage, fieldErrors } from '@/lib/errors';
 import { trpc } from '@/lib/trpc';
@@ -34,7 +34,7 @@ export function SupplierReturns() {
         <Table minWidth={640}>
           <THead><tr><Th>Debit note</Th><Th>Date</Th><Th>Supplier</Th><Th>Reason</Th><Th className="text-right">Units</Th></tr></THead>
           <tbody>
-            {list.data?.length === 0 && <EmptyRow cols={5}>No returns yet.</EmptyRow>}
+            {!list.data && <LoadingRow cols={5} />}{list.data?.length === 0 && <EmptyRow cols={5}>No returns yet.</EmptyRow>}
             {list.data?.map((r) => <Tr key={r.id}><Td className="font-mono text-sm">{r.number}</Td><Td>{formatDate(r.date)}</Td><Td>{r.supplier}</Td><Td className="text-sm">{r.reason}</Td><Td className="num font-semibold">{r.units}</Td></Tr>)}
           </tbody>
         </Table>

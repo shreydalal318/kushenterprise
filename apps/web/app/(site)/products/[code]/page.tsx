@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, ImageOff, Lock, MessageSquare } from 'lucide-react';
+import { ArrowLeft, Lock, MessageSquare } from 'lucide-react';
 import { fmtPower, LENS_TYPE_LABEL } from '@/components/site/bits';
 import { publicApi, siteUrl } from '@/lib/public-api';
 
@@ -45,11 +45,7 @@ export default async function ProductPage({ params }: { params: Promise<{ code: 
     <div className="mx-auto max-w-6xl px-4 py-10">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }} />
       <Link href="/products" className="inline-flex items-center gap-1 text-sm text-teal-700 hover:underline"><ArrowLeft className="size-4" aria-hidden /> All products</Link>
-      <div className="mt-6 grid gap-10 lg:grid-cols-2">
-        <div className="grid min-h-72 place-items-center rounded-2xl border border-line bg-canvas p-6">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {p.images[0] ? <img src={`/api/files/${p.images[0]}`} alt={p.name} className="max-h-80 w-auto object-contain" /> : <ImageOff className="size-12 text-line" aria-hidden />}
-        </div>
+      <div className="mt-6 max-w-3xl">
         <div>
           <p className="text-sm text-muted">{[p.brand, p.category, p.code].filter(Boolean).join(' · ')}</p>
           <h1 className="mt-1 text-3xl font-semibold leading-tight text-navy">{p.name}</h1>

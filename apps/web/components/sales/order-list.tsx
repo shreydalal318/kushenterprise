@@ -6,7 +6,7 @@ import { Plus, Search } from 'lucide-react';
 import { formatDate, formatDateTime, ORDER_STATUS_LABEL, ORDER_STATUSES, type OrderStatus } from '@kush/core';
 import { Badge, Card, PageHeader } from '@/components/ui/card';
 import { LinkButton } from '@/components/ui/link-button';
-import { EmptyRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
+import { EmptyRow, LoadingRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
 import { rupees } from '@/lib/format';
 import { trpc } from '@/lib/trpc';
 import { useMe } from '@/lib/use-me';
@@ -27,23 +27,48 @@ export function OrderList() {
   return (
     <>
       <PageHeader title="Orders" description="Pending orders are listed first." actions={can('CREATE_ORDERS') && <LinkButton href="/app/orders/new"><Plus className="size-4" aria-hidden /> New order</LinkButton>} />
-      <div className="mb-4 flex flex-wrap gap-2">
-        <label className="relative"><span className="sr-only">Search</span><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Order no. or customer" className={`${sel} w-56 pl-9`} /></label>
+      <div className="mb-4 grid grid-cols-2 gap-2 lg:flex lg:flex-wrap">
+        <label className="relative col-span-2"><span className="sr-only">Search</span><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden />
+          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Order no. or customer" className={`${sel} w-full pl-9 lg:w-64`} /></label>
         <select aria-label="Status" className={sel} value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">Any status</option>{ORDER_STATUSES.map((s) => <option key={s} value={s}>{ORDER_STATUS_LABEL[s]}</option>)}
         </select>
         <select aria-label="Assigned to" className={sel} value={assignedToId} onChange={(e) => setAssigned(e.target.value)}>
           <option value="">Anyone</option>{staff.data?.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <input aria-label="From date" type="date" className={sel} value={from} onChange={(e) => setFrom(e.target.value)} />
-        <input aria-label="To date" type="date" className={sel} value={to} onChange={(e) => setTo(e.target.value)} />
+        <label className="flex min-w-0 items-center gap-2 text-sm text-muted">From <input aria-label="From date" type="date" className={`${sel} min-w-0 flex-1`} value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label className="flex min-w-0 items-center gap-2 text-sm text-muted">To <input aria-label="To date" type="date" className={`${sel} min-w-0 flex-1`} value={to} onChange={(e) => setTo(e.target.value)} /></label>
       </div>
-      <Card className="overflow-hidden">
+
+      {/* Phones: one card per order. */}
+      <ul className="flex flex-col gap-2 sm:hidden" aria-busy={!list.data}>
+        {!list.data && Array.from({ length: 4 }, (_, i) => <li key={i} className="h-24 animate-pulse rounded-xl border border-line bg-white" aria-hidden />)}
+        {list.data?.length === 0 && <li><Card className="py-10 text-center text-sm text-muted">No orders.</Card></li>}
+        {list.data?.map((o) => (
+          <li key={o.id}>
+            <Link href={`/app/orders/${o.id}`} className="block rounded-xl border border-line bg-white px-4 py-3 active:bg-aqua-50">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-mono text-sm font-medium text-navy">{o.number}</p>
+                  <p className="truncate font-medium">{o.customer.name}</p>
+                  {(o.forDoctor || o.surgeryDate) && <p className="truncate text-xs text-muted">{[o.forDoctor && `for ${o.forDoctor}`, o.surgeryDate && `Surgery ${formatDate(o.surgeryDate)}`].filter(Boolean).join(' · ')}</p>}
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <OrderBadge status={o.status} />
+                  {o.backorder > 0 && o.status !== 'PLACED' && o.status !== 'CANCELLED' && <Badge tone="warn">{o.backorder} to send</Badge>}
+                </div>
+              </div>
+              <p className="mt-2 flex justify-between text-xs text-muted"><span>{o.units} unit{o.units === 1 ? '' : 's'} · <span className="font-medium text-ink">{rupees(o.value)}</span></span><span>{o.assignedTo ?? formatDateTime(o.createdAt)}</span></p>
+            </Link>
+          </li>
+        ))}
+      </ul>
+
+      <Card className="hidden overflow-hidden sm:block">
         <Table minWidth={860}>
           <THead><tr><Th>Order</Th><Th>Customer</Th><Th>Status</Th><Th className="text-right">Units</Th><Th className="text-right">Value</Th><Th>Assigned</Th><Th>Source</Th></tr></THead>
           <tbody>
-            {list.data?.length === 0 && <EmptyRow cols={7}>No orders.</EmptyRow>}
+            {!list.data && <LoadingRow cols={7} />}{list.data?.length === 0 && <EmptyRow cols={7}>No orders.</EmptyRow>}
             {list.data?.map((o) => (
               <Tr key={o.id} className="hover:bg-aqua-50/60">
                 <Td><Link href={`/app/orders/${o.id}`} className="font-mono text-sm font-medium text-navy hover:underline">{o.number}</Link><div className="text-xs text-muted">{formatDateTime(o.createdAt)}</div></Td>

@@ -35,8 +35,6 @@ export const NAV: { section: string; items: NavItem[] }[] = [
       { href: '/app/scan', label: 'Scan', icon: ScanLine },
       { href: '/app/stock/receive', label: 'Receive goods', icon: PackagePlus, permission: 'MANAGE_STOCK' },
       { href: '/app/products', label: 'Products', icon: Package },
-      { href: '/app/suppliers', label: 'Suppliers', icon: Factory, anyOf: ['CREATE_PURCHASE_ORDERS', 'MANAGE_STOCK', 'VIEW_PRICES_MARGINS'] },
-      { href: '/app/purchase-orders', label: 'Purchase orders', icon: Truck, anyOf: ['CREATE_PURCHASE_ORDERS', 'MANAGE_STOCK'] },
     ],
   },
   {
@@ -45,6 +43,14 @@ export const NAV: { section: string; items: NavItem[] }[] = [
       { href: '/app/customers', label: 'Customers', icon: Users, permission: 'MANAGE_CUSTOMERS' },
       { href: '/app/pricing', label: 'Pricing', icon: Tags, permission: 'VIEW_PRICES_MARGINS' },
       { href: '/app/leads', label: 'Leads', icon: ClipboardList, permission: 'MANAGE_CUSTOMERS' },
+    ],
+  },
+  // Secondary to day-to-day orders and stock, so it sits below them.
+  {
+    section: 'Purchasing',
+    items: [
+      { href: '/app/purchase-orders', label: 'Purchase orders', icon: Truck, anyOf: ['CREATE_PURCHASE_ORDERS', 'MANAGE_STOCK'] },
+      { href: '/app/suppliers', label: 'Suppliers', icon: Factory, anyOf: ['CREATE_PURCHASE_ORDERS', 'MANAGE_STOCK', 'VIEW_PRICES_MARGINS'] },
     ],
   },
   { section: 'Insights', items: [{ href: '/app/analytics', label: 'Analytics & reports', icon: BarChart3, permission: 'VIEW_ANALYTICS' }] },

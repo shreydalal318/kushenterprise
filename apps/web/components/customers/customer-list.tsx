@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { Plus, Search } from 'lucide-react';
 import { Badge, Card, PageHeader } from '@/components/ui/card';
 import { LinkButton } from '@/components/ui/link-button';
-import { EmptyRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
+import { EmptyRow, LoadingRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
 import { trpc } from '@/lib/trpc';
 import { TYPE_LABEL, type CustomerType } from './labels';
 
@@ -41,7 +41,7 @@ export function CustomerList() {
         <Table minWidth={820}>
           <THead><tr><Th>Customer</Th><Th>Type</Th><Th>City</Th><Th>Assigned to</Th><Th>Pricing</Th><Th className="text-right">Logins</Th></tr></THead>
           <tbody>
-            {list.data?.length === 0 && <EmptyRow cols={6}>No customers match.</EmptyRow>}
+            {!list.data && <LoadingRow cols={6} />}{list.data?.length === 0 && <EmptyRow cols={6}>No customers match.</EmptyRow>}
             {list.data?.map((c) => (
               <Tr key={c.id} className="hover:bg-aqua-50/60">
                 <Td>

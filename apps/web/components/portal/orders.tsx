@@ -5,7 +5,7 @@ import { ArrowLeft, CheckCircle2, Circle, RotateCcw, Truck } from 'lucide-react'
 import { formatDate, formatDateTime, ORDER_FLOW, ORDER_STATUS_LABEL } from '@kush/core';
 import { Button } from '@/components/ui/button';
 import { Alert, Card, CardBody, CardHeader, PageHeader } from '@/components/ui/card';
-import { EmptyRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
+import { EmptyRow, LoadingRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
 import { OrderBadge } from '@/components/sales/status';
 import { cn } from '@/lib/cn';
 import { rupees } from '@/lib/format';
@@ -25,7 +25,7 @@ export function MyOrders() {
         <Table minWidth={620}>
           <THead><tr><Th>Order</Th><Th>Status</Th><Th className="text-right">Units</Th><Th className="text-right">Value</Th><Th>For</Th></tr></THead>
           <tbody>
-            {q.data?.length === 0 && <EmptyRow cols={5}>No orders here.</EmptyRow>}
+            {!q.data && <LoadingRow cols={5} />}{q.data?.length === 0 && <EmptyRow cols={5}>No orders here.</EmptyRow>}
             {q.data?.map((o) => (
               <Tr key={o.id}>
                 <Td><Link href={`/portal/orders/${o.id}`} className="font-mono text-sm font-medium text-navy hover:underline">{o.number}</Link><div className="text-xs text-muted">{formatDateTime(o.createdAt)}</div></Td>

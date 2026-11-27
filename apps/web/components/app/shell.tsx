@@ -2,11 +2,10 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, type ReactNode } from 'react';
-import { Menu, X } from 'lucide-react';
+import { ChevronRight, Menu, X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { NAV, navFor, type NavItem } from '@/lib/nav';
 import type { Principal } from '@kush/core';
-import { SignOutButton } from './sign-out-button';
 import { StaffBell } from './staff-bell';
 
 interface ShellUser extends Principal { name: string; email: string | null }
@@ -68,12 +67,15 @@ export function AppShell({ user, children }: { user: ShellUser; children: ReactN
         </div>
         <div className="scroll-dark flex-1 overflow-y-auto">{nav}</div>
         <div className="border-t border-white/10 p-4">
-          <Link href="/app/account" className="block rounded-lg p-2 hover:bg-white/8">
-            <p className="truncate text-sm font-medium">{user.name}</p>
-            <p className="truncate text-xs text-white/60">{user.role === 'OWNER' ? 'Owner' : 'Employee'}{user.email ? ` · ${user.email}` : ''}</p>
+          <StaffBell label className="rounded-lg px-2 py-1.5 text-white/80 hover:bg-white/8 hover:text-white" />
+          {/* Password, devices and sign out are on the account page. */}
+          <Link href="/app/account" className="mt-1 flex items-center gap-2 rounded-lg p-2 hover:bg-white/8">
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">{user.name}</span>
+              <span className="block truncate text-xs text-white/60">{user.role === 'OWNER' ? 'Owner' : 'Employee'} · Account &amp; sign out</span>
+            </span>
+            <ChevronRight className="size-4 shrink-0 text-white/50" aria-hidden />
           </Link>
-          <StaffBell label className="mt-1 rounded-lg px-2 py-1.5 text-white/80 hover:bg-white/8 hover:text-white" />
-          <SignOutButton className="mt-1 px-2 text-white/80 hover:text-white" />
         </div>
       </aside>
       {open && <button aria-label="Close menu" className="fixed inset-0 z-30 bg-ink/40 lg:hidden" onClick={() => setOpen(false)} />}

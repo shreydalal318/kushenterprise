@@ -31,6 +31,10 @@
   body { font-family: var(--font-sans); font-feature-settings: "cv11" 1; }
   :focus-visible { outline: 2px solid var(--color-teal); outline-offset: 2px; }
   ::selection { background: var(--color-aqua); }
+  /* Tailwind v4 gives buttons the default arrow; show the hand on anything clickable. */
+  button:not(:disabled), [role="button"]:not([aria-disabled="true"]), [role="tab"], select:not(:disabled), summary,
+  label:has(> input[type="checkbox"]:not(:disabled)), label:has(> input[type="radio"]:not(:disabled)) { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
   /* Thin scrollbars without arrow buttons (Windows otherwise draws the classic grey bar). */
   * { scrollbar-width: thin; scrollbar-color: rgb(91 103 116 / 0.35) transparent; }
 }
@@ -38,6 +42,9 @@
 /* Scroll areas on the navy sidebar: a faint thumb that shows while the pointer is over it. */
 .scroll-dark { scrollbar-color: transparent transparent; }
 .scroll-dark:hover, .scroll-dark:focus-within { scrollbar-color: rgb(255 255 255 / 0.25) transparent; }
+
+/* Document numbers (KE/SO/2026-27/0012) stay on one line in tables. */
+td .font-mono, td.font-mono { white-space: nowrap; }
 
 /* Indian-number tables align on the decimal point. */
 .num { font-variant-numeric: tabular-nums; text-align: right; }

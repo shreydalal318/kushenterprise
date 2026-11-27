@@ -16,6 +16,20 @@ export const Td = ({ className, ...p }: TdHTMLAttributes<HTMLTableCellElement>) 
 export const Tr = ({ className, children, ...p }: { className?: string; children: ReactNode } & React.HTMLAttributes<HTMLTableRowElement>) => (
   <tr className={cn('border-t border-line', className)} {...p}>{children}</tr>
 );
+/** Placeholder rows while a list loads, so an empty table never reads as "nothing here". */
+export function LoadingRow({ cols, rows = 3 }: { cols: number; rows?: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }, (_, i) => (
+        <tr key={i} aria-hidden className="animate-pulse">
+          <td colSpan={cols} className="px-5 py-3"><div className="h-4 rounded bg-canvas" style={{ width: `${85 - i * 15}%` }} /></td>
+        </tr>
+      ))}
+      <tr className="sr-only"><td colSpan={cols}>Loading…</td></tr>
+    </>
+  );
+}
+
 export function EmptyRow({ cols, children }: { cols: number; children: ReactNode }) {
   return <tr><td colSpan={cols} className="px-5 py-10 text-center text-sm text-muted">{children}</td></tr>;
 }

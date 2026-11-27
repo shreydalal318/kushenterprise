@@ -10,7 +10,7 @@ import { Alert, Badge, Card, PageHeader } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
 import { TextField } from '@/components/ui/field';
 import { LinkButton } from '@/components/ui/link-button';
-import { EmptyRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
+import { EmptyRow, LoadingRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
 import { cn } from '@/lib/cn';
 import { errorMessage } from '@/lib/errors';
 import { rupees } from '@/lib/format';
@@ -30,7 +30,7 @@ export function ProformaList() {
         <Table minWidth={720}>
           <THead><tr><Th>Proforma</Th><Th>Date</Th><Th>Customer</Th><Th>Valid until</Th><Th className="text-right">Total</Th><Th>Status</Th></tr></THead>
           <tbody>
-            {list.data?.length === 0 && <EmptyRow cols={6}>No proformas yet.</EmptyRow>}
+            {!list.data && <LoadingRow cols={6} />}{list.data?.length === 0 && <EmptyRow cols={6}>No proformas yet.</EmptyRow>}
             {list.data?.map((p) => (
               <Tr key={p.id} className="hover:bg-aqua-50/60">
                 <Td><Link href={`/app/proforma/${p.id}`} className="font-mono text-sm font-medium text-navy hover:underline">{p.number}</Link></Td>

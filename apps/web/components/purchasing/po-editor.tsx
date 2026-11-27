@@ -6,7 +6,7 @@ import { computeGst, istDateString, stateByCode } from '@kush/core';
 import { Button } from '@/components/ui/button';
 import { Alert, Badge, Card, CardBody, CardHeader } from '@/components/ui/card';
 import { SelectField, TextAreaField, TextField } from '@/components/ui/field';
-import { EmptyRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
+import { EmptyRow, LoadingRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
 import { ScanField } from '@/components/scan/scan-field';
 import { VariantPicker, type VariantChoice } from '@/components/stock/variant-picker';
 import { cn } from '@/lib/cn';
@@ -108,7 +108,7 @@ export function PoEditor({ poId }: { poId?: string }) {
               <THead><tr><Th className="w-10" /><Th>Item</Th><Th className="text-right">In stock</Th><Th className="text-right">Reorder at</Th><Th className="text-right">On order</Th><Th className="w-28">Order qty</Th><Th className="text-right">Last rate</Th></tr></THead>
               <tbody>
                 {suggestions.isLoading && <EmptyRow cols={7}>Checking stock…</EmptyRow>}
-                {suggestions.data?.length === 0 && <EmptyRow cols={7}>Nothing is below its reorder level{head.supplierId ? ' among this supplier’s products' : ''}.</EmptyRow>}
+                {!suggestions.data && <LoadingRow cols={7} />}{suggestions.data?.length === 0 && <EmptyRow cols={7}>Nothing is below its reorder level{head.supplierId ? ' among this supplier’s products' : ''}.</EmptyRow>}
                 {suggestions.data?.map((r) => (
                   <Tr key={r.variantId}>
                     <Td><input type="checkbox" aria-label={`Order ${r.productName} ${r.label ?? ''}`} checked={r.variantId in picked} onChange={(e) => { const n = { ...picked }; if (e.target.checked) n[r.variantId] = r.suggestedQty; else delete n[r.variantId]; setPicked(n); }} className="size-4 accent-teal-700" /></Td>

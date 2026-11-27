@@ -5,7 +5,7 @@ import { Plus, Search } from 'lucide-react';
 import { formatDate } from '@kush/core';
 import { Badge, Card, PageHeader } from '@/components/ui/card';
 import { LinkButton } from '@/components/ui/link-button';
-import { EmptyRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
+import { EmptyRow, LoadingRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
 import { cn } from '@/lib/cn';
 import { rupees } from '@/lib/format';
 import { trpc } from '@/lib/trpc';
@@ -42,8 +42,8 @@ export function InvoiceList() {
             </select>
           </>
         )}
-        <input aria-label="From date" type="date" className={sel} value={from} onChange={(e) => setFrom(e.target.value)} />
-        <input aria-label="To date" type="date" className={sel} value={to} onChange={(e) => setTo(e.target.value)} />
+        <label className="flex items-center gap-2 text-sm text-muted">From <input aria-label="From date" type="date" className={sel} value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label className="flex items-center gap-2 text-sm text-muted">To <input aria-label="To date" type="date" className={sel} value={to} onChange={(e) => setTo(e.target.value)} /></label>
         {tab === 'invoices' && <span className="ml-auto text-sm text-muted">Billed {rupees(total)} · due {rupees(due)}</span>}
       </div>
       <Card className="overflow-hidden">
@@ -51,7 +51,7 @@ export function InvoiceList() {
           <Table minWidth={820}>
             <THead><tr><Th>Invoice</Th><Th>Date</Th><Th>Customer</Th><Th className="text-right">Total</Th><Th className="text-right">Due</Th><Th>Due date</Th><Th>Status</Th></tr></THead>
             <tbody>
-              {list.data?.length === 0 && <EmptyRow cols={7}>No invoices yet.</EmptyRow>}
+              {!list.data && <LoadingRow cols={7} />}{list.data?.length === 0 && <EmptyRow cols={7}>No invoices yet.</EmptyRow>}
               {list.data?.map((r) => (
                 <Tr key={r.id} className="hover:bg-aqua-50/60">
                   <Td><Link href={`/app/invoices/${r.id}`} className="font-mono text-sm font-medium text-navy hover:underline">{r.number}</Link><div className="text-xs text-muted">{r.taxType === 'INTER_STATE' ? 'IGST' : 'CGST + SGST'}</div></Td>
@@ -69,7 +69,7 @@ export function InvoiceList() {
           <Table minWidth={720}>
             <THead><tr><Th>Credit note</Th><Th>Date</Th><Th>Customer</Th><Th>Against</Th><Th>Reason</Th><Th className="text-right">Amount</Th></tr></THead>
             <tbody>
-              {cns.data?.length === 0 && <EmptyRow cols={6}>No credit notes.</EmptyRow>}
+              {!cns.data && <LoadingRow cols={6} />}{cns.data?.length === 0 && <EmptyRow cols={6}>No credit notes.</EmptyRow>}
               {cns.data?.map((c) => (
                 <Tr key={c.id}>
                   <Td><a href={`/api/documents/credit-note/${c.id}`} target="_blank" className="font-mono text-sm font-medium text-navy hover:underline" rel="noreferrer">{c.number}</a></Td>

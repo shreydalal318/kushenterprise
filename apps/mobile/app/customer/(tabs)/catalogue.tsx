@@ -1,10 +1,8 @@
 import { useState } from 'react';
-import { FlatList, Image, Pressable, TextInput, View } from 'react-native';
+import { FlatList, Pressable, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { Alert, Card, Loading, P, Row, s, Small } from '@/components/ui';
 import { fmtPower, LENS_TYPE_LABEL, StockBadge } from '@/components/status';
-import { API_URL } from '@/lib/config';
 import { rupees } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
@@ -25,10 +23,7 @@ export default function CatalogueScreen() {
         ListEmptyComponent={list.data ? <P muted style={{ textAlign: 'center' }}>Nothing matches.</P> : undefined}
         renderItem={({ item: p }) => (
           <Pressable accessibilityRole="button" accessibilityLabel={p.name} onPress={() => router.push(`/customer/product/${p.id}`)}>
-            <Card style={{ flexDirection: 'row', gap: 12 }}>
-              <View style={{ width: 64, height: 64, borderRadius: 8, backgroundColor: C.canvas, alignItems: 'center', justifyContent: 'center' }}>
-                {p.image ? <Image source={{ uri: `${API_URL}/api/files/${p.image}` }} style={{ width: 60, height: 60 }} resizeMode="contain" /> : <Ionicons name="eye-outline" size={26} color={C.line} />}
-              </View>
+            <Card>
               <View style={{ flex: 1, gap: 2 }}>
                 <Small>{[p.brand ?? p.category, p.lensType && LENS_TYPE_LABEL[p.lensType], p.preloaded && 'Preloaded'].filter(Boolean).join(' · ')}</Small>
                 <P style={{ fontWeight: '700', color: C.navy }} numberOfLines={2}>{p.name}</P>

@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { Alert, Button, Card, H1, H2, KV, Loading, P, Row, Screen, Small } from '@/components/ui';
 import { fmtPower, LENS_TYPE_LABEL } from '@/components/status';
 import { useCart } from '@/lib/cart';
-import { API_URL } from '@/lib/config';
 import { rupees } from '@/lib/format';
 import { C, R } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
@@ -38,7 +37,6 @@ export default function ProductScreen() {
         onPress={() => { if (!total) { router.push('/customer/cart'); return; } cart.add(Object.entries(qty).map(([variantId, n]) => ({ variantId, qty: n }))); setAdded(total); setQty({}); }} />
     </>}>
       <Stack.Screen options={{ title: p.code }} />
-      {p.images[0] && <Image source={{ uri: `${API_URL}/api/files/${p.images[0]}` }} style={{ height: 160, borderRadius: R.lg, backgroundColor: C.white }} resizeMode="contain" />}
       <Small>{[p.brand, p.category].filter(Boolean).join(' · ')}</Small>
       <H1>{p.name}</H1>
       <P><Text style={{ fontWeight: '700', fontSize: 20 }}>{rupees(p.price)}</Text> per {p.unit} + GST {p.gstRate}% · MRP {rupees(p.mrp)}</P>

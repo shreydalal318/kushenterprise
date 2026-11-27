@@ -5,7 +5,7 @@ import { PackagePlus, Search } from 'lucide-react';
 import { formatDate, type StockStatus } from '@kush/core';
 import { Badge, Card, PageHeader } from '@/components/ui/card';
 import { LinkButton } from '@/components/ui/link-button';
-import { EmptyRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
+import { EmptyRow, LoadingRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
 import { rupees } from '@/lib/format';
 import { trpc } from '@/lib/trpc';
 import { useMe } from '@/lib/use-me';
@@ -51,7 +51,7 @@ export function StockOverview() {
         <Table minWidth={820}>
           <THead><tr><Th>Product</Th><Th className="text-right">On hand</Th><Th>Powers / variants</Th><Th>Alerts</Th><Th>Status</Th>{showValue && <Th className="text-right">Value</Th>}</tr></THead>
           <tbody>
-            {rows.data?.length === 0 && <EmptyRow cols={6}>Nothing matches.</EmptyRow>}
+            {!rows.data && <LoadingRow cols={6} />}{rows.data?.length === 0 && <EmptyRow cols={6}>Nothing matches.</EmptyRow>}
             {rows.data?.map((r) => (
               <Tr key={r.productId} className="hover:bg-aqua-50/60">
                 <Td><Link href={`/app/stock/product/${r.productId}`} className="font-medium text-navy hover:underline">{r.name}</Link><div className="text-xs text-muted">{r.code} · {r.category}</div></Td>

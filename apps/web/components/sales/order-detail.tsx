@@ -106,7 +106,24 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
       <div className="grid gap-5 xl:grid-cols-[1fr_340px]">
         <Card className="overflow-hidden">
           <CardHeader title="Items" description={backorder > 0 && o.invoices.length ? `${backorder} unit(s) still to send (back-order)` : undefined} />
-          <Table minWidth={720}>
+          {/* Phones: one row per item instead of a 7-column table. */}
+          <ul className="divide-y divide-line sm:hidden">
+            {o.lines.map((l) => {
+              const st = stock.get(l.variant.id);
+              return (
+                <li key={l.id} className="px-5 py-3">
+                  <div className="flex justify-between gap-3"><span className="font-medium">{l.variant.product.name}</span><span className="shrink-0 font-medium">{rupees(l.amount)}</span></div>
+                  <p className="text-xs text-muted">{l.variant.label ?? l.variant.sku} · {l.qty} × {rupees(l.rate)}</p>
+                  <p className="mt-1 flex flex-wrap gap-x-3 text-xs">
+                    <span className={l.backorder > 0 ? 'font-semibold text-warn' : 'text-ok'}>{l.backorder > 0 ? `${l.backorder} to send` : 'All sent'}</span>
+                    {l.qtyDispatched > 0 && <span className="text-muted">{l.qtyDispatched} invoiced</span>}
+                    {st && l.backorder > 0 && <span className={st.short > 0 ? 'font-semibold text-danger' : 'text-muted'}>{st.available} in stock{st.short > 0 ? ` · short ${st.short}` : ''}{st.onOrder > 0 ? ` · ${st.onOrder} on PO` : ''}</span>}
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+          <Table minWidth={720} className="hidden sm:block">
             <THead><tr><Th>Item</Th><Th className="text-right">Ordered</Th><Th className="text-right">Invoiced</Th><Th className="text-right">To send</Th><Th className="text-right">In stock</Th><Th className="text-right">Rate</Th><Th className="text-right">Amount</Th></tr></THead>
             <tbody>
               {o.lines.map((l) => (

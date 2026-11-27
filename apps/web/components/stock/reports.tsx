@@ -3,7 +3,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { ADJUSTMENT_REASON_LABELS, formatDate, formatDateTime, type AdjustmentReason } from '@kush/core';
 import { Badge, Card, CardHeader, PageHeader } from '@/components/ui/card';
-import { EmptyRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
+import { EmptyRow, LoadingRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
 import { rupees } from '@/lib/format';
 import { trpc } from '@/lib/trpc';
 import { useMe } from '@/lib/use-me';
@@ -71,7 +71,7 @@ export function LowStockReport() {
         <Table minWidth={720}>
           <THead><tr><Th>Item</Th><Th className="text-right">On hand</Th><Th className="text-right">Reorder at</Th><Th className="text-right">Suggested order</Th><Th>Usual supplier</Th></tr></THead>
           <tbody>
-            {q.data?.length === 0 && <EmptyRow cols={5}>Nothing is low. </EmptyRow>}
+            {!q.data && <LoadingRow cols={5} />}{q.data?.length === 0 && <EmptyRow cols={5}>Nothing is low. </EmptyRow>}
             {q.data?.map((r) => (
               <Tr key={r.variantId}>
                 <Td><Link href={`/app/stock/product/${r.productId}`} className="font-medium text-navy hover:underline">{r.productName}</Link><div className="text-xs text-muted">{r.label ?? r.sku}</div></Td>
@@ -99,7 +99,7 @@ export function AdjustmentsList() {
         <Table minWidth={760}>
           <THead><tr><Th>When</Th><Th>Item</Th><Th>Batch</Th><Th className="text-right">Change</Th><Th>Reason</Th><Th>Note</Th><Th>By</Th></tr></THead>
           <tbody>
-            {q.data?.length === 0 && <EmptyRow cols={7}>No adjustments yet.</EmptyRow>}
+            {!q.data && <LoadingRow cols={7} />}{q.data?.length === 0 && <EmptyRow cols={7}>No adjustments yet.</EmptyRow>}
             {q.data?.map((r) => (
               <Tr key={r.id}>
                 <Td className="whitespace-nowrap text-xs text-muted">{formatDateTime(r.at)}</Td>
