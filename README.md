@@ -318,6 +318,18 @@ Use **GitHub Codespaces**: the app and its database run on GitHub, and you use t
 
 When you're done, stop the codespace (**Code → Codespaces → … → Stop**) so it doesn't use your free hours. Your data is kept until you delete the codespace.
 
+## Hosted demo on Render
+
+[`render.yaml`](render.yaml) sets up the web app (Docker, from the [`Dockerfile`](Dockerfile)) and a Postgres database on Render's free plan, in Singapore:
+
+1. In Render: **New → Blueprint**, connect GitHub and choose this repository.
+2. Enter a password for the first owner when asked (10+ characters, letters and a number), then **Apply**.
+3. The first deploy takes about 10–15 minutes. On first start the container applies migrations, creates the owner (`owner@example.com`) and loads the demo data; later starts skip that.
+
+It is set up as a **demo**: `SEED_DEMO=true` loads the demo data and `DEMO_QUICK_LOGIN=true` puts the one-click quick login on the home and sign-in pages, so anyone with the link can sign in as any user. Before real use, set both to `false` on a fresh database (Render → the service → Environment).
+
+Free-plan limits: the app sleeps after 15 minutes without visits and takes about a minute to wake; the free database is removed after 30 days; uploaded files (product photos, logo) are lost on each redeploy unless `STORAGE_DRIVER=s3` is configured.
+
 ## Running locally (with demo data)
 
 On your own computer you need **Node.js 22+**, **Docker Desktop** (for the database) and **Git**.
@@ -361,9 +373,12 @@ Open **http://localhost:3000** (or the Codespaces preview) and sign in:
 | Owner (everything) | `owner@example.com` | `ChangeMe!2026` |
 | Counter staff (orders, billing, customers) | `ravi.counter@demo.local` | `DemoStaff2026` |
 | Store staff (stock, scanning, products) | `sunita.store@demo.local` | `DemoStaff2026` |
-| Customer (Mobile OTP tab) | `90000 10001` | Press **Send code**, then run `pnpm otp` in any terminal to see the 6-digit code |
+| Delivery staff (no permissions: only their own deliveries) | `ramesh.delivery@demo.local` | `DemoStaff2026` |
+| Customer (Mobile OTP tab) | `90000 10001` (private hospital) · `90000 30001` (clinic) · `90000 30002` (government trust) · `90000 30003` (doctor, base rates) | Press **Send code**, then run `pnpm otp` in any terminal to see the 6-digit code |
 
-`pnpm setup:demo` creates `.env` if it is missing (with a random `AUTH_SECRET`), creates the database tables and loads the demo data: 3 suppliers, 30 products with 223 lens powers, 10 customers, 2 price lists, special prices, 638 units of opening stock, demo sales (orders, invoices, payments, a credit note), demo purchase orders and demo website enquiries (leads). Running it again does no harm.
+**Quick login for demos:** set `DEV_QUICK_LOGIN="true"` in `.env` and restart `pnpm dev`. The home page, the sign-in page and the mobile app's sign-in screen then list every user; one click signs in as them, with no password or OTP. It is ignored when `NODE_ENV=production` (`pnpm preview`, real deployments).
+
+`pnpm setup:demo` creates `.env` if it is missing (with a random `AUTH_SECRET`), creates the database tables and loads the demo data: 3 suppliers, 30 products with 223 lens powers, 10 customers, 2 price lists, special prices, 638 units of opening stock, demo sales (orders, invoices, payments, a credit note), demo purchase orders, demo website enquiries (leads), local deliveries by the demo delivery person (one delivered with proof of delivery), an order waiting for pickup and an out-of-stock order raised on the supplier. Running it again does no harm.
 
 The demo sets the company state to Gujarat so GST can be worked out. Enter the real company profile in **Settings → Company**.
 

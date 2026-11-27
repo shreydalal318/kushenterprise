@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
+import { env } from '@kush/api/server';
+import { DevQuickLogin } from '@/components/common/dev-quick-login';
 import { getSessionUser, homeFor } from '@/lib/session';
 import { LoginForm } from './login-form';
 
@@ -14,6 +16,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
       <div className="w-full max-w-sm">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/brand/logo-stacked.png" alt="Kush Enterprise" className="mx-auto mb-8 h-24 w-auto" />
+        {env.devQuickLogin && <DevQuickLogin className="mb-6" />}
         <LoginForm next={next ?? null} />
         <p className="mt-6 text-center text-xs text-muted">
           Doctors, hospitals and clinics: sign in with the mobile number registered with Kush Enterprise.

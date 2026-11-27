@@ -27,6 +27,24 @@ const fyStart = `${financialYear(today).slice(0, 4)}-04-01`;
 /** n days ago, but never before 1 April of this financial year. */
 const ago = (n: number) => { const d = addDays(today, -n); return d < fyStart ? fyStart : d; };
 
+const taken = new Set<string>();
+/** A sale line for `code`: the n-th stocked power for lenses (with serials), else FEFO. */
+async function line(code: string, qty: number, nth = 0) {
+  const bals = await prisma.stockBalance.findMany({
+    where: { qty: { gt: 0 }, variant: { product: { code } } },
+    include: { variant: { include: { product: true } }, batch: true },
+    orderBy: [{ variant: { powerSph: 'asc' } }, { batch: { expiryDate: 'asc' } }],
+  });
+  const fresh = bals.filter((b) => !b.batch.expiryDate || b.batch.expiryDate.toISOString().slice(0, 10) > today);
+  const variantIds = [...new Set(fresh.map((b) => b.variantId))];
+  const variantId = variantIds[nth % variantIds.length]!;
+  const product = fresh.find((b) => b.variantId === variantId)!.variant.product;
+  if (!product.trackSerial) return { variantId, qty };
+  const units = await prisma.serialUnit.findMany({ where: { status: 'IN_STOCK', batch: { variantId }, serialNo: { notIn: [...taken] } }, take: qty, orderBy: { serialNo: 'asc' } });
+  units.forEach((u) => taken.add(u.serialNo));
+  return { variantId, qty: units.length, serialNos: units.map((u) => u.serialNo) };
+}
+
 async function ownerApi() {
   const owner = await prisma.user.findFirst({ where: { role: 'OWNER', isActive: true }, orderBy: { createdAt: 'asc' } });
   if (!owner) throw new Error('No owner account; run pnpm db:seed first.');
@@ -56,24 +74,6 @@ async function seedSales() {
   const customers = await prisma.customer.findMany({ select: { id: true, name: true } });
   const cust = (prefix: string) => customers.find((c) => c.name.startsWith(prefix))!.id;
   const staff = await prisma.user.findFirst({ where: { email: 'ravi.counter@demo.local' }, select: { id: true } });
-
-  const taken = new Set<string>();
-  /** A sale line for `code`: the n-th stocked power for lenses (with serials), else FEFO. */
-  async function line(code: string, qty: number, nth = 0) {
-    const bals = await prisma.stockBalance.findMany({
-      where: { qty: { gt: 0 }, variant: { product: { code } } },
-      include: { variant: { include: { product: true } }, batch: true },
-      orderBy: [{ variant: { powerSph: 'asc' } }, { batch: { expiryDate: 'asc' } }],
-    });
-    const fresh = bals.filter((b) => !b.batch.expiryDate || b.batch.expiryDate.toISOString().slice(0, 10) > today);
-    const variantIds = [...new Set(fresh.map((b) => b.variantId))];
-    const variantId = variantIds[nth % variantIds.length]!;
-    const product = fresh.find((b) => b.variantId === variantId)!.variant.product;
-    if (!product.trackSerial) return { variantId, qty };
-    const units = await prisma.serialUnit.findMany({ where: { status: 'IN_STOCK', batch: { variantId }, serialNo: { notIn: [...taken] } }, take: qty, orderBy: { serialNo: 'asc' } });
-    units.forEach((u) => taken.add(u.serialNo));
-    return { variantId, qty: units.length, serialNos: units.map((u) => u.serialNo) };
-  }
 
   // ---------- Stand-alone counter invoices, back-dated for ageing ----------
   const inv = async (customer: string, date: string, lines: Awaited<ReturnType<typeof line>>[], extra: Record<string, string> = {}) =>
@@ -212,10 +212,66 @@ async function seedLeads() {
   console.log(`Demo leads ready: ${leads.length} website enquiries (2 new, 1 contacted, 1 closed).`);
 }
 
+/**
+ * Local delivery by our own staff (two still out, one delivered with proof of delivery), an order
+ * waiting for customer pickup, and an order with an out-of-stock power ordered from the supplier.
+ */
+async function seedDeliveries() {
+  if (await prisma.salesOrder.count({ where: { clientRequestId: { startsWith: 'demo-dlv-' } } })) { console.log('Demo deliveries already loaded.'); return; }
+  if (!(await prisma.proforma.count({ where: { terms: { contains: '[demo]' } } }))) { console.log('Demo deliveries skipped: demo sales are not loaded.'); return; }
+  const ramesh = await prisma.user.findUnique({ where: { email: 'ramesh.delivery@demo.local' }, select: { id: true } });
+  if (!ramesh) { console.log('Demo deliveries skipped: run pnpm db:seed:demo first.'); return; }
+  const api = await ownerApi();
+  const customers = await prisma.customer.findMany({ select: { id: true, name: true } });
+  const cust = (prefix: string) => customers.find((c) => c.name.startsWith(prefix))!.id;
+  const staff = await prisma.user.findFirst({ where: { email: 'sunita.store@demo.local' }, select: { id: true } });
+
+  let n = 0;
+  const ship = async (customer: string, items: [string, number, number?][], dispatch: Record<string, unknown>) => {
+    const picked = await Promise.all(items.map(([c, q, nth]) => line(c, q, nth)));
+    const o = await api.orders.create({ customerId: cust(customer), lines: picked.map((l) => ({ variantId: l.variantId, qty: l.qty })), assignedToId: staff?.id ?? null, clientRequestId: `demo-dlv-${++n}` });
+    await api.orders.setStatus({ id: o.id, status: 'CONFIRMED' });
+    await api.invoices.create({ customerId: cust(customer), orderId: o.id, date: today, clientRequestId: `demo-dlv-inv-${n}`, lines: picked.map((l) => ({ ...l, discPct: 0 })) });
+    await api.orders.setStatus({ id: o.id, status: 'PACKED' });
+    await api.orders.setStatus({ id: o.id, status: 'DISPATCHED', dispatch: { dispatchDate: today, ...dispatch } });
+    return o;
+  };
+
+  await ship('District Government', [['LV-PM100', 4, 2], ['VG-TB06', 5]], { method: 'OWN_DELIVERY', deliveryPersonId: ramesh.id, vehicleNo: 'GJ06AB1234' });
+  await ship('Drishti', [['VG-SH14', 10], ['PE-CAN27', 5]], { method: 'OWN_DELIVERY', deliveryPersonId: ramesh.id, vehicleNo: 'GJ06AB1234' });
+  const delivered = await ship('Dr. Kavita', [['LV-HA600', 2, 3]], { method: 'OWN_DELIVERY', deliveryPersonId: ramesh.id, vehicleNo: 'GJ06AB1234' });
+  await ship('ClearView', [['OC-KERA', 2], ['VG-SH14', 4]], { method: 'PICKUP' });
+
+  // The delivered one is marked by Ramesh himself, as he would from the app's Deliver tab.
+  const { token } = await createSession(prisma, ramesh.id, { client: 'mobile' });
+  const asRamesh = createCaller(await createContext({ headers: new Headers({ cookie: `ke_session=${token}`, 'user-agent': 'seed-demo' }) }));
+  await asRamesh.orders.markDelivered({ id: delivered.id, receivedBy: 'Pooja (clinic reception)', note: 'Handed over at the clinic counter' });
+
+  // A customer order with a power we don't have: raised on the supplier, linked to the order.
+  const missing = await prisma.productVariant.findFirst({
+    where: { isActive: true, product: { code: 'LV-HA600' }, balances: { none: { qty: { gt: 0 } } } },
+    orderBy: { powerSph: 'desc' }, select: { id: true, productId: true },
+  });
+  if (missing) {
+    const inStock = await line('VG-SH14', 4);
+    const o = await api.orders.create({
+      customerId: cust('Netra Jyoti'), forDoctorId: cust('Dr. Meera'), patientName: 'Mr. R. Bhide', surgeryDate: addDays(today, 6),
+      lines: [{ variantId: missing.id, qty: 1 }, { variantId: inStock.variantId, qty: inStock.qty }],
+      assignedToId: staff?.id ?? null, clientRequestId: `demo-dlv-${++n}`, customerNote: 'High power for a long eye',
+    });
+    await api.orders.setStatus({ id: o.id, status: 'CONFIRMED' });
+    const lastFrom = await prisma.grnLine.findFirst({ where: { variant: { productId: missing.productId }, grn: { supplierId: { not: null } } }, select: { grn: { select: { supplierId: true } } } });
+    const supplierId = lastFrom?.grn.supplierId ?? (await prisma.supplier.findFirstOrThrow({ orderBy: { name: 'asc' } })).id;
+    await api.purchaseOrders.createForOrder({ orderId: o.id, items: [{ variantId: missing.id, qty: 1, supplierId }], expectedDate: addDays(today, 4), send: true, tellCustomer: true });
+  }
+  console.log('Demo deliveries ready: 2 out with our delivery staff (Ramesh), 1 delivered with proof, 1 awaiting pickup, 1 out-of-stock order raised on the supplier.');
+}
+
 async function main() {
   await seedSales();
   await seedPurchasing();
   await seedLeads();
+  await seedDeliveries();
 }
 
 main().catch((e) => { console.error(e); process.exit(1); }).finally(() => prisma.$disconnect());

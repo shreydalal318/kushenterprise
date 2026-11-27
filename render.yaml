@@ -1,0 +1,48 @@
+# Render Blueprint: the web app (Docker) and its Postgres database.
+# Render dashboard → New → Blueprint → choose this repository. It asks for the first owner's password.
+# This is set up as a hosted DEMO (demo data + one-click quick login). Before real use, set
+# DEMO_QUICK_LOGIN and SEED_DEMO to "false" on a fresh database.
+services:
+  - type: web
+    name: kush-enterprise
+    runtime: docker
+    plan: free
+    region: singapore
+    healthCheckPath: /login
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kush-db
+          property: connectionString
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: JOB_SECRET
+        generateValue: true
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: PORT
+        value: "3000"
+      - key: SEED_OWNER_NAME
+        value: Owner
+      - key: SEED_OWNER_EMAIL
+        value: owner@example.com
+      - key: SEED_OWNER_PASSWORD # 10+ characters with letters and a number
+        sync: false
+      - key: SEED_DEMO
+        value: "true"
+      - key: DEMO_QUICK_LOGIN
+        value: "true"
+      - key: SMS_PROVIDER
+        value: console
+      - key: PUSH_PROVIDER
+        value: console
+      - key: STORAGE_DRIVER # files are lost on redeploy on the free plan; use s3 for real use
+        value: local
+
+databases:
+  - name: kush-db
+    plan: free
+    region: singapore
+    databaseName: kush
+    user: kush
+    postgresMajorVersion: "16"

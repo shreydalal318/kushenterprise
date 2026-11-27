@@ -17,6 +17,11 @@ export const env = {
     return (cachedSecret ??= authSecret());
   },
   cookieSecure: process.env.COOKIE_SECURE ? process.env.COOKIE_SECURE === 'true' : isProd,
+  /**
+   * One-click sign-in as any user. DEV_QUICK_LOGIN works in development only; DEMO_QUICK_LOGIN also
+   * works in production, for a hosted demo with demo data only (anyone with the link gets in).
+   */
+  devQuickLogin: (!isProd && process.env.DEV_QUICK_LOGIN === 'true') || process.env.DEMO_QUICK_LOGIN === 'true',
   smsProvider: process.env.SMS_PROVIDER ?? 'console',
   storageDriver: (process.env.STORAGE_DRIVER ?? 'local') as 'local' | 's3',
   storageLocalDir: process.env.STORAGE_LOCAL_DIR ?? './storage',

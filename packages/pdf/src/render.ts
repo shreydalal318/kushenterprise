@@ -5,13 +5,19 @@ import type { DocModel } from './types';
 
 /**
  * Server-side HTML → A4 PDF with headless Chromium. One browser per process, one page per render.
- * Set CHROMIUM_PATH in production if Chromium isn't in a standard location.
+ * Set CHROMIUM_PATH in production if Chromium isn't in a standard location. On Windows an installed
+ * Chrome or Edge is used.
  */
 let browser: Promise<Browser> | null = null;
 
 function executablePath(): string | undefined {
   if (process.env.CHROMIUM_PATH) return process.env.CHROMIUM_PATH;
-  for (const p of ['/opt/pw-browsers/chromium', '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome']) if (existsSync(p)) return p;
+  const windows = process.platform === 'win32'
+    ? [process.env.PROGRAMFILES, process.env['PROGRAMFILES(X86)'], process.env.LOCALAPPDATA].filter(Boolean).flatMap((d) => [
+      `${d}\\Google\\Chrome\\Application\\chrome.exe`, `${d}\\Microsoft\\Edge\\Application\\msedge.exe`,
+    ])
+    : [];
+  for (const p of ['/opt/pw-browsers/chromium', '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome', ...windows]) if (existsSync(p)) return p;
   return undefined; // Playwright's own download (`npx playwright install chromium`)
 }
 

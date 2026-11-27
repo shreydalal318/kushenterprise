@@ -1,6 +1,7 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowLeft, CheckCircle2, Circle, FileText, Receipt, ScanLine, Truck } from 'lucide-react';
 import { DISPATCH_METHOD_LABEL, DISPATCH_METHODS, formatDate, formatDateTime, istDateString, nextStatuses, ORDER_FLOW, ORDER_STATUS_LABEL, type DispatchMethod, type OrderStatus } from '@kush/core';
 import { Button } from '@/components/ui/button';
@@ -22,12 +23,22 @@ import { PoBadge } from '@/components/purchasing/po-status';
 
 type Order = RouterOutputs['orders']['get'];
 
-export function OrderDetail({ id, isNew }: { id: string; isNew: boolean }) {
+export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; isNew: boolean; openDispatch?: boolean }) {
   const { can } = useMe();
+  const router = useRouter();
   const utils = trpc.useUtils();
-  const q = trpc.orders.get.useQuery({ id });
+  // Always refetch on arrival: coming back from raising an invoice, the cached order doesn't have it yet.
+  const q = trpc.orders.get.useQuery({ id }, { refetchOnMount: 'always' });
   const setStatus = trpc.orders.setStatus.useMutation({ onSuccess: () => utils.orders.invalidate() });
   const [dispatchOpen, setDispatchOpen] = useState(false);
+  // Back from "Create tax invoice" in the Dispatch dialog: reopen it once the fresh order has the invoice.
+  const autoOpened = useRef(false);
+  useEffect(() => {
+    if (!openDispatch || autoOpened.current || !q.data || q.isFetching) return;
+    autoOpened.current = true;
+    if (q.data.status === 'PACKED' && q.data.invoices.some((i) => i.status === 'ISSUED')) setDispatchOpen(true);
+    router.replace(`/app/orders/${id}`, { scroll: false });
+  }, [openDispatch, q.data, q.isFetching]); // eslint-disable-line react-hooks/exhaustive-deps
   const [packOpen, setPackOpen] = useState(false);
   const [deliverOpen, setDeliverOpen] = useState(false);
   const [sourceOpen, setSourceOpen] = useState(false);
@@ -57,7 +68,7 @@ export function OrderDetail({ id, isNew }: { id: string; isNew: boolean }) {
       <PageHeader title={o.number}
         description={<span className="flex flex-wrap items-center gap-2">{o.customer.name}{o.forDoctor ? ` · for ${o.forDoctor.name}` : ''} <OrderBadge status={o.status} /></span>}
         actions={<div className="flex flex-wrap gap-2">
-          {backorder > 0 && o.status !== 'CANCELLED' && can('CREATE_TAX_INVOICE') && <LinkButton href={`/app/invoices/new?order=${o.id}`}><Receipt className="size-4" aria-hidden /> Create tax invoice</LinkButton>}
+          {backorder > 0 && o.status !== 'CANCELLED' && can('CREATE_TAX_INVOICE') && <LinkButton href={`/app/invoices/new?order=${o.id}${o.status === 'PACKED' ? '&next=dispatch' : ''}`}><Receipt className="size-4" aria-hidden /> Create tax invoice</LinkButton>}
           {o.status !== 'CANCELLED' && can('CREATE_PROFORMA') && <LinkButton variant="secondary" href={`/app/proforma/new?order=${o.id}`}><FileText className="size-4" aria-hidden /> Proforma</LinkButton>}
           {open && backorder > 0 && can('CREATE_PURCHASE_ORDERS') && sq.data && <Button variant={toOrder > 0 ? 'primary' : 'secondary'} onClick={() => setSourceOpen(true)}><Truck className="size-4" aria-hidden /> Order from supplier</Button>}
           {can('SCAN_DISPATCH') && ['CONFIRMED', 'PLACED'].includes(o.status) && <Button variant="secondary" onClick={() => setPackOpen(true)}><ScanLine className="size-4" aria-hidden /> Pack &amp; verify</Button>}
@@ -165,23 +176,26 @@ export function OrderDetail({ id, isNew }: { id: string; isNew: boolean }) {
         </div>
       </div>
       {sourceOpen && sq.data && <OrderFromSupplierDialog s={sq.data} onClose={() => setSourceOpen(false)} />}
-      {dispatchOpen && <DispatchDialog o={o} onClose={() => setDispatchOpen(false)} />}
+      {dispatchOpen && <DispatchDialog o={o} refreshing={q.isFetching} onClose={() => setDispatchOpen(false)} />}
       {packOpen && <PackDialog o={o} onClose={() => setPackOpen(false)} />}
       {deliverOpen && <DeliverDialog o={o} onClose={() => setDeliverOpen(false)} />}
     </div>
   );
 }
 
-function DispatchDialog({ o, onClose }: { o: Order; onClose: () => void }) {
+function DispatchDialog({ o, refreshing, onClose }: { o: Order; refreshing: boolean; onClose: () => void }) {
+  const { can } = useMe();
   const utils = trpc.useUtils();
   const staff = trpc.orders.staff.useQuery();
   const invoices = o.invoices.filter((i) => i.status === 'ISSUED');
-  const [v, setV] = useState({ method: o.suggestedDispatch as DispatchMethod, courier: '', docketNo: '', vehicleNo: '', dispatchDate: istDateString(), invoiceId: invoices.at(-1)?.id ?? '', deliveryPersonId: '', deliveryPersonName: '', deliveryPersonMobile: '' });
+  const [v, setV] = useState({ method: o.suggestedDispatch as DispatchMethod, courier: '', docketNo: '', vehicleNo: '', dispatchDate: istDateString(), invoiceId: '', deliveryPersonId: '', deliveryPersonName: '', deliveryPersonMobile: '' });
+  // Defaults to the latest invoice, including one that arrives after the dialog opened.
+  const invoiceId = v.invoiceId || invoices.at(-1)?.id || '';
   const m = trpc.orders.setStatus.useMutation({ onSuccess: async () => { await utils.orders.invalidate(); onClose(); } });
   const other = v.deliveryPersonId === 'OTHER';
   function save() {
     m.mutate({ id: o.id, status: 'DISPATCHED', dispatch: {
-      method: v.method, dispatchDate: v.dispatchDate, invoiceId: v.invoiceId || undefined, vehicleNo: v.vehicleNo,
+      method: v.method, dispatchDate: v.dispatchDate, invoiceId: invoiceId || undefined, vehicleNo: v.vehicleNo,
       courier: v.method === 'COURIER' || v.method === 'TRANSPORT' ? v.courier : null, docketNo: v.method === 'COURIER' || v.method === 'TRANSPORT' ? v.docketNo : null,
       deliveryPersonId: v.method === 'OWN_DELIVERY' && !other ? v.deliveryPersonId || null : null,
       deliveryPersonName: v.method === 'OWN_DELIVERY' && other ? v.deliveryPersonName : null, deliveryPersonMobile: v.method === 'OWN_DELIVERY' && other ? v.deliveryPersonMobile : null,
@@ -191,7 +205,14 @@ function DispatchDialog({ o, onClose }: { o: Order; onClose: () => void }) {
     <Dialog open onClose={onClose} title="Dispatch" description="How is this order going out? The details print on the invoice and the customer is told." size="md"
       footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={m.isPending} disabled={!invoices.length} onClick={save}>{v.method === 'PICKUP' ? 'Mark ready for pickup' : 'Mark dispatched'}</Button></>}>
       <div className="flex flex-col gap-4">
-        {invoices.length === 0 && <Alert tone="warn">Raise a tax invoice before dispatching.</Alert>}
+        {invoices.length === 0 && (refreshing ? <Alert tone="info">Checking for the tax invoice…</Alert> : (
+          <Alert tone="warn">
+            <span className="flex flex-wrap items-center justify-between gap-3">
+              <span>A tax invoice is needed before dispatch. You&apos;ll come straight back here to finish dispatching.</span>
+              {can('CREATE_TAX_INVOICE') && <LinkButton href={`/app/invoices/new?order=${o.id}&next=dispatch`} className="h-9 shrink-0"><Receipt className="size-4" aria-hidden /> Create tax invoice</LinkButton>}
+            </span>
+          </Alert>
+        ))}
         <div role="radiogroup" aria-label="Dispatch method" className="grid grid-cols-2 gap-2">
           {DISPATCH_METHODS.map((k) => (
             <button key={k} type="button" role="radio" aria-checked={v.method === k} onClick={() => setV({ ...v, method: k })}
@@ -200,7 +221,7 @@ function DispatchDialog({ o, onClose }: { o: Order; onClose: () => void }) {
             </button>
           ))}
         </div>
-        {invoices.length > 1 && <SelectField label="Invoice" value={v.invoiceId} onChange={(e) => setV({ ...v, invoiceId: e.target.value })}>{invoices.map((i) => <option key={i.id} value={i.id}>{i.number}</option>)}</SelectField>}
+        {invoices.length > 1 && <SelectField label="Invoice" value={invoiceId} onChange={(e) => setV({ ...v, invoiceId: e.target.value })}>{invoices.map((i) => <option key={i.id} value={i.id}>{i.number}</option>)}</SelectField>}
         {v.method === 'OWN_DELIVERY' && (
           <>
             <SelectField label="Delivered by" value={v.deliveryPersonId} onChange={(e) => setV({ ...v, deliveryPersonId: e.target.value })} hint="Staff in the list see this delivery in their app and mark it delivered there.">

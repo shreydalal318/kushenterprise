@@ -31,7 +31,13 @@
   body { font-family: var(--font-sans); font-feature-settings: "cv11" 1; }
   :focus-visible { outline: 2px solid var(--color-teal); outline-offset: 2px; }
   ::selection { background: var(--color-aqua); }
+  /* Thin scrollbars without arrow buttons (Windows otherwise draws the classic grey bar). */
+  * { scrollbar-width: thin; scrollbar-color: rgb(91 103 116 / 0.35) transparent; }
 }
+
+/* Scroll areas on the navy sidebar: a faint thumb that shows while the pointer is over it. */
+.scroll-dark { scrollbar-color: transparent transparent; }
+.scroll-dark:hover, .scroll-dark:focus-within { scrollbar-color: rgb(255 255 255 / 0.25) transparent; }
 
 /* Indian-number tables align on the decimal point. */
 .num { font-variant-numeric: tabular-nums; text-align: right; }

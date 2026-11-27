@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { AUTH } from '../env';
+import { AUTH, env } from '../env';
 import { burnPasswordCheck, hashPassword, verifyPassword } from '../auth/password';
 import {
   clearSessionCookie, createSession, revokeAllSessions, revokeSession, sessionCookie,
@@ -125,6 +125,27 @@ export const authRouter = router({
     await logActivity(ctx.db, { actorId: user.id, action: 'auth.login', entityType: 'User', entityId: user.id, summary: `OTP login (${input.client})`, ip: ctx.ip });
     return { user: publicUser(user), ...s };
   }),
+
+  /** Quick login (DEV_QUICK_LOGIN in development, or DEMO_QUICK_LOGIN on a hosted demo): every active user. */
+  devUsers: publicProcedure.query(async ({ ctx }) => {
+    if (!env.devQuickLogin) return null;
+    return ctx.db.user.findMany({
+      where: { isActive: true },
+      orderBy: [{ role: 'asc' }, { name: 'asc' }],
+      select: { id: true, name: true, role: true, email: true, mobile: true, permissions: true },
+    });
+  }),
+
+  devLogin: publicProcedure
+    .input(z.object({ userId: z.string(), client: z.enum(['web', 'mobile']).default('web') }))
+    .mutation(async ({ ctx, input }) => {
+      if (!env.devQuickLogin) throw new TRPCError({ code: 'NOT_FOUND' });
+      const user = await ctx.db.user.findFirst({ where: { id: input.userId, isActive: true } });
+      if (!user) throw new TRPCError({ code: 'NOT_FOUND', message: 'No such user' });
+      const s = await startSession(ctx, user.id, input.client);
+      await logActivity(ctx.db, { actorId: user.id, action: 'auth.login', entityType: 'User', entityId: user.id, summary: `Dev quick login (${input.client})`, ip: ctx.ip });
+      return { user: publicUser({ ...user, mustChangePassword: false }), ...s };
+    }),
 
   logout: publicProcedure.mutation(async ({ ctx }) => {
     if (ctx.session) await revokeSession(ctx.db, ctx.session.sessionId);

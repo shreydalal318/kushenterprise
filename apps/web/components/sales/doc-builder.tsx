@@ -41,6 +41,8 @@ export interface BuilderPrefill {
   shippingAddressId?: string | null;
   forDoctorId?: string | null;
   orderId?: string | null;
+  /** After saving an invoice for an order, go back to the order with the Dispatch dialog open. */
+  thenDispatch?: boolean;
   lines?: Omit<BuilderLine, 'key'>[];
 }
 
@@ -155,7 +157,7 @@ export function DocBuilder({ mode, prefill }: { mode: BuilderMode; prefill?: Bui
         ...common, date, orderId: prefill?.orderId ?? null, clientRequestId: requestId.current,
         buyersOrderNo: extra.buyersOrderNo, buyersOrderDate: extra.buyersOrderDate, dispatchedThrough: extra.dispatchedThrough, destination: extra.destination || ship?.city || '', termsOfDelivery: extra.termsOfDelivery,
         lines: lines.map((l) => ({ variantId: l.variantId, qty: l.qty, discPct: l.discPct, rate: isOwner ? l.rate : null, batchId: l.batchId, serialNos: l.serials })),
-      }, { onSuccess: (r) => after(`/app/invoices/${r.id}?new=1`)() });
+      }, { onSuccess: (r) => after(prefill?.orderId && prefill.thenDispatch ? `/app/orders/${prefill.orderId}?dispatch=1` : `/app/invoices/${r.id}?new=1`)() });
     } else if (mode === 'proforma') {
       createProforma.mutate({ ...common, date, orderId: prefill?.orderId ?? null, validUntil: extra.validUntil, lines: lines.map((l) => ({ variantId: l.variantId, qty: l.qty, discPct: l.discPct, rate: isOwner ? l.rate : null })) },
         { onSuccess: (r) => after(`/app/proforma/${r.id}?new=1`)() });

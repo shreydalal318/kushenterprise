@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Image, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { DevQuickLogin } from '@/components/dev-quick-login';
 import { Alert, Button, Field, P, Small, Tabs } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { errorText } from '@/lib/format';
@@ -29,6 +30,7 @@ export default function Login() {
         <ScrollView contentContainerStyle={{ padding: 24, gap: 16, flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
           <Image source={require('../assets/splash.png')} style={{ width: 160, height: 120, alignSelf: 'center' }} resizeMode="contain" accessibilityLabel="Kush Enterprise" />
           <P muted style={{ textAlign: 'center' }}>Sign in to order, track deliveries and download invoices. Staff: scanning, billing and stock.</P>
+          <DevQuickLogin onDone={done} />
           <Tabs value={mode} onChange={setMode} options={[['otp', 'Mobile OTP'], ['password', 'Password']]} />
           {mode === 'otp' ? (
             <View style={{ gap: 12 }}>

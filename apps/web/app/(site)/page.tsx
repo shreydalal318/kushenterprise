@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowRight, BadgeCheck, Microscope, PackageSearch, ScanBarcode, ScissorsLineDashed, Syringe, Tag, Truck } from 'lucide-react';
+import { env } from '@kush/api/server';
+import { DevQuickLogin } from '@/components/common/dev-quick-login';
 import { LensArt } from '@/components/site/lens-art';
 import { publicApi } from '@/lib/public-api';
 
@@ -39,7 +41,7 @@ export default async function Home() {
             </div>
             <p className="mt-4 text-sm text-muted">Already a customer? <Link href="/login" className="font-semibold text-teal-700 hover:underline">Log in to see your price</Link>.</p>
           </div>
-          <LensArt className="mx-auto w-full max-w-sm" />
+          {env.devQuickLogin ? <DevQuickLogin className="mx-auto w-full max-w-sm" /> : <LensArt className="mx-auto w-full max-w-sm" />}
         </div>
       </section>
 

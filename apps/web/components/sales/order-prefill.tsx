@@ -6,7 +6,7 @@ import { trpc } from '@/lib/trpc';
 import { DocBuilder, type BuilderMode, type BuilderPrefill } from './doc-builder';
 
 /** Opens the builder pre-filled from an order (remaining / back-ordered quantities, order rates). */
-export function BuilderFromOrder({ mode, orderId }: { mode: BuilderMode; orderId: string | null }) {
+export function BuilderFromOrder({ mode, orderId, thenDispatch = false }: { mode: BuilderMode; orderId: string | null; thenDispatch?: boolean }) {
   const utils = trpc.useUtils();
   const order = trpc.orders.get.useQuery({ id: orderId! }, { enabled: !!orderId });
   const [prefill, setPrefill] = useState<BuilderPrefill | null>(orderId ? null : {});
@@ -25,7 +25,7 @@ export function BuilderFromOrder({ mode, orderId }: { mode: BuilderMode; orderId
           mrp: v?.mrp ?? p.mrp, trackSerial: p.trackSerial, qty: mode === 'invoice' && p.trackSerial ? 0 : qty, rate: l.rate, discPct: 0, batchId: null, serials: [],
         });
       }
-      setPrefill({ customerId: o.customer.id, shippingAddressId: o.shippingAddressId, forDoctorId: o.forDoctor?.id ?? null, orderId: o.id, lines });
+      setPrefill({ customerId: o.customer.id, shippingAddressId: o.shippingAddressId, forDoctorId: o.forDoctor?.id ?? null, orderId: o.id, thenDispatch, lines });
     })();
   }, [order.data]); // eslint-disable-line react-hooks/exhaustive-deps
   if (order.error) return <Alert>{errorMessage(order.error)}</Alert>;

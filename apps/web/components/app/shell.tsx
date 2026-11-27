@@ -66,7 +66,7 @@ export function AppShell({ user, children }: { user: ShellUser; children: ReactN
           <span className="font-semibold tracking-tight">Kush Enterprise</span>
           <button className="ml-auto lg:hidden" onClick={() => setOpen(false)} aria-label="Close menu"><X className="size-5" /></button>
         </div>
-        <div className="flex-1 overflow-y-auto">{nav}</div>
+        <div className="scroll-dark flex-1 overflow-y-auto">{nav}</div>
         <div className="border-t border-white/10 p-4">
           <Link href="/app/account" className="block rounded-lg p-2 hover:bg-white/8">
             <p className="truncate text-sm font-medium">{user.name}</p>

@@ -120,8 +120,11 @@ async function main() {
   for (const s of [
     { name: 'Ravi Mehta', email: 'ravi.counter@demo.local', permissions: ['VIEW_ORDERS', 'CREATE_ORDERS', 'CREATE_PROFORMA', 'CREATE_TAX_INVOICE', 'RECORD_PAYMENTS', 'MANAGE_CUSTOMERS'] },
     { name: 'Sunita Pawar', email: 'sunita.store@demo.local', permissions: ['VIEW_ORDERS', 'UPDATE_ORDER_STATUS', 'SCAN_DISPATCH', 'MANAGE_STOCK', 'MANAGE_PRODUCTS'] },
+    // A delivery person: a staff login with no permissions sees only their own deliveries.
+    { name: 'Ramesh Solanki', email: 'ramesh.delivery@demo.local', mobile: '9000040001', permissions: [] },
   ] as const) {
-    staff.push(await prisma.user.upsert({ where: { email: s.email }, create: { role: 'EMPLOYEE', name: s.name, email: s.email, passwordHash: demoPw, permissions: [...s.permissions] }, update: {} }));
+    const mobile = 'mobile' in s && s.mobile ? normalizeIndianMobile(s.mobile) : null;
+    staff.push(await prisma.user.upsert({ where: { email: s.email }, create: { role: 'EMPLOYEE', name: s.name, email: s.email, mobile, passwordHash: demoPw, permissions: [...s.permissions] }, update: {} }));
   }
 
   const brandIds = new Map<string, string>();
@@ -222,16 +225,23 @@ async function main() {
     await prisma.priceChangeLog.create({ data: { productId, scope: 'CUSTOMER', scopeRefId: customerId, newRate: new Prisma.Decimal(rate), validFrom: d(from), validTo: d(to), changedById: owner.id, source: 'seed' } });
   }
 
-  // One demo customer login (OTP) for the portal / app.
+  // Demo customer logins (OTP) for the portal / app: a private hospital, a clinic, a government
+  // trust and a doctor on base rates, so each sees a different price for the same lens.
   const demoLogin = normalizeIndianMobile('9000010001')!;
-  if (!(await prisma.user.findUnique({ where: { mobile: demoLogin } }))) {
-    await prisma.user.create({ data: { role: 'CUSTOMER', name: 'Mr. Prakash Joshi', mobile: demoLogin, customerId: customerIds.get('H1') } });
+  for (const [mobile, name, key] of [
+    ['9000010001', 'Mr. Prakash Joshi', 'H1'],
+    ['9000030001', 'Ms. Hetal Shah', 'C1'],
+    ['9000030002', 'Central Pharmacy (Sankara)', 'H2'],
+    ['9000030003', 'Dr. Kavita Desai', 'D3'],
+  ] as const) {
+    const m = normalizeIndianMobile(mobile)!;
+    if (!(await prisma.user.findUnique({ where: { mobile: m } }))) await prisma.user.create({ data: { role: 'CUSTOMER', name, mobile: m, customerId: customerIds.get(key) } });
   }
 
   await seedStock(owner.id);
 
   console.log(`Demo masters ready: ${SUPPLIERS.length} suppliers, ${PRODUCTS.length} products (${variants} new variants), ${CUSTOMERS.length} customers, 2 price lists.`);
-  console.log(`Demo staff: ravi.counter@demo.local / sunita.store@demo.local (password: ${process.env.DEMO_STAFF_PASSWORD ? 'DEMO_STAFF_PASSWORD' : 'DemoStaff2026'}). Demo customer OTP login: ${demoLogin}.`);
+  console.log(`Demo staff: ravi.counter@demo.local / sunita.store@demo.local / ramesh.delivery@demo.local (password: ${process.env.DEMO_STAFF_PASSWORD ? 'DEMO_STAFF_PASSWORD' : 'DemoStaff2026'}). Demo customer OTP logins: ${demoLogin}, +919000030001 to +919000030003.`);
 }
 
 
