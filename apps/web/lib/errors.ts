@@ -13,6 +13,8 @@ export function fieldErrors(err: unknown): Record<string, string> {
 export function errorMessage(err: unknown): string | null {
   if (!err) return null;
   if (err instanceof TRPCClientError) {
+    // No `data` means the reply never came from the API: no connection, or the server is restarting.
+    if (!err.data) return 'Can’t reach the server right now. Check your internet connection and try again.';
     const zod = (err.data as { zodError?: { formErrors?: string[] } | null } | undefined)?.zodError;
     if (zod) return zod.formErrors?.[0] ?? 'Please correct the highlighted fields';
     return err.message;

@@ -21,9 +21,11 @@ export function IntroSplash({ onDone }: { onDone: () => void }) {
 
   useEffect(() => {
     let alive = true;
+    // Never let the intro block the app (animations pause while the app is in the background).
+    const safety = setTimeout(() => { if (alive) { alive = false; onDone(); } }, 3500);
     void AccessibilityInfo.isReduceMotionEnabled().then((reduce) => {
       if (!alive) return;
-      if (reduce) return onDone();
+      if (reduce) { alive = false; clearTimeout(safety); return onDone(); }
       const ease = Easing.out(Easing.cubic);
       Animated.sequence([
         Animated.parallel([
@@ -33,9 +35,9 @@ export function IntroSplash({ onDone }: { onDone: () => void }) {
         Animated.timing(word, { toValue: 1, duration: 350, easing: ease, useNativeDriver: true }),
         Animated.delay(400),
         Animated.timing(fade, { toValue: 0, duration: 300, useNativeDriver: true }),
-      ]).start(() => alive && onDone());
+      ]).start(() => { if (alive) { alive = false; clearTimeout(safety); onDone(); } });
     });
-    return () => { alive = false; };
+    return () => { alive = false; clearTimeout(safety); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const appear = left.interpolate({ inputRange: [-START, 0], outputRange: [0, 1] });
