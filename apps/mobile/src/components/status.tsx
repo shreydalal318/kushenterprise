@@ -1,11 +1,11 @@
 import { Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { daysUntil, formatDate, istDateString, ORDER_STATUS_LABEL, type OrderStatus } from '@kush/core';
+import { daysUntil, formatDate, istDateString } from '@kush/core';
 import { C } from '@/lib/theme';
 import { Badge, Small } from './ui';
 
-const ORDER_TONE: Record<string, 'ok' | 'warn' | 'danger' | 'teal' | 'neutral'> = { PLACED: 'warn', CONFIRMED: 'teal', PACKED: 'teal', DISPATCHED: 'teal', DELIVERED: 'ok', CANCELLED: 'danger', ON_HOLD: 'warn' };
-export const OrderStatusBadge = ({ status }: { status: string }) => <Badge label={ORDER_STATUS_LABEL[status as OrderStatus] ?? status} tone={ORDER_TONE[status] ?? 'neutral'} />;
+/** Same as StaffStatusBadge: one set of words and colours everywhere. */
+export const OrderStatusBadge = ({ status }: { status: string }) => <StaffStatusBadge status={status} />;
 
 /**
  * Staff see four words for four steps. The server's Placed / Confirmed / Packed mean nothing to someone

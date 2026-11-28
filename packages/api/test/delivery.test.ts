@@ -48,7 +48,7 @@ describe('local delivery by our own staff', () => {
     expect((await prisma.invoice.findUniqueOrThrow({ where: { id: inv.id } })).dispatchedThrough).toBe(`By hand (${rider.name}), GJ06AB1234`);
     expect(await prisma.notification.count({ where: { userId: rider.id, title: { startsWith: 'Delivery:' }, channel: 'IN_APP' } })).toBe(1);
     expect((await a.deliveries.board()).find((d) => d.orderId === id)).toMatchObject({ person: rider.name, personId: rider.id });
-    const told = await prisma.notification.findFirstOrThrow({ where: { userId: custUser.id, title: { endsWith: 'Dispatched' }, channel: 'IN_APP' }, orderBy: { createdAt: 'desc' } });
+    const told = await prisma.notification.findFirstOrThrow({ where: { userId: custUser.id, title: { endsWith: 'On the way' }, channel: 'IN_APP' }, orderBy: { createdAt: 'desc' } });
     expect(told.body).toContain(`Out for delivery today with ${rider.name}`);
 
     const r = await api(rider);

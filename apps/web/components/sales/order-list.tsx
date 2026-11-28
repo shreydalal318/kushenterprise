@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, Search } from 'lucide-react';
-import { formatDate, formatDateTime, ORDER_STATUS_LABEL, ORDER_STATUSES, type OrderStatus } from '@kush/core';
+import { formatDate, formatDateTime, type OrderStatus } from '@kush/core';
 import { Alert, Badge, Card, PageHeader } from '@/components/ui/card';
 import { LinkButton } from '@/components/ui/link-button';
 import { EmptyRow, LoadingRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
@@ -16,13 +16,17 @@ import { OrderBadge } from './status';
 const sel = 'h-10 rounded-lg border border-line bg-white px-3 text-sm';
 /** Filter value (and ?assigned= link value) for orders nobody has been chosen to handle yet. */
 const NOBODY = 'none';
+/** The same four steps as everywhere else (New covers Placed and Confirmed), then the side states. */
+const FILTERS: [OrderStatus | 'TO_INVOICE', string][] = [
+  ['TO_INVOICE', 'New (to invoice)'], ['PACKED', 'Invoiced (to dispatch)'], ['DISPATCHED', 'Dispatched'], ['DELIVERED', 'Delivered'], ['ON_HOLD', 'On hold'], ['CANCELLED', 'Cancelled'],
+];
 const NotAssigned = ({ status }: { status: OrderStatus }) => <Badge tone={status === 'DELIVERED' || status === 'CANCELLED' ? 'neutral' : 'warn'}>Not assigned</Badge>;
 
 export function OrderList() {
   const { can } = useMe();
   const [q, setQ] = useState('');
   const params = useSearchParams();
-  const [status, setStatus] = useState(params.get('status') ?? '');
+  const [status, setStatus] = useState(() => { const s = params.get('status') ?? ''; return s === 'PLACED' || s === 'CONFIRMED' ? 'TO_INVOICE' : s; });
   const [assigned, setAssigned] = useState(params.get('assigned') ?? '');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -38,7 +42,7 @@ export function OrderList() {
         <label className="relative col-span-2"><span className="sr-only">Search</span><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden />
           <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Order no. or customer" className={`${sel} w-full pl-9 lg:w-64`} /></label>
         <select aria-label="Status" className={sel} value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="">Any status</option><option value="TO_INVOICE">To invoice (placed or confirmed)</option>{ORDER_STATUSES.map((s) => <option key={s} value={s}>{ORDER_STATUS_LABEL[s]}</option>)}
+          <option value="">Any status</option>{FILTERS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
         <select aria-label="Handled by" className={sel} value={assigned} onChange={(e) => setAssigned(e.target.value)}>
           <option value="">Anyone</option><option value={NOBODY}>Not assigned</option>

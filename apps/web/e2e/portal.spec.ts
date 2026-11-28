@@ -69,20 +69,22 @@ test.describe.serial('Phase 6 customer portal', () => {
     await expect(page.getByRole('link', { name: 'Cart (0 items)' })).toBeVisible();
   });
 
-  test('staff see the new order; the customer is told when it is confirmed', async ({ page, browser }) => {
+  test('staff see the new order; the customer is told when it is put on hold', async ({ page, browser }) => {
     await login(page, run.owner.email, run.owner.password);
     await page.goto('/app/notifications');
     await page.getByRole('link', { name: `New order ${ctx.orderNo}` }).click();
-    await page.getByRole('button', { name: 'Confirm only' }).click();
-    await expect(page.getByText('Confirmed', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('New', { exact: true }).first()).toBeVisible();
+    page.once('dialog', (d) => void d.accept('Waiting for stock'));
+    await page.getByRole('button', { name: 'Put on hold' }).click();
+    await expect(page.getByText('On hold', { exact: true }).first()).toBeVisible();
 
     const cust = await browser.newPage();
     await login(cust, ctx.mobile, ctx.password);
     await expect(cust.getByRole('link', { name: /Notifications \(\d+ unread\)/ })).toBeVisible();
     await cust.goto('/portal/notifications');
-    await expect(cust.getByRole('link', { name: `Order ${ctx.orderNo}: Confirmed` })).toBeVisible();
+    await expect(cust.getByRole('link', { name: `Order ${ctx.orderNo}: On hold` })).toBeVisible();
     await snap(cust, '53-portal-notifications');
-    await cust.getByRole('link', { name: `Order ${ctx.orderNo}: Confirmed` }).click();
+    await cust.getByRole('link', { name: `Order ${ctx.orderNo}: On hold` }).click();
     await expect(cust.getByText('Mrs. K. Mehta')).toBeVisible();
     await snap(cust, '54-portal-order');
 

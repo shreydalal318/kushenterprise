@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { canMoveTo, ORDER_STATUS_LABEL, type DispatchMethod, type OrderStatus } from '@kush/core';
+import { canMoveTo, CUSTOMER_ORDER_STATUS_LABEL, ORDER_STATUS_LABEL, orderStep, type DispatchMethod, type OrderStatus } from '@kush/core';
 import type { Tx } from '@kush/db';
 import { logActivity } from '../activity';
 import { dayToDate } from '../num';
@@ -81,7 +81,7 @@ function dispatchedThrough(method: DispatchMethod, d: { courier?: string | null;
   return [d.courier, d.vehicleNo].filter(Boolean).join(', ') || null;
 }
 
-/** Move an order along Placed → Confirmed → Packed → Dispatched → Delivered (hold / cancel aside). */
+/** Move an order along New → Invoiced (Packed) → Dispatched → Delivered (hold / cancel aside). Placed → Confirmed stays allowed for old clients. */
 /** Orders are handled by employees (the owner oversees them all). */
 export async function assertHandler(tx: Tx, userId: string) {
   const u = await tx.user.findFirst({ where: { id: userId, role: 'EMPLOYEE', isActive: true }, select: { id: true } });
@@ -133,18 +133,23 @@ export async function changeOrderStatus(tx: Tx, input: StatusInput, actor: { id:
     await tx.dispatch.updateMany({ where: { orderId: o.id, deliveredAt: null }, data: { deliveredAt: new Date(), receivedBy: input.delivery?.receivedBy ?? null, deliveryNote: input.delivery?.note ?? null } });
   }
   await tx.salesOrder.update({ where: { id: o.id }, data: { status: input.status } });
-  if (settingsView(await getSettings(tx)).notificationConfig.orderStatusToCustomer) {
+  // The doctor's own words. Placed → Confirmed changes nothing they can see, so it isn't worth a message;
+  // coming off hold is (the invoice itself sends "Invoice …" when it is made).
+  const resumed = o.status === 'ON_HOLD' && orderStep(input.status) > 0;
+  const unseen = !redispatch && orderStep(input.status) > 0 && orderStep(o.status) === orderStep(input.status);
+  if (settingsView(await getSettings(tx)).notificationConfig.orderStatusToCustomer && !unseen) {
     const d = input.dispatch;
     const m: DispatchMethod = d?.method ?? 'COURIER';
     const body = input.status === 'DISPATCHED' && d ? (
       m === 'OWN_DELIVERY' ? `Out for delivery today${deliveredWith ? ` with ${deliveredWith}` : ''}.`
         : m === 'PICKUP' ? 'Ready for pickup from our store.'
           : `Sent${d.courier ? ` via ${d.courier}` : ''}${d.docketNo ? `, ${m === 'TRANSPORT' ? 'LR' : 'docket'} ${d.docketNo}` : ''}.`)
-      : input.status === 'DELIVERED' && input.delivery?.receivedBy ? `Delivered. Received by ${input.delivery.receivedBy}.`
+      : input.status === 'DELIVERED' ? `Delivered${input.delivery?.receivedBy ? `. Received by ${input.delivery.receivedBy}` : ''}.`
       : input.status === 'CANCELLED' ? `Your order was cancelled${input.note ? `: ${input.note}` : '.'}`
         : input.status === 'ON_HOLD' ? `Your order is on hold${input.note ? `: ${input.note}` : '.'}`
-          : `Your order is now ${ORDER_STATUS_LABEL[input.status].toLowerCase()}.`;
-    await notifyCustomer(tx, o.customerId, { title: `Order ${o.number}: ${ORDER_STATUS_LABEL[input.status]}`, body, link: `/portal/orders/${o.id}` });
+          : `${resumed ? 'Your order is back on track' : 'Your order'}: ${CUSTOMER_ORDER_STATUS_LABEL[input.status].toLowerCase()}.`;
+    const title = `Order ${o.number}: ${resumed ? 'Back on track' : CUSTOMER_ORDER_STATUS_LABEL[input.status]}`;
+    await notifyCustomer(tx, o.customerId, { title, body, link: `/portal/orders/${o.id}` });
   }
   await tx.orderStatusEvent.create({ data: { orderId: o.id, status: input.status, note: input.note ?? null, byUserId: actor.id } });
   await logActivity(tx, { actorId: actor.id, action: 'order.status', entityType: 'SalesOrder', entityId: o.id, ip, summary: `${o.number}: ${ORDER_STATUS_LABEL[o.status]} → ${ORDER_STATUS_LABEL[input.status]}${input.note ? ` (${input.note})` : ''}` });

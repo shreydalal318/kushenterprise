@@ -249,7 +249,6 @@ export default function StaffOrder() {
   const invoiceRest = isOpen && hasInvoice && backorder > 0 && ['PACKED', 'DISPATCHED'].includes(o.status) && canInvoice;
   const more: { icon: Icon; title: string; onPress: () => void; danger?: boolean }[] = [
     ...(canSource ? [{ icon: 'cart-outline' as Icon, title: 'Order from supplier', onPress: () => setMode('source') }] : []),
-    ...(o.status === 'PLACED' && canStatus ? [{ icon: 'checkmark-circle-outline' as Icon, title: 'Confirm order (invoice later)', onPress: () => setStatus.mutate({ id: o.id, status: 'CONFIRMED' }, { onSuccess: () => finish('Saved ✓ Next: make the invoice.') }) }] : []),
     // When a later invoice is waiting to go out, delivering what already went is the less likely step.
     ...(toSend && canDeliver ? [{ icon: 'checkmark-done-outline' as Icon, title: 'Mark delivered', onPress: openDeliver }] : []),
     ...(next.includes('ON_HOLD') && canStatus ? [{ icon: 'pause-circle-outline' as Icon, title: 'Put on hold', onPress: () => { setNote(''); setMode('hold'); } }] : []),

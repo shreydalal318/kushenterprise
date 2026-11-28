@@ -2,11 +2,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, CheckCircle2, Circle, RotateCcw, Truck } from 'lucide-react';
-import { formatDate, formatDateTime, ORDER_FLOW, ORDER_STATUS_LABEL } from '@kush/core';
+import { CUSTOMER_ORDER_STATUS_LABEL, formatDate, formatDateTime, ORDER_STEPS } from '@kush/core';
 import { Button } from '@/components/ui/button';
 import { Alert, Card, CardBody, CardHeader, PageHeader } from '@/components/ui/card';
 import { EmptyRow, LoadingRow, Table, Td, Th, THead, Tr } from '@/components/ui/table';
-import { OrderBadge } from '@/components/sales/status';
+import { CustomerOrderBadge } from '@/components/sales/status';
 import { cn } from '@/lib/cn';
 import { errorMessage } from '@/lib/errors';
 import { rupees } from '@/lib/format';
@@ -31,7 +31,7 @@ export function MyOrders() {
             <Link href={`/portal/orders/${o.id}`} className="block rounded-xl border border-line bg-white px-4 py-3 active:bg-aqua-50">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0"><p className="font-mono text-sm font-medium text-navy">{o.number}</p><p className="text-xs text-muted">{formatDateTime(o.createdAt)}</p></div>
-                <OrderBadge status={o.status} />
+                <CustomerOrderBadge status={o.status} />
               </div>
               <p className="mt-2 flex justify-between gap-2 text-xs text-muted"><span>{o.units} unit{o.units === 1 ? '' : 's'} · <span className="font-medium text-ink">{rupees(o.value)}</span></span><span className="truncate">{[o.forDoctor, o.surgeryDate && `Surgery ${formatDate(o.surgeryDate)}`].filter(Boolean).join(' · ')}</span></p>
             </Link>
@@ -46,7 +46,7 @@ export function MyOrders() {
             {q.data?.map((o) => (
               <Tr key={o.id}>
                 <Td><Link href={`/portal/orders/${o.id}`} className="font-mono text-sm font-medium text-navy hover:underline">{o.number}</Link><div className="text-xs text-muted">{formatDateTime(o.createdAt)}</div></Td>
-                <Td><OrderBadge status={o.status} /></Td><Td className="num">{o.units}</Td><Td className="num">{rupees(o.value)}</Td>
+                <Td><CustomerOrderBadge status={o.status} /></Td><Td className="num">{o.units}</Td><Td className="num">{rupees(o.value)}</Td>
                 <Td className="text-sm">{o.forDoctor ?? '—'}{o.surgeryDate && <div className="text-xs text-muted">Surgery {formatDate(o.surgeryDate)}</div>}</Td>
               </Tr>
             ))}
@@ -67,18 +67,18 @@ export function MyOrder({ id, isNew }: { id: string; isNew: boolean }) {
   return (
     <div className="flex flex-col gap-5">
       <Link href="/portal/orders" className="flex w-fit items-center gap-1 text-sm text-teal-700 hover:underline"><ArrowLeft className="size-4" aria-hidden /> My orders</Link>
-      <PageHeader title={o.number} description={<span className="flex flex-wrap items-center gap-2">Placed {formatDateTime(o.createdAt)}{o.forDoctor ? ` · for ${o.forDoctor}` : ''} <OrderBadge status={o.status} /></span>} />
+      <PageHeader title={o.number} description={<span className="flex flex-wrap items-center gap-2">Placed {formatDateTime(o.createdAt)}{o.forDoctor ? ` · for ${o.forDoctor}` : ''} <CustomerOrderBadge status={o.status} /></span>} />
       {isNew && <Alert tone="ok">Thank you, your order is placed. We will let you know when it is invoiced, dispatched and delivered.</Alert>}
       {o.status === 'CANCELLED' && <Alert>This order was cancelled{o.events.find((e) => e.status === 'CANCELLED')?.note ? `: ${o.events.find((e) => e.status === 'CANCELLED')!.note}` : '.'}</Alert>}
       {o.status === 'ON_HOLD' && <Alert tone="warn">On hold{o.events.filter((e) => e.status === 'ON_HOLD').at(-1)?.note ? `: ${o.events.filter((e) => e.status === 'ON_HOLD').at(-1)!.note}` : '.'} We will contact you.</Alert>}
       <Card>
         <CardHeader title="Status" />
         <CardBody>
-          <ol className="grid gap-3 sm:grid-cols-5">
-            {ORDER_FLOW.map((s) => { const t = at(s); return (
+          <ol className="grid gap-3 sm:grid-cols-4">
+            {ORDER_STEPS.map((s) => { const t = at(s); return (
               <li key={s} className="flex items-start gap-2">
                 {t ? <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-teal" aria-hidden /> : <Circle className="mt-0.5 size-5 shrink-0 text-line" aria-hidden />}
-                <div><p className={cn('text-sm font-medium', !t && 'text-muted')}>{ORDER_STATUS_LABEL[s]}</p>{t && <p className="text-xs text-muted">{formatDateTime(t)}</p>}</div>
+                <div><p className={cn('text-sm font-medium', !t && 'text-muted')}>{CUSTOMER_ORDER_STATUS_LABEL[s]}</p>{t && <p className="text-xs text-muted">{formatDateTime(t)}</p>}</div>
               </li>
             ); })}
           </ol>

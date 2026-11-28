@@ -4,9 +4,21 @@ import { addDays, daysUntil } from './stock';
 export const ORDER_STATUSES = ['PLACED', 'CONFIRMED', 'PACKED', 'DISPATCHED', 'DELIVERED', 'CANCELLED', 'ON_HOLD'] as const;
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 export const ORDER_FLOW: OrderStatus[] = ['PLACED', 'CONFIRMED', 'PACKED', 'DISPATCHED', 'DELIVERED'];
+/**
+ * What people see. The tax invoice confirms and packs an order in one go, so Placed and Confirmed are both
+ * "New" and Packed is "Invoiced": four words for four steps, the same on the website and in the app.
+ */
 export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
-  PLACED: 'Placed', CONFIRMED: 'Confirmed', PACKED: 'Packed', DISPATCHED: 'Dispatched', DELIVERED: 'Delivered', CANCELLED: 'Cancelled', ON_HOLD: 'On hold',
+  PLACED: 'New', CONFIRMED: 'New', PACKED: 'Invoiced', DISPATCHED: 'Dispatched', DELIVERED: 'Delivered', CANCELLED: 'Cancelled', ON_HOLD: 'On hold',
 };
+/** The same four steps in a doctor's words. */
+export const CUSTOMER_ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
+  PLACED: 'Order placed', CONFIRMED: 'Order placed', PACKED: 'Invoice ready', DISPATCHED: 'On the way', DELIVERED: 'Delivered', CANCELLED: 'Cancelled', ON_HOLD: 'On hold',
+};
+/** The four steps shown on status trackers, one status per step (Confirmed is part of New). */
+export const ORDER_STEPS: OrderStatus[] = ['PLACED', 'PACKED', 'DISPATCHED', 'DELIVERED'];
+/** How far along the four steps an order is: 1 New … 4 Delivered, 0 when on hold or cancelled. */
+export const orderStep = (s: OrderStatus) => ({ PLACED: 1, CONFIRMED: 1, PACKED: 2, DISPATCHED: 3, DELIVERED: 4, ON_HOLD: 0, CANCELLED: 0 })[s];
 
 /** Allowed next statuses. On hold can resume to any open step; delivered and cancelled are final. */
 const NEXT: Record<OrderStatus, OrderStatus[]> = {

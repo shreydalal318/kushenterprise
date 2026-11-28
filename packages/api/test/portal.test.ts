@@ -105,8 +105,8 @@ describe('customer portal', () => {
     const c = await api(customerUser);
     await c.portal.setNotifyChannels({ channels: ['SMS'] });
     const o = await c.portal.placeOrder({ clientRequestId: `cr-${tag()}`, lines: [{ variantId: lens.v20, qty: 1 }] });
-    await (await api()).orders.setStatus({ id: o.id, status: 'CONFIRMED' });
-    const title = `Order ${o.number}: Confirmed`;
+    await (await api()).orders.setStatus({ id: o.id, status: 'ON_HOLD', note: 'Waiting for stock' });
+    const title = `Order ${o.number}: On hold`;
     expect(await prisma.notification.count({ where: { userId: customerUser.id, title, channel: 'IN_APP' } })).toBe(1);
     expect(await prisma.notification.count({ where: { userId: customerUser.id, title, channel: 'SMS' } })).toBe(1);
     await deliverQueued(prisma, 100, { userId: customerUser.id });

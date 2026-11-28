@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, CheckCircle2, Circle, FileText, Loader2, Receipt, Truck, UserRound } from 'lucide-react';
-import { DISPATCH_METHOD_LABEL, DISPATCH_METHODS, formatDate, formatDateTime, istDateString, nextStatuses, ORDER_FLOW, ORDER_STATUS_LABEL, type DispatchMethod, type OrderStatus } from '@kush/core';
+import { DISPATCH_METHOD_LABEL, DISPATCH_METHODS, formatDate, formatDateTime, istDateString, nextStatuses, ORDER_STATUS_LABEL, ORDER_STEPS, type DispatchMethod, type OrderStatus } from '@kush/core';
 import { Button } from '@/components/ui/button';
 import { Alert, Badge, Card, CardBody, CardHeader, PageHeader } from '@/components/ui/card';
 import { Dialog } from '@/components/ui/dialog';
@@ -67,6 +67,7 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
   const linkedPos = [...new Map((sq.data?.lines ?? []).flatMap((l) => l.purchaseOrders).map((p) => [p.id, p])).values()];
   const open = !['CANCELLED', 'DELIVERED'].includes(o.status);
   const reached = (s: OrderStatus) => o.events.find((e) => e.status === s);
+  const resumeTo: OrderStatus = hasInvoice ? 'PACKED' : reached('CONFIRMED') ? 'CONFIRMED' : 'PLACED';
 
   function go(s: OrderStatus) {
     if (s === 'DISPATCHED') return setDispatchOpen(true);
@@ -101,16 +102,15 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
             )}
             {can('UPDATE_ORDER_STATUS') && canDispatch && <Button size="sm" onClick={() => go('DISPATCHED')}><Truck className="size-4" aria-hidden /> Dispatch</Button>}
             {canDeliver && o.status === 'DISPATCHED' && <Button size="sm" variant={canDispatch ? 'secondary' : 'primary'} onClick={() => go('DELIVERED')}>Mark delivered</Button>}
-            {can('UPDATE_ORDER_STATUS') && o.status === 'PLACED' && <Button size="sm" variant="secondary" loading={setStatus.isPending && setStatus.variables?.status === 'CONFIRMED'} onClick={() => go('CONFIRMED')}>Confirm only</Button>}
-            {/* Invoiced goods are already picked, so an invoiced order on hold can only go back to Packed. */}
-            {can('UPDATE_ORDER_STATUS') && o.status === 'ON_HOLD' && next.filter((s) => s !== 'CANCELLED' && (!hasInvoice || s === 'PACKED')).map((s) => <Button key={s} size="sm" variant="secondary" onClick={() => go(s)}>Resume ({ORDER_STATUS_LABEL[s].toLowerCase()})</Button>)}
+            {/* Back to where it was: Invoiced if it has an invoice (the goods are already picked), else New. */}
+            {can('UPDATE_ORDER_STATUS') && o.status === 'ON_HOLD' && <Button size="sm" variant="secondary" loading={setStatus.isPending} onClick={() => go(resumeTo)}>Resume ({ORDER_STATUS_LABEL[resumeTo].toLowerCase()})</Button>}
             {can('UPDATE_ORDER_STATUS') && next.includes('ON_HOLD') && <Button size="sm" variant="secondary" onClick={() => go('ON_HOLD')}>Put on hold</Button>}
             {can('UPDATE_ORDER_STATUS') && next.includes('CANCELLED') && !hasInvoice && <Button size="sm" variant="danger" onClick={() => go('CANCELLED')}>Cancel order</Button>}
           </div>
         )} />
         <CardBody>
-          <ol className="grid gap-3 sm:grid-cols-5">
-            {ORDER_FLOW.map((s) => {
+          <ol className="grid gap-3 sm:grid-cols-4">
+            {ORDER_STEPS.map((s) => {
               const e = reached(s);
               return (
                 <li key={s} className="flex items-start gap-2">

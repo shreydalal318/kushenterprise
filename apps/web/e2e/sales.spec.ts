@@ -94,7 +94,7 @@ test.describe.serial('Phase 4 sales', () => {
     await expect(page.getByLabel('Quantity for line 1')).toHaveValue('2');
     await page.getByRole('button', { name: /Save tax invoice/ }).click();
     await page.waitForURL((u) => u.pathname === orderPath);
-    await expect(page.getByText('Packed', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Invoiced', { exact: true }).first()).toBeVisible();
     const dlg2 = page.getByRole('dialog');
     await expect(dlg2).toBeVisible();
     // Same city as us → our own delivery staff is suggested; this one goes by courier instead.
@@ -172,7 +172,6 @@ test.describe.serial('Phase 4 sales', () => {
     const c = customers.find((x) => x.name === ctx.customer)!;
     const gel = await trpc<{ variant: { id: string } }>(r, 'scan.resolve', { code: ctx.gelBarcode }, 'GET');
     const o = await trpc<{ id: string; number: string }>(r, 'orders.create', { customerId: c.id, lines: [{ variantId: gel.variant.id, qty: 1 }] });
-    await trpc(r, 'orders.setStatus', { id: o.id, status: 'CONFIRMED' });
     await trpc(r, 'invoices.create', { customerId: c.id, orderId: o.id, date: new Date().toISOString().slice(0, 10), lines: [{ variantId: gel.variant.id, qty: 1 }] });
     await page.goto(`/app/orders/${o.id}`); // the invoice already packed it
     await page.getByRole('button', { name: 'Dispatch', exact: true }).click();

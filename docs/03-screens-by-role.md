@@ -29,7 +29,7 @@ Legend: 🌐 public website · 🖥 web app (desktop / counter tablet) · 📱 m
 | C4 | **Product detail + power grid** | Pick powers from a grid (e.g. +10.0 to +30.0 D) and set the quantity for each power |
 | C5 | **Cart & checkout** | Delivery address, "for Dr. X" (hospital accounts), patient name / surgery date (optional), note, submit |
 | C6 | **My orders** | List with status filters |
-| C7 | **Order detail** | **Status timeline** (Placed → Confirmed → Packed → Dispatched → Delivered), dispatch details (courier, docket no.), back-ordered items, linked invoices |
+| C7 | **Order detail** | **Status timeline** (Order placed → Invoice ready → On the way → Delivered), dispatch details (courier, docket no.), back-ordered items, linked invoices |
 | C8 | **Invoices** | List of invoices and proformas, with PDF download and share |
 | C9 | **Account / ledger** | Invoices, payments, outstanding, ageing (0–30 / 31–60 / 61–90 / 90+), statement PDF |
 | C10 | **Notifications** | In-app inbox. Push, WhatsApp, SMS or email according to the customer's preferences |

@@ -13,11 +13,11 @@ import { AgeingBar, dayLabel, LineChart } from './charts';
 
 type Home = RouterOutputs['analytics']['home'];
 
-/** Raising the tax invoice also confirms and packs an order, so Placed and Confirmed are one step. */
+/** The same steps as the order list: New (Placed or Confirmed) → Invoiced → Dispatched. */
 const WAITING: { label: string; status: string; statuses: OrderStatus[] }[] = [
-  { label: 'To invoice', status: 'TO_INVOICE', statuses: ['PLACED', 'CONFIRMED'] },
-  { label: 'To dispatch', status: 'PACKED', statuses: ['PACKED'] },
-  { label: 'Out for delivery', status: 'DISPATCHED', statuses: ['DISPATCHED'] },
+  { label: 'New (to invoice)', status: 'TO_INVOICE', statuses: ['PLACED', 'CONFIRMED'] },
+  { label: 'Invoiced (to dispatch)', status: 'PACKED', statuses: ['PACKED'] },
+  { label: 'Dispatched', status: 'DISPATCHED', statuses: ['DISPATCHED'] },
   { label: 'On hold', status: 'ON_HOLD', statuses: ['ON_HOLD'] },
 ];
 

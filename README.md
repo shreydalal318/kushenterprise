@@ -141,7 +141,7 @@ Not in this phase:
 - **Catalogue at their own price only** (special price → price list → default; never cost or other customers' rates). Filters: category, brand, lens type and **power**. Stock shows only as *Available*, *Limited* or *On request*, never quantities.
 - **Product page with a power grid**: set a quantity against each power and add them all at once.
 - **Cart and checkout**: delivery address, "for Dr. X" (hospital accounts), patient name, surgery date, note. Double-clicks and retries never create a second order.
-- **My orders**: status timeline (Placed → Confirmed → Packed → Dispatched → Delivered), courier and docket number, items still to be sent, linked invoices, and "Order the same again".
+- **My orders**: status timeline (Order placed → Invoice ready → On the way → Delivered), courier and docket number, items still to be sent, linked invoices, and "Order the same again".
 - **Invoices**: tax invoices, proformas and credit notes to view or download as PDF.
 - **Account**: outstanding, overdue, ageing (0–30 / 31–60 / 61–90 / 90+), statement, and a **statement PDF** for any period.
 - **Profile**: registration details and addresses (kept by Kush Enterprise; the customer sends a change request, which reaches the owner and the assigned employee), and how they want to be kept informed.
@@ -201,7 +201,7 @@ Not in this phase: emailing / WhatsApp-ing the PO to the supplier (needs the not
   - Original / Duplicate / Triplicate copies in one PDF; download or print from the invoice screen.
   - The PDF is checked against the saved totals before it is produced.
 - **Orders**: placed by staff (and by customers from Phase 6). Pending orders are listed first.
-  - Flow: Placed → Confirmed → Packed → Dispatched → Delivered, plus On hold and Cancelled. Each step is recorded with who did it and when.
+  - Flow staff see: New → Invoiced → Dispatched → Delivered, plus On hold and Cancelled. Making the tax invoice moves a New order to Invoiced (internally Placed → Confirmed → Packed in one go). Each step is recorded with who did it and when.
   - Rates are locked when the order is placed. Back-ordered quantities stay open until invoiced.
   - **Pack & verify**: scan every box into the parcel; wrong items and extra units are flagged.
   - Dispatch needs an invoice and the courier/docket details, which are also printed on the invoice.

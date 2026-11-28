@@ -5,7 +5,7 @@ import { formatDateTime } from '@kush/core';
 import { Button } from '@/components/ui/button';
 import { Alert, Card, CardBody, CardHeader, PageHeader } from '@/components/ui/card';
 import { LinkButton } from '@/components/ui/link-button';
-import { OrderBadge } from '@/components/sales/status';
+import { CustomerOrderBadge } from '@/components/sales/status';
 import { cn } from '@/lib/cn';
 import { errorMessage } from '@/lib/errors';
 import { rupees } from '@/lib/format';
@@ -40,7 +40,7 @@ export function PortalHome() {
             {d.orders.map((o) => (
               <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3">
                 <div><Link href={`/portal/orders/${o.id}`} className="font-mono text-sm font-medium text-navy hover:underline">{o.number}</Link><div className="text-xs text-muted">{formatDateTime(o.createdAt)} · {o.units} unit(s)</div></div>
-                <div className="flex items-center gap-2"><OrderBadge status={o.status} /><Button size="sm" variant="secondary" onClick={() => void reorder(o.id)}><RotateCcw className="size-3.5" aria-hidden /> Order again</Button></div>
+                <div className="flex items-center gap-2"><CustomerOrderBadge status={o.status} /><Button size="sm" variant="secondary" onClick={() => void reorder(o.id)}><RotateCcw className="size-3.5" aria-hidden /> Order again</Button></div>
               </li>
             ))}
           </ul>
