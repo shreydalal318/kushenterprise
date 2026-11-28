@@ -90,7 +90,7 @@ test.describe.serial('Phase 6 customer portal', () => {
 
     await cust.goto('/portal/account');
     await expect(cust.getByRole('heading', { name: 'Account' })).toBeVisible();
-    const pdf = await cust.request.get((await cust.getByRole('link', { name: 'Statement PDF' }).getAttribute('href'))!);
+    const pdf = await cust.request.get((await cust.getByRole('link', { name: 'Ledger PDF' }).getAttribute('href'))!);
     expect(pdf.headers()['content-type']).toBe('application/pdf');
 
     await cust.goto('/portal/profile');

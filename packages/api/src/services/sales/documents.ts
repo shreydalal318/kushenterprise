@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { formatDate, INVOICE_COPY_LABEL, type InvoiceCopy } from '@kush/core';
+import { daysUntil, INVOICE_COPY_LABEL, tallyDate, tallyLedgerLine, type InvoiceCopy } from '@kush/core';
 import type { Db } from '@kush/db';
 import { buildDocModel, buildDocumentHtml, buildStatementHtml, renderDocumentPdf, renderHtmlPdf, type DocParty, type DocSource, type DocSupplier } from '@kush/pdf';
 import { istDateString, stateByCode } from '@kush/core';
@@ -11,7 +11,7 @@ import { getSettings } from '../settings';
 
 export type DocKind = 'invoice' | 'proforma' | 'credit-note' | 'purchase-order';
 
-const d = (x: Date | null | undefined) => (x ? formatDate(isoDay(x)) : '');
+const d = (x: Date | null | undefined) => (x ? tallyDate(isoDay(x)) : '');
 
 async function signature(db: Db): Promise<string | null> {
   const s = await getSettings(db);
@@ -126,10 +126,8 @@ export async function renderDocument(db: Db, kind: DocKind, id: string, copies?:
   return { pdf, filename, customerId };
 }
 
-const ROW_TYPE: Record<string, string> = { INVOICE: 'Invoice', PAYMENT: 'Receipt', CREDIT_NOTE: 'Credit note', CANCELLED_INVOICE: 'Invoice (cancelled)' };
-
-/** Statement of account PDF for one customer and period. */
-export async function renderStatement(db: Db, customerId: string, opts: { from?: string; to?: string } = {}) {
+/** A customer's Ledger Account (Tally layout) for a period, as an HTML page. */
+export async function renderStatementHtml(db: Db, customerId: string, opts: { from?: string; to?: string } = {}) {
   const [ledger, settings, c] = await Promise.all([
     customerLedger(db, customerId, opts),
     getSettings(db),
@@ -142,8 +140,19 @@ export async function renderStatement(db: Db, customerId: string, opts: { from?:
     company: { name: co.name, addressLines: co.addressLines, gstin: co.gstin, phone: co.phone, email: co.email },
     customer: { name: c.name, code: c.code, gstin: c.gstin, addressLines: a ? [a.line1, a.line2, `${a.city} - ${a.pincode}`, stateByCode(a.stateCode)?.name].filter(Boolean) as string[] : [] },
     from: opts.from ?? null, to: opts.to ?? istDateString(), opening: ledger.opening, closing: ledger.closing,
-    rows: ledger.rows.map((r) => ({ date: r.date, type: ROW_TYPE[r.type] ?? r.type, number: r.number, narration: r.narration, debit: r.debit, credit: r.credit, balance: r.balance })),
+    rows: ledger.rows.map((r) => {
+      const t = tallyLedgerLine(r.type, r.mode);
+      // Sales lines need no narration in Tally; receipts and credit notes keep theirs (mode, reference, reason).
+      return { date: r.date, particulars: t.particulars, vchType: t.vchType, vchNo: r.number, narration: r.type === 'INVOICE' ? '' : r.narration, debit: r.debit, credit: r.credit, cancelled: r.type === 'CANCELLED_INVOICE' };
+    }),
+    pendingBills: ledger.openInvoices.map((i) => ({ date: i.date, ref: i.number, opening: i.total, pending: i.due, dueOn: i.dueDate, overdueDays: Math.max(0, -daysUntil(i.dueDate, ledger.today)) })),
     ageing: ledger.ageing, overdue: ledger.overdue, onAccount: ledger.onAccount,
   });
-  return { pdf: await renderHtmlPdf(html), filename: `Statement-${c.code}-${opts.to ?? istDateString()}.pdf` };
+  return { html, filename: `Ledger-${c.code}-${opts.to ?? istDateString()}.pdf` };
+}
+
+/** The same Ledger Account as a PDF. */
+export async function renderStatement(db: Db, customerId: string, opts: { from?: string; to?: string } = {}) {
+  const { html, filename } = await renderStatementHtml(db, customerId, opts);
+  return { pdf: await renderHtmlPdf(html), filename };
 }

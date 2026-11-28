@@ -5,22 +5,23 @@ import { Ionicons } from '@expo/vector-icons';
 import { DocView } from '@/components/doc-view';
 import { Alert, Button, Loading } from '@/components/ui';
 import { API_URL } from '@/lib/config';
-import { docPath, openPdf, type DocKind } from '@/lib/documents';
+import { documentUrls, openPdf, type PreviewKind } from '@/lib/documents';
 import { errorText } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { loadToken } from '@/lib/token';
 
-const NAME: Record<DocKind, string> = { invoice: 'Invoice', proforma: 'Proforma', 'credit-note': 'Credit note', 'purchase-order': 'Purchase order' };
+const NAME: Record<PreviewKind, string> = { invoice: 'Invoice', proforma: 'Proforma', 'credit-note': 'Credit note', 'purchase-order': 'Purchase order', statement: 'Ledger' };
 
-/** See a tax invoice / proforma / credit note / purchase order as it prints, then share the PDF. */
+/** See a tax invoice / proforma / credit note / purchase order / ledger as it prints, then share the PDF. */
 export default function Preview() {
-  const { kind, id, number, copies } = useLocalSearchParams<{ kind: DocKind; id: string; number?: string; copies?: string }>();
+  const { kind, id, number, q } = useLocalSearchParams<{ kind: PreviewKind; id: string; number?: string; q?: string }>();
   const [token, setToken] = useState<string | null | undefined>(undefined);
   const [failed, setFailed] = useState<string | null>(null);
   const [share, setShare] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
   useEffect(() => { void loadToken().then(setToken); }, []);
-  const path = `${docPath(kind, id)}${copies ? `?copies=${copies}` : ''}`;
-  const url = `${API_URL}${docPath(kind, id)}?format=html${copies ? `&copies=${copies}` : ''}`;
+  const urls = documentUrls(kind, id, q);
+  const path = urls.pdf;
+  const url = `${API_URL}${urls.html}`;
   const title = `${NAME[kind] ?? 'Document'}${number ? ` ${number}` : ''}`;
 
   async function sharePdf() {

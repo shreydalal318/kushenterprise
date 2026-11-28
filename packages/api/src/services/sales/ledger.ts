@@ -8,6 +8,8 @@ export interface LedgerEntry {
   id: string;
   number: string;
   narration: string;
+  /** Receipts: how the money came (Tally shows "By Cash" or "By Bank"). */
+  mode: string | null;
   debit: number;
   credit: number;
   balance: number;
@@ -28,11 +30,12 @@ export async function customerLedger(db: Db, customerId: string, opts: { from?: 
   const all: Omit<LedgerEntry, 'balance'>[] = [
     ...invoices.map((i) => ({
       date: isoDay(i.date)!, type: (i.status === 'CANCELLED' ? 'CANCELLED_INVOICE' : 'INVOICE') as LedgerEntry['type'], id: i.id, number: i.number,
-      narration: i.status === 'CANCELLED' ? `Cancelled: ${i.cancelReason ?? ''}` : 'Sales', debit: i.status === 'CANCELLED' ? 0 : num(i.grandTotal), credit: 0,
+      narration: i.status === 'CANCELLED' ? `Cancelled: ${i.cancelReason ?? ''}` : 'Sales', mode: null, debit: i.status === 'CANCELLED' ? 0 : num(i.grandTotal), credit: 0,
     })),
-    ...payments.map((p) => ({ date: isoDay(p.date)!, type: 'PAYMENT' as const, id: p.id, number: p.number, narration: `Receipt (${PAYMENT_MODE_LABEL[p.mode as PaymentMode]})${p.reference ? ` ${p.reference}` : ''}`, debit: 0, credit: num(p.amount) })),
-    ...creditNotes.map((c) => ({ date: isoDay(c.date)!, type: 'CREDIT_NOTE' as const, id: c.id, number: c.number, narration: `Credit note${c.invoice ? ` against ${c.invoice.number}` : ''}: ${c.reason}`, debit: 0, credit: num(c.grandTotal) })),
-  ].sort((a, b) => (a.date === b.date ? (a.type === 'INVOICE' ? -1 : 1) : a.date < b.date ? -1 : 1));
+    ...payments.map((p) => ({ date: isoDay(p.date)!, type: 'PAYMENT' as const, id: p.id, number: p.number, narration: `Receipt (${PAYMENT_MODE_LABEL[p.mode as PaymentMode]})${p.reference ? ` ${p.reference}` : ''}`, mode: p.mode, debit: 0, credit: num(p.amount) })),
+    ...creditNotes.map((c) => ({ date: isoDay(c.date)!, type: 'CREDIT_NOTE' as const, id: c.id, number: c.number, narration: `Credit note${c.invoice ? ` against ${c.invoice.number}` : ''}: ${c.reason}`, mode: null, debit: 0, credit: num(c.grandTotal) })),
+  // By date; on the same day sales first, then by voucher number (as Tally lists them).
+  ].sort((a, b) => (a.date !== b.date ? (a.date < b.date ? -1 : 1) : Number(b.type === 'INVOICE') - Number(a.type === 'INVOICE') || a.number.localeCompare(b.number, 'en', { numeric: true })));
 
   let opening = 0;
   const rows: LedgerEntry[] = [];

@@ -48,7 +48,7 @@ export default function InvoiceScreen() {
   const pdfPath = `${docPath('invoice', i.id)}?copies=${copies.join(',')}`;
   const openInvoicePdf = () => void pdf.open(pdfPath, `${i.number}.pdf`);
   // See it as it prints (Share PDF is on that screen too).
-  const viewInvoice = () => router.push(previewHref('invoice', i.id, i.number, copies.join(',')));
+  const viewInvoice = () => router.push(previewHref('invoice', i.id, i.number, `copies=${copies.join(',')}`));
   const canPay = !cancelled && i.due > 0 && can('RECORD_PAYMENTS');
   const canShare = !cancelled && (can('CREATE_TAX_INVOICE') || can('RECORD_PAYMENTS'));
   const goPay = () => router.push(`/staff/payments/new?customerId=${i.customer.id}&invoiceId=${i.id}`);

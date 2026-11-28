@@ -1,6 +1,6 @@
 import { can } from '@kush/core';
 import { prisma } from '@kush/db';
-import { renderStatement } from '@kush/api/server';
+import { renderStatement, renderStatementHtml } from '@kush/api/server';
 import { getSessionUser } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
@@ -8,7 +8,7 @@ export const runtime = 'nodejs';
 
 const day = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
 
-/** Statement of account PDF. Customers get only their own; staff need payments or customer access. */
+/** Ledger Account PDF (Tally layout). Customers get only their own; staff need payments or customer access. ?format=html for the app's preview. */
 export async function GET(req: Request, { params }: { params: Promise<{ customerId: string }> }) {
   const { customerId } = await params;
   const user = await getSessionUser();
@@ -17,7 +17,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ customer
   if (!allowed) return new Response('Not found', { status: 404 });
   const url = new URL(req.url);
   try {
-    const { pdf, filename } = await renderStatement(prisma, customerId, { from: day(url.searchParams.get('from')), to: day(url.searchParams.get('to')) });
+    const range = { from: day(url.searchParams.get('from')), to: day(url.searchParams.get('to')) };
+    if (url.searchParams.get('format') === 'html') {
+      const { html } = await renderStatementHtml(prisma, customerId, range);
+      return new Response(html.replace('<head>', '<head><meta name="viewport" content="width=820">'), { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'private, no-store', 'Content-Security-Policy': "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:" } });
+    }
+    const { pdf, filename } = await renderStatement(prisma, customerId, range);
     return new Response(new Uint8Array(pdf), { headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `${url.searchParams.get('download') ? 'attachment' : 'inline'}; filename="${filename}"`, 'Cache-Control': 'private, no-store' } });
   } catch (e) {
     return new Response(/NOT_FOUND/.test((e as Error).message) ? 'Not found' : 'Could not create the statement', { status: /NOT_FOUND/.test((e as Error).message) ? 404 : 500 });

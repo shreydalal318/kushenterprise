@@ -3,7 +3,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { keepPreviousData } from '@tanstack/react-query';
 import { Download, FileDown } from 'lucide-react';
-import { AGEING_BUCKETS, CHANNEL_LABEL, formatDate, formatDateTime, NOTIFICATION_CHANNELS_FOR_CUSTOMER, type CustomerChannel } from '@kush/core';
+import { AGEING_BUCKETS, CHANNEL_LABEL, type CustomerChannel, drCr, formatDate, formatDateTime, NOTIFICATION_CHANNELS_FOR_CUSTOMER, tallyDate, tallyLedgerLine } from '@kush/core';
 import { SignOutButton } from '@/components/app/sign-out-button';
 import { Button } from '@/components/ui/button';
 import { Alert, Badge, Card, CardBody, CardHeader, PageHeader } from '@/components/ui/card';
@@ -95,7 +95,6 @@ export function MyInvoices() {
   );
 }
 
-const KIND: Record<string, string> = { INVOICE: 'Invoice', PAYMENT: 'Payment', CREDIT_NOTE: 'Credit note', CANCELLED_INVOICE: 'Invoice (cancelled)' };
 
 export function MyAccount({ customerId }: { customerId: string }) {
   const [from, setFrom] = useState('');
@@ -108,32 +107,33 @@ export function MyAccount({ customerId }: { customerId: string }) {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader title="Account" description={`Payment terms ${d.customer.paymentTermsDays} days${d.customer.creditLimit ? ` · credit limit ${rupees(d.customer.creditLimit)}` : ''}`}
-        actions={<a href={`/api/statement/${customerId}?download=1${qs ? `&${qs}` : ''}`} className="inline-flex h-10 items-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800"><FileDown className="size-4" aria-hidden /> Statement PDF</a>} />
+        actions={<a href={`/api/statement/${customerId}?download=1${qs ? `&${qs}` : ''}`} className="inline-flex h-10 items-center gap-2 rounded-lg bg-teal-700 px-4 text-sm font-semibold text-white hover:bg-teal-800"><FileDown className="size-4" aria-hidden /> Ledger PDF</a>} />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
         <Card className="col-span-2 px-4 py-3"><p className="text-xs text-muted">Outstanding</p><p className={cn('text-2xl font-semibold', d.outstanding > 0 ? 'text-navy' : 'text-ok')}>{rupees(Math.abs(d.outstanding))}{d.outstanding < 0 && <span className="ml-1 text-sm font-normal">advance</span>}</p>{d.overdue > 0 && <p className="text-xs text-danger">{rupees(d.overdue)} overdue</p>}</Card>
         {AGEING_BUCKETS.map((b) => <Card key={b} className="px-4 py-3"><p className="text-xs text-muted">{b} days</p><p className="text-lg font-semibold">{rupees(d.ageing[b])}</p></Card>)}
       </div>
       <Card className="overflow-hidden">
-        <CardHeader title="Statement" actions={<div className="flex flex-wrap gap-2"><input aria-label="From date" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 rounded-lg border border-line px-2 text-sm" /><input aria-label="To date" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9 rounded-lg border border-line px-2 text-sm" /></div>} />
+        {/* Your ledger with us, laid out like Tally: To (debit) / By (credit), voucher type and number, balance Dr / Cr. */}
+        <CardHeader title="Ledger Account" actions={<div className="flex flex-wrap gap-2"><input aria-label="From date" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 rounded-lg border border-line px-2 text-sm" /><input aria-label="To date" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="h-9 rounded-lg border border-line px-2 text-sm" /></div>} />
         {/* Phones: date and document on one line, amount and running balance under it. */}
         <ul className="divide-y divide-line text-sm sm:hidden">
-          <li className="flex justify-between bg-canvas px-5 py-2.5 font-medium"><span>Opening balance</span><span className="font-semibold">{rupees(d.opening)}</span></li>
+          <li className="flex justify-between bg-canvas px-5 py-2.5 font-medium"><span>Opening Balance</span><span className="font-semibold">{drCr(d.opening)}</span></li>
           {d.rows.length === 0 && <li className="px-5 py-8 text-center text-muted">No entries in this period.</li>}
-          {d.rows.map((e) => (
+          {d.rows.map((e) => { const t = tallyLedgerLine(e.type, e.mode); return (
             <li key={`${e.type}-${e.id}`} className={cn('px-5 py-2.5', e.type === 'CANCELLED_INVOICE' && 'text-muted')}>
-              <div className="flex justify-between gap-2"><span>{KIND[e.type]} <span className="font-mono">{e.number}</span></span><span className="shrink-0 text-xs text-muted">{formatDate(e.date)}</span></div>
-              <div className="flex justify-between gap-2 text-xs"><span>{e.debit ? rupees(e.debit) : ''}{e.credit ? <span className="text-ok">{rupees(e.credit)} received</span> : ''}</span><span>Balance <strong>{rupees(e.balance)}</strong></span></div>
+              <div className="flex justify-between gap-2"><span>{t.particulars} · {t.vchType} <span className="font-mono">{e.number}</span></span><span className="shrink-0 text-xs text-muted">{tallyDate(e.date)}</span></div>
+              <div className="flex justify-between gap-2 text-xs"><span>{e.debit ? `Dr ${rupees(e.debit)}` : ''}{e.credit ? `Cr ${rupees(e.credit)}` : ''}</span><span>Balance <strong>{drCr(e.balance)}</strong></span></div>
             </li>
-          ))}
-          <li className="flex justify-between bg-canvas px-5 py-2.5 font-medium"><span>Closing balance</span><span className="font-semibold">{rupees(d.closing)}</span></li>
+          ); })}
+          <li className="flex justify-between bg-canvas px-5 py-2.5 font-medium"><span>Closing Balance</span><span className="font-semibold">{drCr(d.closing)}</span></li>
         </ul>
         <Table minWidth={680} className="hidden sm:block">
-          <THead><tr><Th>Date</Th><Th>Document</Th><Th className="text-right">Debit</Th><Th className="text-right">Credit</Th><Th className="text-right">Balance</Th></tr></THead>
+          <THead><tr><Th>Date</Th><Th>Particulars</Th><Th>Vch Type</Th><Th>Vch No.</Th><Th className="text-right">Debit</Th><Th className="text-right">Credit</Th><Th className="text-right">Balance</Th></tr></THead>
           <tbody>
-            <Tr className="bg-canvas"><Td colSpan={4} className="font-medium">Opening balance</Td><Td className="num font-semibold">{rupees(d.opening)}</Td></Tr>
-            {d.rows.length === 0 && <EmptyRow cols={5}>No entries in this period.</EmptyRow>}
-            {d.rows.map((e) => <Tr key={`${e.type}-${e.id}`} className={e.type === 'CANCELLED_INVOICE' ? 'text-muted' : ''}><Td>{formatDate(e.date)}</Td><Td className="text-sm">{KIND[e.type]} <span className="font-mono">{e.number}</span></Td><Td className="num">{e.debit ? rupees(e.debit) : ''}</Td><Td className="num text-ok">{e.credit ? rupees(e.credit) : ''}</Td><Td className="num font-semibold">{rupees(e.balance)}</Td></Tr>)}
-            <Tr className="bg-canvas"><Td colSpan={4} className="font-medium">Closing balance</Td><Td className="num font-semibold">{rupees(d.closing)}</Td></Tr>
+            <Tr className="bg-canvas"><Td>{from ? tallyDate(from) : ''}</Td><Td colSpan={3} className="font-semibold">Opening Balance</Td><Td className="num">{d.opening > 0 ? rupees(d.opening) : ''}</Td><Td className="num">{d.opening < 0 ? rupees(-d.opening) : ''}</Td><Td className="num font-semibold">{drCr(d.opening)}</Td></Tr>
+            {d.rows.length === 0 && <EmptyRow cols={7}>No entries in this period.</EmptyRow>}
+            {d.rows.map((e) => { const t = tallyLedgerLine(e.type, e.mode); return <Tr key={`${e.type}-${e.id}`} className={e.type === 'CANCELLED_INVOICE' ? 'text-muted' : ''}><Td className="whitespace-nowrap">{tallyDate(e.date)}</Td><Td className="text-sm">{t.particulars}</Td><Td className="text-sm">{t.vchType}</Td><Td className="font-mono text-sm">{e.number}</Td><Td className="num">{e.debit ? rupees(e.debit) : ''}</Td><Td className="num">{e.credit ? rupees(e.credit) : ''}</Td><Td className="num font-semibold whitespace-nowrap">{drCr(e.balance)}</Td></Tr>; })}
+            <Tr className="bg-canvas"><Td /><Td colSpan={5} className="font-semibold">Closing Balance</Td><Td className="num font-semibold whitespace-nowrap">{drCr(d.closing)}</Td></Tr>
           </tbody>
         </Table>
       </Card>

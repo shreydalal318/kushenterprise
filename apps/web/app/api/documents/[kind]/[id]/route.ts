@@ -29,7 +29,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
       const allowed = user.role === 'CUSTOMER' ? user.customerId === customerId : ACCESS[k].some((p) => can(user, p));
       if (!allowed) return new Response('Not found', { status: 404 });
       const page = html.replace('<head>', '<head><meta name="viewport" content="width=820">');
-      return new Response(page, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'private, no-store', 'Content-Security-Policy': "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:" } });
+      return new Response(page, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'private, no-store', // The page lays itself out into A4 pages with its own inline script; nothing else may load or run.
+        'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; img-src data:; style-src 'unsafe-inline'; font-src data:" } });
     }
     const { pdf, filename, customerId } = await renderDocument(prisma, k, id, copies.length ? copies : ['ORIGINAL']);
     // Staff need the permission; a customer may only download their own documents.

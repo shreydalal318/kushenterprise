@@ -1,21 +1,20 @@
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { AGEING_BUCKETS, financialYear, formatDate, istDateString } from '@kush/core';
+import { AGEING_BUCKETS, daysUntil, drCr, financialYear, istDateString, tallyDate, tallyLedgerLine } from '@kush/core';
 import { DateInput, Grid, Heading, isDay, Line, NotAllowed, Note, Pills, Section, SmallButton, Stat, Tag, Waiting, type Tone } from '@/components/admin/bits';
 import { Alert, Button, Card, H2, LinkButton, Screen } from '@/components/ui';
 import { useCan } from '@/lib/auth';
-import { docPath, openPdf } from '@/lib/documents';
+import { documentUrls, openPdf, previewHref } from '@/lib/documents';
 import { errorText, rupees } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
 
-const KIND: Record<string, string> = { INVOICE: 'Invoice', PAYMENT: 'Money received', CREDIT_NOTE: 'Credit note', CANCELLED_INVOICE: 'Invoice (cancelled)' };
 const PAY: Record<string, [string, Tone]> = { PAID: ['Paid', 'ok'], PARTLY_PAID: ['Part paid', 'warn'], UNPAID: ['Unpaid', 'neutral'], OVERDUE: ['Overdue', 'danger'] };
 const LATEST = 60;
 const sep = { gap: 4, paddingTop: 10, borderTopWidth: 1, borderTopColor: C.line } as const;
 
-/** What a customer owes: total, how old it is, unpaid invoices and every entry, with the statement PDF to share (website: customer ledger). */
+/** What a customer owes: total, how old it is, unpaid invoices and the Tally-style ledger, with the ledger PDF to view and share. */
 export default function Statement() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const can = useCan();
@@ -36,7 +35,7 @@ export default function Statement() {
     catch (e) { const t = errorText(e); setPdf({ busy: null, error: /pdf/i.test(t) ? t : `Could not open the PDF. ${t}` }); }
   }
 
-  const title = <Stack.Screen options={{ title: 'Statement' }} />;
+  const title = <Stack.Screen options={{ title: 'Ledger Account' }} />;
   if (!allowed) return <Screen>{title}<NotAllowed what="see customer statements" /></Screen>;
   if (!q.data) return <Screen>{title}<Waiting q={q} /></Screen>;
   const d = q.data;
@@ -48,8 +47,9 @@ export default function Statement() {
     <Screen footer={
       <>
         {!!pdf.error && <Alert>{pdf.error}</Alert>}
-        <Button title="Share statement PDF" loading={pdf.busy === 'statement'} disabled={!!pdf.busy && pdf.busy !== 'statement'}
-          onPress={() => void share('statement', `/api/statement/${d.customer.id}?download=1${query ? `&${query}` : ''}`, `Statement-${d.customer.code}.pdf`)} />
+        <Button title="View ledger" onPress={() => router.push(previewHref('statement', d.customer.id, d.customer.name, query || undefined))} />
+        <Button variant="secondary" title="Share ledger PDF" loading={pdf.busy === 'statement'} disabled={!!pdf.busy && pdf.busy !== 'statement'}
+          onPress={() => void share('statement', documentUrls('statement', d.customer.id, query || undefined).pdf, `Ledger-${d.customer.code}.pdf`)} />
       </>
     }>
       {title}
@@ -71,25 +71,27 @@ export default function Statement() {
 
       {d.openInvoices.length > 0 && (
         <Card>
-          <H2>{`Unpaid invoices (${d.openInvoices.length})`}</H2>
+          {/* Tally's bill-wise pending bills. */}
+          <H2>{`Pending bills (${d.openInvoices.length})`}</H2>
           {d.openInvoices.map((i) => (
             <View key={i.id} style={sep}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Text style={{ flex: 1, fontSize: 16, fontWeight: '700', color: C.navy }}>{i.number}</Text>
                 <Tag label={(PAY[i.status] ?? [i.status, 'neutral'])[0]} tone={(PAY[i.status] ?? [i.status, 'neutral'])[1]} />
               </View>
-              <Line k="Invoice date" v={formatDate(i.date)} />
-              <Line k="Due by" v={formatDate(i.dueDate)} tone={i.status === 'OVERDUE' ? C.danger : undefined} />
-              <Line k="Invoice total" v={rupees(i.total)} />
-              <Line k="Still to pay" v={rupees(i.due)} strong />
-              <SmallButton icon="document-text-outline" title="PDF" label={`Open the PDF of invoice ${i.number}`} busy={pdf.busy === i.id} disabled={!!pdf.busy} onPress={() => void share(i.id, docPath('invoice', i.id), `${i.number}.pdf`)} />
+              <Line k="Date" v={tallyDate(i.date)} />
+              <Line k="Due on" v={`${tallyDate(i.dueDate)}${-daysUntil(i.dueDate, d.today) > 0 ? ` · overdue by ${-daysUntil(i.dueDate, d.today)} days` : ''}`} tone={i.status === 'OVERDUE' ? C.danger : undefined} />
+              <Line k="Opening amount" v={`${rupees(i.total)} Dr`} />
+              <Line k="Pending amount" v={`${rupees(i.due)} Dr`} strong />
+              <SmallButton icon="eye-outline" title="View" label={`View invoice ${i.number}`} onPress={() => router.push(previewHref('invoice', i.id, i.number))} />
             </View>
           ))}
         </Card>
       )}
 
       <Card>
-        <H2>Entries</H2>
+        {/* Tally's ledger: To (debit) / By (credit), voucher type and number, balance Dr / Cr. */}
+        <H2>Ledger</H2>
         <Pills value={period} onChange={(p) => { setPeriod(p); setAll(false); }} options={[['all', 'All time'], ['fy', 'This financial year'], ['custom', 'Choose dates']]} />
         {period === 'custom' && (
           <>
@@ -98,7 +100,7 @@ export default function Statement() {
           </>
         )}
         {q.isFetching && <Note>Updating…</Note>}
-        <Line k={`Opening balance${range.from ? ` on ${formatDate(range.from)}` : ''}`} v={rupees(d.opening)} strong />
+        <Line k={`Opening Balance${range.from ? ` (${tallyDate(range.from)})` : ''}`} v={drCr(d.opening)} strong />
         {d.rows.length > rows.length && (
           <>
             <Note>{`Showing the latest ${LATEST} of ${d.rows.length} entries.`}</Note>
@@ -107,22 +109,24 @@ export default function Statement() {
         )}
         {!d.rows.length && <Note>No entries in this period.</Note>}
         {rows.map((e) => {
-          const doc = e.type === 'INVOICE' || e.type === 'CANCELLED_INVOICE' ? docPath('invoice', e.id) : e.type === 'CREDIT_NOTE' ? docPath('credit-note', e.id) : null;
+          const kind = e.type === 'INVOICE' || e.type === 'CANCELLED_INVOICE' ? 'invoice' as const : e.type === 'CREDIT_NOTE' ? 'credit-note' as const : null;
+          const t = tallyLedgerLine(e.type, e.mode);
           return (
             <View key={`${e.type}-${e.id}`} style={[sep, e.type === 'CANCELLED_INVOICE' ? { opacity: 0.6 } : null]}>
               <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-                <Text style={{ flex: 1, fontSize: 15, fontWeight: '700', color: C.ink }}>{`${KIND[e.type] ?? e.type} ${e.number}`}</Text>
-                <Note>{formatDate(e.date)}</Note>
+                <Text style={{ flex: 1, fontSize: 15, fontWeight: '700', color: C.ink }}>{t.particulars}</Text>
+                <Note>{tallyDate(e.date)}</Note>
               </View>
-              {!!e.narration && <Note>{e.narration}</Note>}
-              {e.debit > 0 && <Line k="Billed" v={rupees(e.debit)} />}
-              {e.credit > 0 && <Line k={e.type === 'PAYMENT' ? 'Received' : 'Credit'} v={rupees(e.credit)} tone={C.ok} />}
-              <Line k="Balance after this" v={rupees(e.balance)} strong />
-              {!!doc && <SmallButton icon="document-text-outline" title="PDF" label={`Open the PDF of ${e.number}`} busy={pdf.busy === e.id} disabled={!!pdf.busy} onPress={() => void share(e.id, doc, `${e.number}.pdf`)} />}
+              <Note>{`${t.vchType} · ${e.number}`}</Note>
+              {e.type !== 'INVOICE' && !!e.narration && <Note style={{ fontStyle: 'italic' }}>{e.narration}</Note>}
+              {e.debit > 0 && <Line k="Debit" v={rupees(e.debit)} />}
+              {e.credit > 0 && <Line k="Credit" v={rupees(e.credit)} />}
+              <Line k="Balance" v={drCr(e.balance)} strong />
+              {!!kind && <SmallButton icon="eye-outline" title="View" label={`View ${e.number}`} onPress={() => router.push(previewHref(kind, e.id, e.number))} />}
             </View>
           );
         })}
-        <View style={sep}><Line k="Closing balance" v={rupees(d.closing)} strong /></View>
+        <View style={sep}><Line k="Closing Balance" v={drCr(d.closing)} strong /></View>
       </Card>
       {can('RECORD_PAYMENTS') && <Button variant="secondary" title="Record money received" onPress={() => router.push(`/staff/payments/new?customerId=${id}`)} />}
     </Screen>

@@ -3,13 +3,14 @@
  * Builds a self-contained HTML page; a small script inside lays out pages by measuring real
  * row heights, so long documents flow onto continuation pages that repeat the full header.
  */
-import { formatDate, formatINR } from '@kush/core';
+import { formatINR, tallyDate } from '@kush/core';
 import { INTER_FACES, LOGO_PNG_BASE64 } from './assets.generated';
 import type { DocLine, DocModel, DocParty } from './types';
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const fmtINR = formatINR;
-const fmtDate = (d: string | null | undefined) => (d ? formatDate(d) : '');
+// Tally's date style on every printed document: 27-Nov-26.
+const fmtDate = (d: string | null | undefined) => (d ? tallyDate(d) : '');
 
 // Unicode ranges as published by @fontsource for the two subsets we embed.
 const RANGES = {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { amountInWords, formatINR, integerToIndianWords, round2 } from '../src/money';
-import { financialYear, financialYearRange, formatDate, formatDateTime } from '../src/dates';
+import { financialYear, financialYearRange, formatDate, formatDateTime, tallyDate } from '../src/dates';
 
 describe('money', () => {
   it('rounds half away from zero', () => {
@@ -38,5 +38,13 @@ describe('dates', () => {
     expect(financialYear('2099-06-01')).toBe('2099-00');
     expect(financialYearRange('2026-27')).toEqual({ start: '2026-04-01', end: '2027-03-31' });
     expect(() => financialYearRange('2026-28')).toThrow();
+  });
+});
+
+describe('tallyDate', () => {
+  it('prints dates the way Tally does', () => {
+    expect(tallyDate('2026-11-27')).toBe('27-Nov-26');
+    expect(tallyDate('2027-04-01')).toBe('1-Apr-27');
+    expect(tallyDate(null)).toBe('');
   });
 });

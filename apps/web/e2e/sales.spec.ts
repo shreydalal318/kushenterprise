@@ -144,8 +144,8 @@ test.describe.serial('Phase 4 sales', () => {
     await expect(page.getByRole('cell', { name: ctx.customer })).toBeVisible();
 
     await page.getByRole('link', { name: ctx.customer }).first().click();
-    await expect(page.getByRole('heading', { name: 'Account statement' })).toBeVisible();
-    await expect(page.getByRole('link', { name: ctx.invoiceNo })).toHaveCount(2); // unpaid list + statement
+    await expect(page.getByRole('heading', { name: 'Ledger Account' })).toBeVisible();
+    await expect(page.getByRole('link', { name: ctx.invoiceNo })).toHaveCount(2); // pending bills + ledger
     await expect(page.getByRole('row').filter({ hasText: ctx.invoiceNo }).first()).toContainText('2,350.00');
     await snap(page, '34-customer-ledger');
   });

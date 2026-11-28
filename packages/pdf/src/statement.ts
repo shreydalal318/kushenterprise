@@ -1,6 +1,22 @@
-/** Customer account statement (A4, simple table) — generated for the portal and staff. */
-import { amountInWords, formatDate, formatINR } from '@kush/core';
-import { fontCss, LOGO } from './template';
+/**
+ * A customer's account printed the way Tally prints a Ledger Account: company and party centred at the top,
+ * then Date / Particulars (To … for debits, By … for credits) / Vch Type / Vch No. / Debit / Credit, the
+ * opening balance first, and the closing balance on the other side so both columns total the same.
+ */
+import { formatINR, tallyDate } from '@kush/core';
+import { fontCss } from './template';
+
+export interface StatementRow {
+  date: string;
+  /** "To Sales", "By Bank", "By Sales Returns" … */
+  particulars: string;
+  vchType: string;
+  vchNo: string;
+  narration: string;
+  debit: number;
+  credit: number;
+  cancelled?: boolean;
+}
 
 export interface StatementModel {
   company: { name: string; addressLines: string[]; gstin: string; phone?: string | null; email?: string | null };
@@ -9,7 +25,9 @@ export interface StatementModel {
   to: string;
   opening: number;
   closing: number;
-  rows: { date: string; type: string; number: string; narration: string; debit: number; credit: number; balance: number }[];
+  rows: StatementRow[];
+  /** Tally's bill-wise pending bills: each unpaid invoice, what is left on it and how late it is. */
+  pendingBills: { date: string; ref: string; opening: number; pending: number; dueOn: string; overdueDays: number }[];
   ageing: Record<string, number>;
   overdue: number;
   onAccount: number;
@@ -17,40 +35,93 @@ export interface StatementModel {
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const money = (n: number) => (n ? formatINR(n) : '');
-const signed = (n: number) => `${formatINR(Math.abs(n))} ${n < 0 ? 'Cr' : 'Dr'}`;
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 export function buildStatementHtml(m: StatementModel) {
-  const rows = m.rows.map((r) => `<tr><td>${esc(formatDate(r.date))}</td><td>${esc(r.type)} <b>${esc(r.number)}</b></td><td>${esc(r.narration)}</td><td class="r">${money(r.debit)}</td><td class="r">${money(r.credit)}</td><td class="r b">${signed(r.balance)}</td></tr>`).join('');
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Statement ${esc(m.customer.name)}</title>
+  const firstDate = m.from ?? m.rows[0]?.date ?? m.to;
+  const openDr = m.opening > 0 ? m.opening : 0;
+  const openCr = m.opening < 0 ? -m.opening : 0;
+  const totalDr = round2(openDr + m.rows.reduce((t, r) => t + r.debit, 0));
+  const totalCr = round2(openCr + m.rows.reduce((t, r) => t + r.credit, 0));
+  // Tally balances the account: the closing balance goes on the smaller side.
+  const closeDr = m.closing < 0 ? -m.closing : 0;
+  const closeCr = m.closing > 0 ? m.closing : 0;
+  const grand = round2(Math.max(totalDr + closeDr, totalCr + closeCr));
+
+  const line = (date: string, particulars: string, vchType: string, vchNo: string, debit: number, credit: number, narration = '', cls = '') =>
+    `<tr class="${cls}"><td class="dt">${esc(date)}</td><td class="pt">${particulars}${narration ? `<div class="nar">${esc(narration)}</div>` : ''}</td><td>${esc(vchType)}</td><td>${esc(vchNo)}</td><td class="r">${money(debit)}</td><td class="r">${money(credit)}</td></tr>`;
+  const body = [
+    m.opening ? line(tallyDate(firstDate), '<b>Opening Balance</b>', '', '', openDr, openCr) : '',
+    ...m.rows.map((r) => line(tallyDate(r.date), r.cancelled ? '<i>(cancelled)</i>' : esc(r.particulars), r.vchType, r.vchNo, r.debit, r.credit, r.narration, r.cancelled ? 'cancelled' : '')),
+  ].join('');
+  const ageingCells = Object.entries(m.ageing);
+
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Ledger Account ${esc(m.customer.name)}</title>
 <style>${fontCss}
-@page { size: A4; margin: 12mm 11mm 14mm; }
-body { font-family: Inter, sans-serif; font-size: 8.4pt; color: #111; margin: 0; }
-.top { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1pt solid #0f2f4d; padding-bottom: 3mm; }
-.top img { height: 11mm; }
-.co { text-align: right; font-size: 7.6pt; line-height: 1.45; }
-h1 { font-size: 13pt; margin: 4mm 0 1mm; color: #0f2f4d; letter-spacing: .04em; }
-.meta { display: flex; justify-content: space-between; gap: 6mm; margin-bottom: 3mm; }
-.box { border: .6pt solid #999; padding: 2mm 3mm; flex: 1; line-height: 1.45; }
-.lbl { font-size: 6.8pt; color: #555; text-transform: uppercase; letter-spacing: .05em; }
-table { width: 100%; border-collapse: collapse; }
-th, td { border: .5pt solid #999; padding: 1.3mm 1.6mm; vertical-align: top; }
-th { background: #eef4f7; font-weight: 600; text-align: left; font-size: 7.4pt; }
+@page { size: A4; margin: 12mm 12mm 14mm; }
+@media screen { body { padding: 10mm 12mm; max-width: 186mm; margin: 0 auto; background: #fff; } }
+body { font-family: Inter, Arial, sans-serif; font-size: 8.2pt; color: #000; margin: 0; }
+.head { text-align: center; line-height: 1.4; }
+.co { font-size: 12pt; font-weight: 700; }
+.party { margin-top: 4mm; }
+.party .nm { font-size: 10.5pt; font-weight: 700; }
+.party .ttl { font-size: 8.4pt; margin: .6mm 0; }
+.period { margin: 2.5mm 0 3mm; font-weight: 600; }
+table.ledger { width: 100%; border-collapse: collapse; }
+table.ledger th { font-weight: 600; text-align: left; padding: 1.2mm 1.4mm; border-top: .8pt solid #000; border-bottom: .8pt solid #000; }
+table.ledger th.r, td.r { text-align: right; }
+table.ledger td { padding: .9mm 1.4mm; vertical-align: top; }
 thead { display: table-header-group; }
 tr { break-inside: avoid; }
-.r { text-align: right; white-space: nowrap; } .b { font-weight: 600; }
-.sum td { background: #f6f8fa; font-weight: 600; }
-.ageing { margin-top: 4mm; width: 70%; }
-.foot { margin-top: 4mm; font-size: 7.2pt; color: #444; }
+td.dt { white-space: nowrap; width: 17mm; }
+td.r { white-space: nowrap; width: 25mm; }
+.nar { font-style: italic; font-size: 7.4pt; color: #333; }
+tr.cancelled td { color: #666; }
+tr.sub td { border-top: .6pt solid #000; font-weight: 600; padding-top: 1.2mm; }
+tr.close td { font-weight: 600; }
+tr.grand td { border-top: .6pt solid #000; border-bottom: 1.6pt double #000; font-weight: 700; padding: 1.2mm 1.4mm; }
+.age { margin-top: 6mm; }
+.age h2 { font-size: 8.6pt; margin: 0 0 1.5mm; }
+.age table { border-collapse: collapse; }
+.age th, .age td { padding: .8mm 3mm; text-align: right; }
+.age th { font-weight: 600; border-top: .6pt solid #000; border-bottom: .6pt solid #000; }
+.age table.bills { width: 100%; }
+.age .l { text-align: left; }
+.age tr.tot td { border-top: .6pt solid #000; font-weight: 700; }
+.foot { margin-top: 5mm; font-size: 7.2pt; color: #333; }
 </style></head><body>
-<div class="top"><img src="${LOGO}" alt=""><div class="co"><b>${esc(m.company.name)}</b><br>${m.company.addressLines.map(esc).join('<br>')}<br>GSTIN: ${esc(m.company.gstin)}${m.company.phone ? ` · ${esc(m.company.phone)}` : ''}${m.company.email ? ` · ${esc(m.company.email)}` : ''}</div></div>
-<h1>STATEMENT OF ACCOUNT</h1>
-<div class="meta">
-  <div class="box"><div class="lbl">Customer</div><b>${esc(m.customer.name)}</b> (${esc(m.customer.code)})<br>${m.customer.addressLines.map(esc).join('<br>')}${m.customer.gstin ? `<br>GSTIN: ${esc(m.customer.gstin)}` : ''}</div>
-  <div class="box"><div class="lbl">Period</div>${m.from ? esc(formatDate(m.from)) : 'From the beginning'} to ${esc(formatDate(m.to))}<br><div class="lbl" style="margin-top:2mm">Balance due</div><b style="font-size:11pt">₹ ${signed(m.closing)}</b>${m.overdue > 0 ? `<br>of which overdue: ₹ ${formatINR(m.overdue)}` : ''}</div>
+<div class="head">
+  <div class="co">${esc(m.company.name)}</div>
+  ${m.company.addressLines.map((l) => `<div>${esc(l)}</div>`).join('')}
+  ${m.company.gstin ? `<div>GSTIN/UIN: ${esc(m.company.gstin)}</div>` : ''}
+  ${m.company.phone || m.company.email ? `<div>${[m.company.phone && `Contact: ${esc(m.company.phone)}`, m.company.email && `E-Mail: ${esc(m.company.email)}`].filter(Boolean).join(' · ')}</div>` : ''}
+  <div class="party">
+    <div class="nm">${esc(m.customer.name)}</div>
+    <div class="ttl">Ledger Account</div>
+    ${m.customer.addressLines.map((l) => `<div>${esc(l)}</div>`).join('')}
+    ${m.customer.gstin ? `<div>GSTIN/UIN: ${esc(m.customer.gstin)}</div>` : ''}
+  </div>
+  <div class="period">${esc(tallyDate(firstDate))} to ${esc(tallyDate(m.to))}</div>
 </div>
-<table><thead><tr><th style="width:15mm">Date</th><th style="width:48mm">Document</th><th>Particulars</th><th class="r" style="width:24mm">Debit (₹)</th><th class="r" style="width:24mm">Credit (₹)</th><th class="r" style="width:28mm">Balance (₹)</th></tr></thead>
-<tbody><tr class="sum"><td colspan="5">Opening balance</td><td class="r">${signed(m.opening)}</td></tr>${rows}<tr class="sum"><td colspan="5">Closing balance (${esc(amountInWords(Math.abs(m.closing)))})</td><td class="r">${signed(m.closing)}</td></tr></tbody></table>
-<table class="ageing"><thead><tr>${Object.keys(m.ageing).map((k) => `<th class="r">${esc(k)} days</th>`).join('')}<th class="r">On account</th></tr></thead><tbody><tr>${Object.values(m.ageing).map((v) => `<td class="r">${formatINR(v)}</td>`).join('')}<td class="r">${formatINR(m.onAccount)}</td></tr></tbody></table>
-<p class="foot">Dr = amount due from you, Cr = in your favour. Please let us know within 15 days if anything here does not match your books. This is a computer-generated statement.</p>
+<table class="ledger">
+  <thead><tr><th>Date</th><th>Particulars</th><th>Vch Type</th><th>Vch No.</th><th class="r">Debit</th><th class="r">Credit</th></tr></thead>
+  <tbody>
+    ${body || '<tr><td colspan="6" style="text-align:center;padding:6mm">No entries in this period.</td></tr>'}
+    <tr class="sub"><td></td><td></td><td></td><td></td><td class="r">${formatINR(totalDr)}</td><td class="r">${formatINR(totalCr)}</td></tr>
+    ${m.closing ? line('', `<b>${m.closing > 0 ? 'By' : 'To'} Closing Balance</b>`, '', '', closeDr, closeCr, '', 'close') : ''}
+    <tr class="grand"><td></td><td></td><td></td><td></td><td class="r">${formatINR(grand)}</td><td class="r">${formatINR(grand)}</td></tr>
+  </tbody>
+</table>
+<div class="age">
+  <h2>Pending Bills (as on ${esc(tallyDate(m.to))})</h2>
+  <table class="bills"><thead><tr><th class="l">Date</th><th class="l">Ref. No.</th><th>Opening Amount</th><th>Pending Amount</th><th class="l">Due on</th><th>Overdue by days</th></tr></thead>
+  <tbody>${m.pendingBills.map((b) => `<tr><td class="l">${esc(tallyDate(b.date))}</td><td class="l">${esc(b.ref)}</td><td>${formatINR(b.opening)} Dr</td><td>${formatINR(b.pending)} Dr</td><td class="l">${esc(tallyDate(b.dueOn))}</td><td>${b.overdueDays > 0 ? b.overdueDays : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="l">No pending bills.</td></tr>'}
+  ${m.onAccount > 0 ? `<tr><td class="l"></td><td class="l">On Account</td><td></td><td>${formatINR(m.onAccount)} Cr</td><td></td><td></td></tr>` : ''}
+  <tr class="tot"><td class="l"></td><td class="l">Total</td><td></td><td>${formatINR(Math.abs(m.pendingBills.reduce((t, b) => t + b.pending, 0) - m.onAccount))} ${m.pendingBills.reduce((t, b) => t + b.pending, 0) - m.onAccount < 0 ? 'Cr' : 'Dr'}</td><td></td><td></td></tr></tbody></table>
+  <h2 style="margin-top:4mm">Ageing</h2>
+  <table><thead><tr>${ageingCells.map(([k]) => `<th>${esc(k)} days</th>`).join('')}<th>Overdue</th></tr></thead>
+  <tbody><tr>${ageingCells.map(([, v]) => `<td>${formatINR(v)}</td>`).join('')}<td>${formatINR(m.overdue)}</td></tr></tbody></table>
+</div>
+<p class="foot">Closing balance: <b>${formatINR(Math.abs(m.closing))} ${m.closing < 0 ? 'Cr' : 'Dr'}</b> (Dr = due from you, Cr = in your favour). Please tell us within 15 days if anything here does not match your books. This is a computer generated ledger.</p>
 </body></html>`;
 }

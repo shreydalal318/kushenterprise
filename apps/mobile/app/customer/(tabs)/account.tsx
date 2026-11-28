@@ -5,7 +5,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { AGEING_BUCKETS, formatDate } from '@kush/core';
 import { Button, Card, H2, Loading, Row, Screen } from '@/components/ui';
 import { PayBadge } from '@/components/status';
-import { usePdf } from '@/customer/actions';
 import { useToast } from '@/customer/toast';
 import { EmptyState, ErrorBox, Input, Line, Note, Notice, Segments } from '@/customer/ui';
 import { useAuth } from '@/lib/auth';
@@ -21,18 +20,15 @@ export default function AccountScreen() {
   const ledger = trpc.portal.ledger.useQuery();
   const docs = trpc.portal.documents.useQuery(undefined, { enabled: tab === 'invoices' });
   const profile = trpc.portal.profile.useQuery(undefined, { enabled: tab === 'profile' });
-  const pdf = usePdf();
   const [msg, setMsg] = useState('');
   const req = trpc.portal.requestChange.useMutation();
   const send = () => req.mutate({ message: msg }, { onSuccess: () => { setMsg(''); toast('Request sent', "We'll update your details and let you know."); } });
   const [leaving, setLeaving] = useState(false);
   const failed = (q: { error: unknown; isFetching: boolean; refetch: () => unknown }) => <ErrorBox text={errorText(q.error)} onRetry={() => void q.refetch()} busy={q.isFetching} />;
-  const statement = me?.customerId ? `/api/statement/${me.customerId}` : null;
   const owed = ledger.data?.outstanding ?? 0;
   return (
     <Screen>
       <Segments value={tab} onChange={setTab} options={[['balance', 'Balance'], ['invoices', 'Invoices'], ['profile', 'My details']]} />
-      {pdf.failed && <ErrorBox text={pdf.failed.text} onRetry={pdf.failed.retry} />}
 
       {tab === 'balance' && (ledger.data ? (
         <>
@@ -43,7 +39,8 @@ export default function AccountScreen() {
             {ledger.data.overdue > 0 && <Text style={{ fontSize: 15, color: C.danger, fontWeight: '600' }}>{rupees(ledger.data.overdue)} is past its due date. Please pay it soon.</Text>}
             <Note>You have {ledger.data.customer.paymentTermsDays} days to pay each invoice.</Note>
           </Card>
-          {!!statement && <Button title="Download statement (PDF)" icon={<Ionicons name="download-outline" size={20} color={C.white} />} loading={pdf.busy === statement} onPress={() => pdf.open(statement, 'Statement.pdf', 'Statement downloaded')} />}
+          {/* Your ledger with us as Tally prints it; Share PDF is on that screen. */}
+          {!!me?.customerId && <Button title="View my ledger" icon={<Ionicons name="eye-outline" size={20} color={C.white} />} onPress={() => router.push(previewHref('statement', me.customerId!, 'My ledger'))} />}
           {owed > 0 && (
             <Card>
               <H2>How old the unpaid amount is</H2>

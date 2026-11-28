@@ -1,4 +1,5 @@
 /** Sales rules shared by API, web and mobile: order flow, due dates, payment status, ageing. */
+import { formatINR } from './money';
 import { addDays, daysUntil } from './stock';
 
 export const ORDER_STATUSES = ['PLACED', 'CONFIRMED', 'PACKED', 'DISPATCHED', 'DELIVERED', 'CANCELLED', 'ON_HOLD'] as const;
@@ -19,6 +20,20 @@ export const CUSTOMER_ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
 export const ORDER_STEPS: OrderStatus[] = ['PLACED', 'PACKED', 'DISPATCHED', 'DELIVERED'];
 /** How far along the four steps an order is: 1 New … 4 Delivered, 0 when on hold or cancelled. */
 export const orderStep = (s: OrderStatus) => ({ PLACED: 1, CONFIRMED: 1, PACKED: 2, DISPATCHED: 3, DELIVERED: 4, ON_HOLD: 0, CANCELLED: 0 })[s];
+
+export type LedgerEntryType = 'INVOICE' | 'PAYMENT' | 'CREDIT_NOTE' | 'CANCELLED_INVOICE';
+/**
+ * A party ledger line the way Tally prints it: Particulars is "To" (debit) or "By" (credit) and the other
+ * ledger (Sales, Bank or Cash, Sales Returns), next to the voucher type.
+ */
+export function tallyLedgerLine(type: LedgerEntryType, paymentMode?: string | null): { particulars: string; vchType: string } {
+  if (type === 'INVOICE') return { particulars: 'To Sales', vchType: 'Sales' };
+  if (type === 'CANCELLED_INVOICE') return { particulars: '(cancelled)', vchType: 'Sales' };
+  if (type === 'CREDIT_NOTE') return { particulars: 'By Sales Returns', vchType: 'Credit Note' };
+  return { particulars: paymentMode === 'CASH' ? 'By Cash' : 'By Bank', vchType: 'Receipt' };
+}
+/** Tally's balance style: "9,773.00 Dr" (the party owes us) / "1,200.00 Cr" (in their favour). */
+export const drCr = (n: number) => `${formatINR(Math.abs(n))} ${n < 0 ? 'Cr' : 'Dr'}`;
 
 /** Allowed next statuses. On hold can resume to any open step; delivered and cancelled are final. */
 const NEXT: Record<OrderStatus, OrderStatus[]> = {

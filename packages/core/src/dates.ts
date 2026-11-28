@@ -20,6 +20,15 @@ export function formatDate(d: Date | string | null | undefined): string {
   return `${p.day}-${p.month}-${p.year}`;
 }
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** Tally's date style on printed documents and ledgers: "2026-11-27" -> "27-Nov-26". */
+export function tallyDate(d: Date | string | null | undefined): string {
+  if (!d) return '';
+  const iso = typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : istDateString(new Date(d));
+  const [y, m, day] = iso.split('-') as [string, string, string];
+  return `${Number(day)}-${MONTHS[Number(m) - 1]}-${y.slice(2)}`;
+}
+
 /** Date -> "DD-MM-YYYY HH:mm" in Asia/Kolkata. */
 export function formatDateTime(d: Date | string | null | undefined): string {
   if (!d) return '';

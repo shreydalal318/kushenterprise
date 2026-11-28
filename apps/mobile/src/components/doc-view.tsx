@@ -2,7 +2,7 @@ import { createElement, useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { Loading } from './ui';
 
-/** Web build (review preview only): fetch the page with the token and show it in a frame that can't run scripts. The phone uses doc-view.native.tsx. */
+/** Web build (review preview only): fetch the page with the token and show it in an isolated frame (its own layout script runs; it can't reach the app). The phone uses doc-view.native.tsx. */
 export function DocView({ url, token, onError }: { url: string; token: string | null; onError: (message: string) => void }) {
   const [html, setHtml] = useState<string | null>(null);
   useEffect(() => {
@@ -14,5 +14,5 @@ export function DocView({ url, token, onError }: { url: string; token: string | 
     return () => { live = false; };
   }, [url, token]); // eslint-disable-line react-hooks/exhaustive-deps
   if (html == null) return <Loading />;
-  return <View style={{ flex: 1, backgroundColor: '#e9eef2' }}>{createElement('iframe', { srcDoc: html, sandbox: 'allow-same-origin', title: 'Document preview', style: { flex: 1, width: '100%', height: '100%', border: 0, background: '#fff' } })}</View>;
+  return <View style={{ flex: 1, backgroundColor: '#e9eef2' }}>{createElement('iframe', { srcDoc: html, sandbox: 'allow-scripts', title: 'Document preview', style: { flex: 1, width: '100%', height: '100%', border: 0, background: '#fff' } })}</View>;
 }

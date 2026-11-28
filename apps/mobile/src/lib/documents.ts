@@ -23,6 +23,15 @@ export async function openPdf(path: string, filename: string) {
 export type DocKind = 'invoice' | 'proforma' | 'credit-note' | 'purchase-order';
 export const docPath = (kind: DocKind, id: string) => `/api/documents/${kind}/${id}`;
 
+/** Anything the app can preview: the four documents, and a customer's ledger (id = the customer). */
+export type PreviewKind = DocKind | 'statement';
+
+/** The PDF and its HTML page (the preview). extra: "copies=ORIGINAL,DUPLICATE" or "from=2026-04-01&to=2026-11-28". */
+export function documentUrls(kind: PreviewKind, id: string, extra?: string) {
+  const base = kind === 'statement' ? `/api/statement/${id}` : docPath(kind, id);
+  return { pdf: `${base}${extra ? `?${extra}` : ''}`, html: `${base}?format=html${extra ? `&${extra}` : ''}` };
+}
+
 /** The in-app preview of a document (the same page the PDF is printed from), with Share PDF under it. */
-export const previewHref = (kind: DocKind, id: string, number: string, copies?: string) =>
-  `/preview?kind=${kind}&id=${encodeURIComponent(id)}&number=${encodeURIComponent(number)}${copies ? `&copies=${encodeURIComponent(copies)}` : ''}` as const;
+export const previewHref = (kind: PreviewKind, id: string, number: string, extra?: string) =>
+  `/preview?kind=${kind}&id=${encodeURIComponent(id)}&number=${encodeURIComponent(number)}${extra ? `&q=${encodeURIComponent(extra)}` : ''}` as const;

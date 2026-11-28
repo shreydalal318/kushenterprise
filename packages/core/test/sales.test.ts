@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ageingBucket, canMoveTo, dueDateFor, paymentStatus } from '../src/sales';
+import { ageingBucket, canMoveTo, drCr, dueDateFor, paymentStatus, tallyLedgerLine } from '../src/sales';
 
 describe('sales rules', () => {
   it('follows the order flow with hold and cancel as side states', () => {
@@ -32,5 +32,16 @@ describe('dispatch method suggestion', () => {
     expect(suggestDispatchMethod({ city: 'Baroda', pincode: '390007' }, { addressLines: ['Sayajigunj - 390020'] })).toBe('OWN_DELIVERY');
     expect(suggestDispatchMethod(co, { addressLines: ['FC Road', 'Pune - 411004'] })).toBe('COURIER');
     expect(suggestDispatchMethod({ city: '[City]', pincode: '[PIN]' }, { addressLines: ['x - 390001'] })).toBe('COURIER');
+  });
+});
+
+describe('Tally ledger lines', () => {
+  it('uses To for debits and By for credits, with the voucher type', () => {
+    expect(tallyLedgerLine('INVOICE')).toEqual({ particulars: 'To Sales', vchType: 'Sales' });
+    expect(tallyLedgerLine('PAYMENT', 'CASH')).toEqual({ particulars: 'By Cash', vchType: 'Receipt' });
+    expect(tallyLedgerLine('PAYMENT', 'UPI')).toEqual({ particulars: 'By Bank', vchType: 'Receipt' });
+    expect(tallyLedgerLine('CREDIT_NOTE')).toEqual({ particulars: 'By Sales Returns', vchType: 'Credit Note' });
+    expect(drCr(9773)).toBe('9,773.00 Dr');
+    expect(drCr(-1200.5)).toBe('1,200.50 Cr');
   });
 });

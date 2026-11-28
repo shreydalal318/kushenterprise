@@ -9,7 +9,7 @@ export { getSettings, settingsView } from './services/settings';
 export { nextDocNumber } from './services/numbering';
 export { exportPriceSheet, previewPriceImport, type SheetTarget } from './services/price-sheets';
 export { resolveCustomerPrices } from './services/pricing';
-export { renderDocument, renderDocumentHtml, renderStatement, documentSource, type DocKind } from './services/sales/documents';
+export { renderDocument, renderDocumentHtml, renderStatement, renderStatementHtml, documentSource, type DocKind } from './services/sales/documents';
 export { deliverQueued } from './notify';
 export { buildReportWorkbook, type SheetSpec } from './services/report-excel';
 export { tallyMastersXml, tallyVouchersXml } from './services/integrations/tally';
