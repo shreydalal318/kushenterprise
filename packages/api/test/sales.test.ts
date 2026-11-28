@@ -323,6 +323,12 @@ describe('payments, credit notes and the customer ledger', () => {
     await a.creditNotes.create({ invoiceId: r.id, date: today, reason: 'Second one back', restock: false, lines: [{ invoiceLineId: line.id, qty: 1, serialNos: [sn[1]!] }] });
     expect((await a.invoices.get({ id: r.id })).lines[0]!.returnedSerials.sort()).toEqual([...sn].sort());
     await expect(a.creditNotes.create({ invoiceId: r.id, date: today, reason: 'Again', restock: false, lines: [{ invoiceLineId: line.id, qty: 1, serialNos: [sn[1]!] }] })).rejects.toThrow(/only 0 left/);
+    // Backup lenses: the one returned to stock can be sold again on a new invoice, and returned again from it.
+    const again = await a.invoices.create({ customerId: gj.id, date: today, lines: [{ variantId: lens.v, qty: 1, serialNos: [sn[0]!] }] });
+    const againLine = (await a.invoices.get({ id: again.id })).lines[0]!;
+    expect(againLine.returnedSerials).toEqual([]);
+    await a.creditNotes.create({ invoiceId: again.id, date: today, reason: 'Backup not used', restock: true, lines: [{ invoiceLineId: againLine.id, qty: 1, serialNos: [sn[0]!] }] });
+    expect((await prisma.serialUnit.findFirst({ where: { serialNo: sn[0] } }))?.status).toBe('IN_STOCK');
     const { pdf } = await renderDocument(prisma, 'credit-note', cn.id);
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
   }, 30_000);

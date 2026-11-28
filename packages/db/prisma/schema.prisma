@@ -189,6 +189,8 @@ model CompanySettings {
   integrationConfig    Json?
   /// Accounts: the date opening balances are as on (start of the books kept in this app).
   booksFrom            DateTime? @db.Date
+  /// Nothing dated on or before this can be entered, changed or cancelled (set after GST is filed).
+  booksLockedUntil     DateTime? @db.Date
   updatedAt            DateTime  @updatedAt
 }
 
@@ -850,6 +852,8 @@ enum TaxType {
 
 model Invoice {
   id            String        @id @default(cuid())
+  /// A bill brought over from Tally (bill-wise opening): no lines and no voucher; its amount is part of the party ledger's opening balance.
+  isOpening         Boolean      @default(false)
   number        String        @unique // KE/2026-27/0001
   financialYear String
   date          DateTime      @db.Date
@@ -1351,6 +1355,8 @@ model VoucherEntry {
   amount    Decimal @db.Decimal(14, 2) // +Dr / −Cr
   billRef   String? // bill-wise reference on party lines (invoice / supplier bill number)
   sl        Int
+  /// Bank reconciliation: the date this entry appeared on the bank statement.
+  reconciledOn DateTime? @db.Date
 
   @@index([ledgerId])
   @@index([voucherId])
@@ -1359,6 +1365,8 @@ model VoucherEntry {
 /// A supplier's tax invoice as entered in our books (Tally purchase voucher).
 model PurchaseBill {
   id           String                      @id @default(cuid())
+  /// A supplier bill brought over from Tally (bill-wise opening); like Invoice.isOpening.
+  isOpening    Boolean @default(false)
   number       String                      @unique // KE/PB/2026-27/0001
   supplierId   String
   supplier     Supplier                    @relation(fields: [supplierId], references: [id])
