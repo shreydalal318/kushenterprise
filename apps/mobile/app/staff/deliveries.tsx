@@ -80,9 +80,9 @@ export default function Deliveries() {
   // Strict: something with one of our staff is theirs to mark delivered (the owner can step in); pickups by anyone allowed.
   const mayDeliver = (x: Item) => !!x.mine || (x.personId ? !!me && (me.role === 'OWNER' || x.personId === me.id) : can('UPDATE_ORDER_STATUS'));
   const startDeliver = (x: Item) => { setOpen(x.dispatchId); setReceivedBy(''); setNote(''); setFlash(null); deliver.reset(); };
-  const save = (x: Item) => deliver.mutate({ id: x.orderId, receivedBy: receivedBy.trim(), note: note.trim() || null }, {
+  const save = (x: Item) => deliver.mutate({ id: x.orderId, receivedBy: receivedBy.trim() || null, note: note.trim() || null }, {
     onSuccess: (_r, v) => {
-      setFlash(`${x.orderNumber} delivered ✓ Received by ${v.receivedBy}.`);
+      setFlash(`${x.orderNumber} delivered ✓${v.receivedBy ? ` Received by ${v.receivedBy}.` : ''}`);
       setOpen(null); setReceivedBy(''); setNote('');
       void utils.deliveries.invalidate(); void utils.orders.invalidate();
     },
@@ -140,11 +140,10 @@ export default function Deliveries() {
             {!!x.mine?.phone && <LinkButton title={`Call ${x.mine.phone}`} icon={<Ionicons name="call-outline" size={18} color={C.teal700} />} onPress={() => call(x.mine!.phone!)} />}
             {mayDeliver(x) && (open === x.dispatchId ? (
               <View style={{ gap: 8 }}>
-                <Field label={x.pickup ? 'Collected by (name)' : 'Received by (name)'} placeholder="e.g. Sister Mary, OT store" value={receivedBy} onChangeText={setReceivedBy} maxLength={80} autoFocus />
+                <Field label={x.pickup ? 'Collected by (optional)' : 'Received by (optional)'} placeholder="e.g. Sister Mary, OT store" value={receivedBy} onChangeText={setReceivedBy} maxLength={80} />
                 <Field label="Note (optional)" value={note} onChangeText={setNote} maxLength={300} />
                 {deliver.error && <Alert>{errorText(deliver.error)}</Alert>}
-                {receivedBy.trim().length < 2 && <Hint tone="muted">To save: write who {x.pickup ? 'collected' : 'received'} it.</Hint>}
-                <Button title="Mark delivered" loading={deliver.isPending} disabled={receivedBy.trim().length < 2} onPress={() => save(x)} />
+                <Button title="Mark delivered" loading={deliver.isPending} onPress={() => save(x)} />
                 <LinkButton tone="muted" title="Back" disabled={deliver.isPending} onPress={() => setOpen(null)} />
               </View>
             ) : <Button variant="secondary" title="Mark delivered" icon={<Ionicons name="checkmark-done-outline" size={18} color={C.ink} />} onPress={() => startDeliver(x)} />)}

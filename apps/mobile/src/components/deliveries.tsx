@@ -20,7 +20,7 @@ export function MyDeliveries() {
   const [pulling, setPulling] = useState(false);
   const m = trpc.orders.markDelivered.useMutation({ onSuccess: (_r, v) => {
     const d = q.data?.find((x) => x.orderId === v.id);
-    setDone(`${d?.orderNumber ?? 'Order'} delivered ✓ Received by ${v.receivedBy}.`);
+    setDone(`${d?.orderNumber ?? 'Order'} delivered ✓${v.receivedBy ? ` Received by ${v.receivedBy}.` : ''}`);
     setOpen(null); setReceivedBy(''); void utils.deliveries.invalidate();
   } });
   if (!q.data) return q.error
@@ -57,10 +57,9 @@ export function MyDeliveries() {
           {!!d.phone && <LinkButton title={`Call ${d.phone}`} icon={<Ionicons name="call-outline" size={18} color={C.teal700} />} onPress={() => void Linking.openURL(`tel:${d.phone}`)} />}
           {open === d.orderId ? (
             <View style={{ gap: 8 }}>
-              <Field label="Received by (name)" placeholder="e.g. Sister Mary, OT store" value={receivedBy} onChangeText={setReceivedBy} maxLength={80} autoFocus />
+              <Field label="Received by (optional)" placeholder="e.g. Sister Mary, OT store" value={receivedBy} onChangeText={setReceivedBy} maxLength={80} />
               {m.error && <Alert>{readableError(m.error)}</Alert>}
-              {receivedBy.trim().length < 2 && <Small style={{ textAlign: 'center' }}>Write who took the parcel, then tap Mark delivered.</Small>}
-              <Button title="Mark delivered" loading={m.isPending} disabled={receivedBy.trim().length < 2} onPress={() => m.mutate({ id: d.orderId, receivedBy: receivedBy.trim() })} />
+              <Button title="Mark delivered" loading={m.isPending} onPress={() => m.mutate({ id: d.orderId, receivedBy: receivedBy.trim() || null })} />
               <LinkButton tone="muted" title="Back" onPress={() => setOpen(null)} />
             </View>
           ) : <Button title="Mark delivered" onPress={() => { setOpen(d.orderId); setReceivedBy(''); setDone(null); m.reset(); }} />}

@@ -58,7 +58,6 @@ describe('local delivery by our own staff', () => {
     expect(mine.map((d) => d.orderId)).toContain(id);
     expect(mine.find((d) => d.orderId === id)!.address).toContain('Alkapuri');
     await expect((await api(clerk)).orders.markDelivered({ id, receivedBy: 'Someone' })).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    await expect(r.orders.markDelivered({ id, receivedBy: 'x' })).rejects.toThrow(/Who received/);
     await r.orders.markDelivered({ id, receivedBy: 'Sister Mary (OT store)' });
     const o = await a.orders.get({ id });
     expect(o.status).toBe('DELIVERED');
@@ -114,7 +113,8 @@ describe('local delivery by our own staff', () => {
     const pi = (await a.orders.get({ id: pickup })).invoices[0]!;
     expect((await prisma.invoice.findUniqueOrThrow({ where: { id: pi.id } })).dispatchedThrough).toBe('Customer pickup');
     expect((await a.deliveries.board()).find((d) => d.orderId === pickup)?.method).toBe('PICKUP');
-    await a.orders.markDelivered({ id: pickup, receivedBy: 'Collected by Mr. Patel' });
+    await a.orders.markDelivered({ id: pickup }); // who received it is optional
     expect((await a.orders.get({ id: pickup })).status).toBe('DELIVERED');
+    expect((await a.orders.get({ id: pickup })).dispatches[0]!.receivedBy).toBeNull();
   });
 });

@@ -6,7 +6,7 @@ import { formatDate, istDateString } from '@kush/core';
 import { Amount, Confirm, Failed, Hint, isDay, MoreActions, Muted, Pick, ProformaBadge, ShareLink, usePdf } from '@/components/sales/common';
 import { Alert, Button, Card, Field, H2, LinkButton, Loading, P, Row, Screen } from '@/components/ui';
 import { useCan } from '@/lib/auth';
-import { docPath } from '@/lib/documents';
+import { docPath, previewHref } from '@/lib/documents';
 import { errorText, rupees } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
@@ -73,6 +73,8 @@ export default function ProformaScreen() {
   const canCancel = !converted && !isCancelled && canEdit;
   const pdfPath = docPath('proforma', p.id);
   const openProformaPdf = () => void pdf.open(pdfPath, `${p.number}.pdf`);
+  // See it as it prints (Share PDF is on that screen too).
+  const viewProforma = () => router.push(previewHref('proforma', p.id, p.number));
   const inter = p.taxType === 'INTER_STATE';
 
   if (mode === 'convert') {
@@ -123,7 +125,7 @@ export default function ProformaScreen() {
         {primary === 'convert' && <Hint>Next: when the customer says yes, make the tax invoice.</Hint>}
         {primary === 'convert'
           ? <Button title="Make tax invoice" icon={<Ionicons name="receipt-outline" size={20} color={C.white} />} onPress={() => setMode('convert')} />
-          : <Button title="Share / print PDF" icon={<Ionicons name="document-text-outline" size={20} color={C.white} />} loading={pdf.busy === pdfPath} disabled={!!pdf.busy} onPress={openProformaPdf} />}
+          : <Button title="View proforma" icon={<Ionicons name="eye-outline" size={20} color={C.white} />} onPress={viewProforma} />}
         {canMarkSent && <LinkButton title="I have sent it: mark as sent" icon={<Ionicons name="checkmark-circle-outline" size={18} color={C.teal700} />} disabled={markSent.isPending} onPress={doMarkSent} />}
       </>
     )}>
@@ -170,8 +172,8 @@ export default function ProformaScreen() {
 
       <Card>
         <H2>PDF</H2>
-        {primary !== 'pdf' && <Button variant="secondary" title="Share / print PDF" icon={<Ionicons name="document-text-outline" size={18} color={C.ink} />} loading={pdf.busy === pdfPath} disabled={!!pdf.busy} onPress={openProformaPdf} />}
-        {primary === 'pdf' && <Muted>Use the button at the bottom to share or print it.</Muted>}
+        {primary !== 'pdf' && <Button variant="secondary" title="View proforma" icon={<Ionicons name="eye-outline" size={18} color={C.ink} />} onPress={viewProforma} />}
+        <Button variant="secondary" title="Share / print PDF" icon={<Ionicons name="share-outline" size={18} color={C.ink} />} loading={pdf.busy === pdfPath} disabled={!!pdf.busy} onPress={openProformaPdf} />
         {!!pdf.error && <Alert>{pdf.error}</Alert>}
         {!isCancelled && canEdit && <ShareLink kind="proforma" id={p.id} />}
       </Card>

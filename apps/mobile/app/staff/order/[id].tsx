@@ -1,5 +1,5 @@
 import { useCallback, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { DISPATCH_METHOD_LABEL, DISPATCH_METHODS, formatDate, formatDateTime, istDateString, nextStatuses, type DispatchMethod, type OrderStatus } from '@kush/core';
@@ -10,7 +10,7 @@ import { LinkedPos, OrderFromSupplier, StockNote } from '@/components/order-sour
 import { StaffStatusBadge, surgeryIn, surgeryText, surgeryTone } from '@/components/status';
 import { Alert, Button, Card, Field, H2, KV, LinkButton, Loading, P, Row, Screen, Small } from '@/components/ui';
 import { useAuth, useCan } from '@/lib/auth';
-import { docPath, openPdf } from '@/lib/documents';
+import { previewHref } from '@/lib/documents';
 import { errorText, rupees } from '@/lib/format';
 import { C, R } from '@/lib/theme';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
@@ -75,7 +75,6 @@ export default function StaffOrder() {
   const [note, setNote] = useState('');
   const [receivedBy, setReceivedBy] = useState('');
   const [d, setD] = useState({ method: '' as '' | DispatchMethod, courier: '', docketNo: '', vehicleNo: '', dispatchDate: istDateString(), personId: '', personName: '', personMobile: '' });
-  const [pdf, setPdf] = useState<{ id: string | null; error: string | null }>({ id: null, error: null });
   // The short green line after each action ("Dispatched ✓ Next: …"); a new order arrives with ?saved=1.
   const [flash, setFlash] = useState<string | null>(saved ? 'Order saved ✓' : null);
   // Opening or closing a form starts without the last form's error.
@@ -121,12 +120,6 @@ export default function StaffOrder() {
   const goInvoice = () => router.push(`/staff/invoice?orderId=${o.id}`);
   const openDeliver = () => { setReceivedBy(''); setMode('deliver'); };
   const view = mode === 'dispatch' && !canDispatch ? null : mode;
-
-  async function showPdf(invId: string, number: string) {
-    setPdf({ id: invId, error: null });
-    try { await openPdf(docPath('invoice', invId), `${number}.pdf`); setPdf({ id: null, error: null }); }
-    catch (e) { const t = errorText(e); setPdf({ id: null, error: /pdf/i.test(t) ? t : `Could not open the PDF. ${t}` }); }
-  }
 
   if (view === 'source' && sq.data) return <Screen><Stack.Screen options={{ title: o.number }} /><OrderFromSupplier s={sq.data} onClose={() => setMode(null)} /></Screen>;
 
@@ -196,20 +189,18 @@ export default function StaffOrder() {
   }
 
   if (view === 'deliver') {
-    const ok = receivedBy.trim().length >= 2;
     return (
       <Screen footer={
         <>
           {deliver.error && <Alert>{readableError(deliver.error)}</Alert>}
-          {!ok && <Small style={{ textAlign: 'center' }}>To save: write who received it.</Small>}
-          <Button title="Mark delivered" loading={deliver.isPending} disabled={!ok} onPress={() => deliver.mutate({ id: o.id, receivedBy: receivedBy.trim() }, { onSuccess: () => finish('Delivered ✓ This order is done.') })} />
+          <Button title="Mark delivered" loading={deliver.isPending} onPress={() => deliver.mutate({ id: o.id, receivedBy: receivedBy.trim() || null }, { onSuccess: () => finish('Delivered ✓ This order is done.') })} />
           <LinkButton tone="muted" title="Back" onPress={() => setMode(null)} />
         </>
       }>
         <Stack.Screen options={{ title: o.number }} />
-        <H2>Who received it?</H2>
+        <H2>Mark it delivered</H2>
         <Small>{o.customer.name}</Small>
-        <Field label="Received by (name)" placeholder="e.g. Sister Mary, OT store" value={receivedBy} onChangeText={setReceivedBy} maxLength={80} autoFocus />
+        <Field label="Received by (optional)" placeholder="e.g. Sister Mary, OT store" value={receivedBy} onChangeText={setReceivedBy} maxLength={80} />
       </Screen>
     );
   }
@@ -297,15 +288,14 @@ export default function StaffOrder() {
             <Row key={i.id} style={{ justifyContent: 'space-between' }}>
               <Small style={[{ flex: 1 }, i.status !== 'ISSUED' && { textDecorationLine: 'line-through' }]}>{i.number} · {formatDate(i.date)} · {rupees(i.grandTotal)}{i.status !== 'ISSUED' ? ' (cancelled)' : ''}</Small>
               {i.status === 'ISSUED' && (
-                <Pressable accessibilityRole="button" accessibilityLabel={`Open the PDF of invoice ${i.number}`} hitSlop={6} disabled={!!pdf.id} onPress={() => void showPdf(i.id, i.number)}
+                <Pressable accessibilityRole="button" accessibilityLabel={`View invoice ${i.number}`} hitSlop={6} onPress={() => router.push(previewHref('invoice', i.id, i.number))}
                   style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 36, paddingHorizontal: 12, borderRadius: 999, borderWidth: 1, borderColor: C.teal700, opacity: pressed ? 0.6 : 1 })}>
-                  {pdf.id === i.id ? <ActivityIndicator size="small" color={C.teal700} /> : <Ionicons name="document-text-outline" size={16} color={C.teal700} />}
-                  <Text style={{ color: C.teal700, fontWeight: '700' }}>PDF</Text>
+                  <Ionicons name="eye-outline" size={16} color={C.teal700} />
+                  <Text style={{ color: C.teal700, fontWeight: '700' }}>View</Text>
                 </Pressable>
               )}
             </Row>
           ))}
-          {!!pdf.error && <Alert>{pdf.error}</Alert>}
         </Step>
         <Step n={3} title="Dispatched" done={sent} lineOn={delivered}>
           {!sent && <Small>Not yet</Small>}

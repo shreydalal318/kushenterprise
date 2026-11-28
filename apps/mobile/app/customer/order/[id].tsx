@@ -1,14 +1,14 @@
 import { useState, type ReactNode } from 'react';
 import { Linking, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { formatDate, ORDER_FLOW, type OrderStatus } from '@kush/core';
 import { Button, Card, H2, Loading, Row, Screen } from '@/components/ui';
-import { useOrderAgain, usePdf } from '@/customer/actions';
+import { useOrderAgain } from '@/customer/actions';
 import { StatusPill } from '@/customer/status';
 import { ErrorBox, Line, Note, Notice } from '@/customer/ui';
-import { docPath } from '@/lib/documents';
+import { previewHref } from '@/lib/documents';
 import { errorCode, errorText, rupees } from '@/lib/format';
 import { C, R } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
@@ -18,7 +18,6 @@ export default function OrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const q = trpc.portal.order.useQuery({ id: id! });
   const again = useOrderAgain(true);
-  const pdf = usePdf();
   const [pulling, setPulling] = useState(false);
   if (!q.data) {
     if (!q.error) return <Loading />;
@@ -69,11 +68,9 @@ export default function OrderScreen() {
               {o.invoices.length === 0 ? <Note>{invoiced ? 'Packed. The invoice will show here soon.' : 'We make the invoice when we pack your order.'}</Note> : o.invoices.map((i) => (
                 <View key={i.id} style={{ gap: 6 }}>
                   <Text style={{ fontSize: 15, color: C.ink }}>Invoice {i.number} · {rupees(i.total)}</Text>
-                  <Button variant="secondary" title="Download invoice" loading={pdf.busy === docPath('invoice', i.id)} icon={<Ionicons name="download-outline" size={20} color={C.ink} />}
-                    onPress={() => pdf.open(docPath('invoice', i.id), `${i.number}.pdf`, `Invoice ${i.number} downloaded`)} />
+                  <Button variant="secondary" title="View invoice" icon={<Ionicons name="eye-outline" size={20} color={C.ink} />} onPress={() => router.push(previewHref('invoice', i.id, i.number))} />
                 </View>
               ))}
-              {pdf.failed && <ErrorBox text={pdf.failed.text} onRetry={pdf.failed.retry} />}
             </Step>
             <Step n={3} done={sent} title={pickup ? 'Ready to collect' : 'On the way'} date={last?.date ?? at('DISPATCHED')}>
               {o.dispatches.length === 0 ? <Note>{sent ? 'Sent out.' : "We'll tell you how it is coming: our delivery person, a courier, or pickup from our store."}</Note> : o.dispatches.map((d, i) => (

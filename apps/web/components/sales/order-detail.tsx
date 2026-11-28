@@ -333,10 +333,10 @@ function DeliverDialog({ o, onClose }: { o: Order; onClose: () => void }) {
   const m = trpc.orders.markDelivered.useMutation({ onSuccess: async () => { await refresh(); onClose(); } });
   const fe = fieldErrors(m.error);
   return (
-    <Dialog open onClose={onClose} title="Mark delivered" description="Who received the goods? This is kept as proof of delivery and shown to the customer." size="sm"
-      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={m.isPending} onClick={() => m.mutate({ id: o.id, receivedBy, note })}>Mark delivered</Button></>}>
+    <Dialog open onClose={onClose} title="Mark delivered" description="Who received the goods? Optional; if you fill it in, it is kept as proof of delivery and shown to the customer." size="sm"
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={m.isPending} onClick={() => m.mutate({ id: o.id, receivedBy: receivedBy.trim() || null, note })}>Mark delivered</Button></>}>
       <div className="flex flex-col gap-3">
-        <TextField label="Received by" placeholder="e.g. Sister Mary, OT store" value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)} error={fe.receivedBy} />
+        <TextField label="Received by (optional)" placeholder="e.g. Sister Mary, OT store" value={receivedBy} onChange={(e) => setReceivedBy(e.target.value)} error={fe.receivedBy} />
         <TextField label="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
         {m.error && !fe.receivedBy && <Alert>{errorMessage(m.error)}</Alert>}
       </div>

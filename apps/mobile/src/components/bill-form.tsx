@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { computeGst, istDateString } from '@kush/core';
 import { readableError } from '@/components/errors';
 import { ProductPicker, type Picked } from '@/components/product-picker';
 import { Scanner } from '@/components/scanner';
 import { Alert, Button, Card, H2, KV, Loading, P, Row, s, Screen, Small } from '@/components/ui';
-import { docPath, openPdf } from '@/lib/documents';
+import { docPath, openPdf, previewHref } from '@/lib/documents';
 import { errorText, newRequestId, rupees } from '@/lib/format';
 import { enqueue, isNetworkError } from '@/lib/outbox';
 import { C } from '@/lib/theme';
@@ -183,7 +184,9 @@ export function BillForm({ orderId, onDone }: { orderId?: string; onDone?: () =>
       </>
     ) : undefined}>
       {done.queued ? <Alert tone="warn">No connection. The invoice is saved on this phone and will be made by itself when you are back online.</Alert> : <Alert tone="ok">Invoice {done.number} made ✓ Stock is updated.</Alert>}
-      {!!done.id && <Button title="Share / print PDF" variant={orderId ? 'secondary' : 'primary'} icon={<Ionicons name="document-text-outline" size={18} color={orderId ? C.ink : C.white} />} loading={pdf.busy} onPress={() => void sharePdf(done.id!, done.number)} />}
+      {/* See it as it prints before sending it; Share PDF is on that screen. */}
+      {!!done.id && <Button title="View invoice" variant={orderId ? 'secondary' : 'primary'} icon={<Ionicons name="eye-outline" size={18} color={orderId ? C.ink : C.white} />} onPress={() => router.push(previewHref('invoice', done.id!, done.number ?? ''))} />}
+      {!!done.id && <Button title="Share / print PDF" variant="secondary" icon={<Ionicons name="share-outline" size={18} color={C.ink} />} loading={pdf.busy} onPress={() => void sharePdf(done.id!, done.number)} />}
       {!!pdf.error && <Alert>{pdf.error}</Alert>}
       {!orderId && <Button variant="secondary" title="New bill" onPress={newBill} />}
     </Screen>

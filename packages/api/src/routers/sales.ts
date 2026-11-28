@@ -130,10 +130,10 @@ export const ordersRouter = router({
    * app) even without the order-status permission. When it went with one of our staff, only they (or
    * the owner) may; a courier, transport or pickup can be marked by anyone with that permission.
    */
-  markDelivered: staffProcedure.input(z.object({ id: z.string(), receivedBy: z.string().trim().min(2, 'Who received it?').max(80), note: z.string().trim().max(300).optional().nullable() })).mutation(async ({ ctx, input }) => {
+  markDelivered: staffProcedure.input(z.object({ id: z.string(), receivedBy: z.string().trim().max(80).optional().nullable(), note: z.string().trim().max(300).optional().nullable() })).mutation(async ({ ctx, input }) => {
     const mine = await ctx.db.dispatch.count({ where: { orderId: input.id, deliveryPersonId: ctx.user.id, deliveredAt: null } });
     if (!mine && !can(ctx.user, 'UPDATE_ORDER_STATUS')) throw new TRPCError({ code: 'FORBIDDEN', message: 'Only the person delivering this order can mark it delivered' });
-    return ctx.db.$transaction((tx) => changeOrderStatus(tx, { id: input.id, status: 'DELIVERED', delivery: { receivedBy: input.receivedBy, note: input.note ?? null } }, ctx.user, ctx.ip));
+    return ctx.db.$transaction((tx) => changeOrderStatus(tx, { id: input.id, status: 'DELIVERED', delivery: { receivedBy: input.receivedBy || null, note: input.note ?? null } }, ctx.user, ctx.ip));
   }),
 
   /** Scan-to-dispatch: compare what was packed (scanned) with the order. */

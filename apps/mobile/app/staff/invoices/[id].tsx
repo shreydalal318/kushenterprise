@@ -8,7 +8,7 @@ import { Amount, Confirm, Failed, Hint, MoreActions, Muted, PdfPill, Pick, Share
 import { PayBadge } from '@/components/status';
 import { Alert, Button, Card, Field, H2, LinkButton, Loading, P, Row, Screen } from '@/components/ui';
 import { useAuth, useCan } from '@/lib/auth';
-import { docPath } from '@/lib/documents';
+import { docPath, previewHref } from '@/lib/documents';
 import { errorText, rupees } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
@@ -47,6 +47,8 @@ export default function InvoiceScreen() {
   const copies = picked ?? ((company.data?.defaultCopies as InvoiceCopy[] | undefined)?.length ? (company.data!.defaultCopies as InvoiceCopy[]) : ['ORIGINAL']);
   const pdfPath = `${docPath('invoice', i.id)}?copies=${copies.join(',')}`;
   const openInvoicePdf = () => void pdf.open(pdfPath, `${i.number}.pdf`);
+  // See it as it prints (Share PDF is on that screen too).
+  const viewInvoice = () => router.push(previewHref('invoice', i.id, i.number, copies.join(',')));
   const canPay = !cancelled && i.due > 0 && can('RECORD_PAYMENTS');
   const canShare = !cancelled && (can('CREATE_TAX_INVOICE') || can('RECORD_PAYMENTS'));
   const goPay = () => router.push(`/staff/payments/new?customerId=${i.customer.id}&invoiceId=${i.id}`);
@@ -97,7 +99,7 @@ export default function InvoiceScreen() {
             <Hint tone={i.paymentStatus === 'OVERDUE' ? 'danger' : 'navy'}>{`${rupees(i.due)} still to receive${i.dueDate ? ` by ${formatDate(i.dueDate)}` : ''}${i.paymentStatus === 'OVERDUE' ? ' (overdue)' : ''}.`}</Hint>
             <Button title="Record payment" icon={<Ionicons name="wallet-outline" size={20} color={C.white} />} onPress={goPay} />
           </>
-        ) : <Button title="Share / print PDF" icon={<Ionicons name="document-text-outline" size={20} color={C.white} />} loading={pdf.busy === pdfPath} disabled={!!pdf.busy} onPress={openInvoicePdf} />}
+        ) : <Button title="View invoice" icon={<Ionicons name="eye-outline" size={20} color={C.white} />} onPress={viewInvoice} />}
       </>
     }>
       <Stack.Screen options={{ title: i.number }} />
@@ -133,7 +135,8 @@ export default function InvoiceScreen() {
               onPress={() => { const next = copies.includes(c) ? copies.filter((x) => x !== c) : INVOICE_COPIES.filter((x) => x === c || copies.includes(x)); if (next.length) setPicked(next); }} />
           ))}
         </View>
-        {canPay && <Button variant="secondary" title="Share / print PDF" icon={<Ionicons name="document-text-outline" size={18} color={C.ink} />} loading={pdf.busy === pdfPath} disabled={!!pdf.busy} onPress={openInvoicePdf} />}
+        {canPay && <Button variant="secondary" title="View invoice" icon={<Ionicons name="eye-outline" size={18} color={C.ink} />} onPress={viewInvoice} />}
+        <Button variant="secondary" title="Share / print PDF" icon={<Ionicons name="share-outline" size={18} color={C.ink} />} loading={pdf.busy === pdfPath} disabled={!!pdf.busy} onPress={openInvoicePdf} />
         {!!pdf.error && <Alert>{pdf.error}</Alert>}
         {canShare && <ShareLink kind="invoice" id={i.id} />}
       </Card>
@@ -166,7 +169,7 @@ export default function InvoiceScreen() {
           {i.creditNotes.map((c) => (
             <Row key={c.id} style={{ justifyContent: 'space-between', minHeight: 44 }}>
               <View style={{ flex: 1 }}><P>{`Credit note ${c.number}`}</P><Muted>{`${formatDate(c.date)} · ${c.reason} · ${rupees(c.grandTotal)}`}</Muted></View>
-              <PdfPill label={`Open the PDF of credit note ${c.number}`} busy={pdf.busy === docPath('credit-note', c.id)} disabled={!!pdf.busy} onPress={() => void pdf.open(docPath('credit-note', c.id), `${c.number}.pdf`)} />
+              <PdfPill label={`View credit note ${c.number}`} busy={false} disabled={false} onPress={() => router.push(previewHref('credit-note', c.id, c.number))} />
             </Row>
           ))}
         </Card>

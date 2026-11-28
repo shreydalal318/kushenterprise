@@ -20,4 +20,9 @@ export async function openPdf(path: string, filename: string) {
   const file = await File.downloadFileAsync(url, new File(Paths.cache, filename.replace(/[^\w.-]+/g, '-')), { headers: token ? { authorization: `Bearer ${token}` } : {}, idempotent: true });
   if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(file.uri, { mimeType: 'application/pdf', dialogTitle: filename, UTI: 'com.adobe.pdf' });
 }
-export const docPath = (kind: 'invoice' | 'proforma' | 'credit-note', id: string) => `/api/documents/${kind}/${id}`;
+export type DocKind = 'invoice' | 'proforma' | 'credit-note' | 'purchase-order';
+export const docPath = (kind: DocKind, id: string) => `/api/documents/${kind}/${id}`;
+
+/** The in-app preview of a document (the same page the PDF is printed from), with Share PDF under it. */
+export const previewHref = (kind: DocKind, id: string, number: string, copies?: string) =>
+  `/preview?kind=${kind}&id=${encodeURIComponent(id)}&number=${encodeURIComponent(number)}${copies ? `&copies=${encodeURIComponent(copies)}` : ''}` as const;

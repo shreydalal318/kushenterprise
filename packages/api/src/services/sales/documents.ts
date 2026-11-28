@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { formatDate, INVOICE_COPY_LABEL, type InvoiceCopy } from '@kush/core';
 import type { Db } from '@kush/db';
-import { buildDocModel, buildStatementHtml, renderDocumentPdf, renderHtmlPdf, type DocParty, type DocSource, type DocSupplier } from '@kush/pdf';
+import { buildDocModel, buildDocumentHtml, buildStatementHtml, renderDocumentPdf, renderHtmlPdf, type DocParty, type DocSource, type DocSupplier } from '@kush/pdf';
 import { istDateString, stateByCode } from '@kush/core';
 import { customerLedger } from './ledger';
 import { supplierSnapshot } from './common';
@@ -112,6 +112,12 @@ export async function documentSource(db: Db, kind: DocKind, id: string, copies: 
       einvoice: c.irn ? { irn: c.irn, ackNo: c.ackNo, ackDate: isoDay(c.ackDate), signedQr: c.signedQr } : null,
     },
   };
+}
+
+/** The same document as an HTML page: what the app shows as a preview before anyone shares the PDF. */
+export async function renderDocumentHtml(db: Db, kind: DocKind, id: string, copies?: InvoiceCopy[]) {
+  const { src, filename, customerId } = await documentSource(db, kind, id, copies);
+  return { html: buildDocumentHtml(await buildDocModel(src)), filename, customerId };
 }
 
 export async function renderDocument(db: Db, kind: DocKind, id: string, copies?: InvoiceCopy[]) {

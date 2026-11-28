@@ -9,7 +9,7 @@ import { usePdf } from '@/customer/actions';
 import { useToast } from '@/customer/toast';
 import { EmptyState, ErrorBox, Input, Line, Note, Notice, Segments } from '@/customer/ui';
 import { useAuth } from '@/lib/auth';
-import { docPath } from '@/lib/documents';
+import { previewHref } from '@/lib/documents';
 import { errorText, rupees } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
@@ -66,21 +66,19 @@ export default function AccountScreen() {
           <EmptyState icon={<Ionicons name="document-text-outline" size={48} color={C.teal700} />} text="No invoices yet. Your invoice shows here once your order is packed." />
         ) : (
           <>
-            <Note>Tap Download to open, save, print or send an invoice.</Note>
+            <Note>Tap View to see an invoice, then share, save or print it.</Note>
             {docs.data.invoices.map((i) => (
               <Card key={i.id}>
                 <Row style={{ justifyContent: 'space-between' }}><Text style={{ fontSize: 16, fontWeight: '700', color: C.navy }}>{i.number}</Text><PayBadge status={i.status} /></Row>
                 <Note>{[i.date && formatDate(i.date), rupees(i.total), i.due > 0 && `${rupees(i.due)} left to pay`].filter(Boolean).join(' · ')}</Note>
-                <Button variant="secondary" title="Download invoice" icon={<Ionicons name="download-outline" size={20} color={C.ink} />} loading={pdf.busy === docPath('invoice', i.id)}
-                  onPress={() => pdf.open(docPath('invoice', i.id), `${i.number}.pdf`, `Invoice ${i.number} downloaded`)} />
+                <Button variant="secondary" title="View invoice" icon={<Ionicons name="eye-outline" size={20} color={C.ink} />} onPress={() => router.push(previewHref('invoice', i.id, i.number))} />
               </Card>
             ))}
             {docs.data.proformas.map((p) => (
               <Card key={p.id}>
                 <Text style={{ fontSize: 16, fontWeight: '700', color: C.navy }}>Proforma bill {p.number}</Text>
                 <Note>{rupees(p.total)} · {p.status.toLowerCase()}</Note>
-                <Button variant="secondary" title="Download proforma" icon={<Ionicons name="download-outline" size={20} color={C.ink} />} loading={pdf.busy === docPath('proforma', p.id)}
-                  onPress={() => pdf.open(docPath('proforma', p.id), `${p.number}.pdf`, `Proforma ${p.number} downloaded`)} />
+                <Button variant="secondary" title="View proforma" icon={<Ionicons name="eye-outline" size={20} color={C.ink} />} onPress={() => router.push(previewHref('proforma', p.id, p.number))} />
               </Card>
             ))}
           </>

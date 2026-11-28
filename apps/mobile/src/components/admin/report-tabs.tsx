@@ -60,6 +60,7 @@ function CountRow({ icon, label, count, warn, onPress }: { icon: Icon; label: st
 /** The website's dashboard: sales today / this week / this month, money owed, orders waiting, stock, overdue. */
 export function TodayTab() {
   const can = useCan();
+  const { me } = useAuth();
   const q = trpc.analytics.home.useQuery(undefined, { refetchInterval: 5 * 60_000 });
   // The dashboard has no "not assigned" count, so count the open ones from the order list (as the website does).
   const unassigned = trpc.orders.list.useQuery({ unassigned: true, limit: 500 }, { enabled: can('VIEW_ORDERS'), refetchInterval: 5 * 60_000 });
@@ -71,7 +72,8 @@ export function TodayTab() {
   const change = t.prevMonthToDate.sales ? Math.round(((t.month.sales - t.prevMonthToDate.sales) / Math.abs(t.prevMonthToDate.sales)) * 100) : null;
   const cur = d.trend.current.reduce((s, p) => s + p.sales, 0);
   const prev = d.trend.previous.reduce((s, p) => s + p.sales, 0);
-  const openOrders = can('VIEW_ORDERS') ? () => router.push('/staff') : undefined;
+  // The owner's first tab is Home, so their order list is the Orders tab.
+  const openOrders = can('VIEW_ORDERS') ? () => router.push(me?.role === 'OWNER' ? '/staff/orders' : '/staff') : undefined;
   const seeStatement = can('MANAGE_CUSTOMERS') || can('RECORD_PAYMENTS');
   return (
     <View style={{ gap: 12 }}>

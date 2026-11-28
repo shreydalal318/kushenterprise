@@ -1,6 +1,6 @@
 import { can, INVOICE_COPIES, type InvoiceCopy, type Permission } from '@kush/core';
 import { prisma } from '@kush/db';
-import { renderDocument, type DocKind } from '@kush/api/server';
+import { renderDocument, renderDocumentHtml, type DocKind } from '@kush/api/server';
 import { getSessionUser } from '@/lib/session';
 
 export const dynamic = 'force-dynamic';
@@ -13,7 +13,7 @@ const ACCESS: Record<DocKind, Permission[]> = {
   'purchase-order': ['CREATE_PURCHASE_ORDERS'], // shows purchase rates
 };
 
-/** PDF of a tax invoice / proforma / credit note / purchase order. ?copies=ORIGINAL,DUPLICATE  ?download=1 */
+/** PDF of a tax invoice / proforma / credit note / purchase order. ?copies=ORIGINAL,DUPLICATE  ?download=1  ?format=html (the app's preview) */
 export async function GET(req: Request, { params }: { params: Promise<{ kind: string; id: string }> }) {
   const { kind, id } = await params;
   if (!(kind in ACCESS)) return new Response('Not found', { status: 404 });
@@ -23,6 +23,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
   const url = new URL(req.url);
   const copies = (url.searchParams.get('copies') ?? 'ORIGINAL').split(',').filter((c): c is InvoiceCopy => (INVOICE_COPIES as readonly string[]).includes(c));
   try {
+    if (url.searchParams.get('format') === 'html') {
+      // The same page the PDF is printed from, for the app's preview (pinch to zoom). Same access rules.
+      const { html, customerId } = await renderDocumentHtml(prisma, k, id, copies.length ? copies : ['ORIGINAL']);
+      const allowed = user.role === 'CUSTOMER' ? user.customerId === customerId : ACCESS[k].some((p) => can(user, p));
+      if (!allowed) return new Response('Not found', { status: 404 });
+      const page = html.replace('<head>', '<head><meta name="viewport" content="width=820">');
+      return new Response(page, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'private, no-store', 'Content-Security-Policy': "default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:" } });
+    }
     const { pdf, filename, customerId } = await renderDocument(prisma, k, id, copies.length ? copies : ['ORIGINAL']);
     // Staff need the permission; a customer may only download their own documents.
     const allowed = user.role === 'CUSTOMER' ? user.customerId === customerId : ACCESS[k].some((p) => can(user, p));
