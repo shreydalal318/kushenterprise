@@ -15,7 +15,9 @@ import { useMe } from '@/lib/use-me';
 const maps = (address: string) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 
 export function Deliveries() {
-  const { can, me } = useMe();
+  const { can, me, isOwner } = useMe();
+  // Strict: something with one of our staff is theirs to mark delivered (the owner can step in); pickups by anyone allowed.
+  const mayDeliver = (personId: string | null) => (personId ? isOwner || (!!me && personId === me.id) : can('UPDATE_ORDER_STATUS'));
   const mine = trpc.deliveries.mine.useQuery();
   const board = trpc.deliveries.board.useQuery(undefined, { enabled: can('VIEW_ORDERS') });
   const [deliver, setDeliver] = useState<{ orderId: string; number: string } | null>(null);
@@ -57,7 +59,7 @@ export function Deliveries() {
                   {rows.map((d) => (
                     <li key={d.dispatchId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
                       <span><Link href={`/app/orders/${d.orderId}`} className="font-mono text-teal-700 hover:underline">{d.orderNumber}</Link> · {d.customer}<span className="block text-xs text-muted">{d.address}</span></span>
-                      <span className="flex items-center gap-2 text-xs text-muted">since {formatDateTime(d.since)}{(can('UPDATE_ORDER_STATUS') || (!!me && d.personId === me.id)) && <Button size="sm" variant="secondary" onClick={() => setDeliver({ orderId: d.orderId, number: d.orderNumber })}>Mark delivered</Button>}</span>
+                      <span className="flex items-center gap-2 text-xs text-muted">since {formatDateTime(d.since)}{mayDeliver(d.personId) && <Button size="sm" variant="secondary" onClick={() => setDeliver({ orderId: d.orderId, number: d.orderNumber })}>Mark delivered</Button>}</span>
                     </li>
                   ))}
                 </ul>

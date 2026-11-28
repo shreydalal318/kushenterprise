@@ -101,11 +101,15 @@ export default function StaffOrder() {
   const toSend = o.invoices.find((i) => i.status === 'ISSUED' && !o.dispatches.some((x) => x.invoiceId === i.id));
   const canStatus = can('UPDATE_ORDER_STATUS');
   const canDispatch = canStatus && ((o.status === 'PACKED' && hasInvoice) || (o.status === 'DISPATCHED' && !!toSend));
-  // The person it was handed to may mark it delivered without the status permission (the API allows it).
-  const canDeliver = o.status === 'DISPATCHED' && (canStatus || o.dispatches.some((x) => x.deliveryPersonId === me?.id && !x.deliveredAt));
+  // Strict: once it is with one of our staff, only that person (or the owner) marks it delivered, even without
+  // the status permission. A courier, transport or pickup can be marked by anyone with that permission.
+  const drops = o.dispatches.filter((x) => !x.deliveredAt && x.deliveryPersonId);
+  const dropNames = drops.map((x) => (x.deliveryPersonId === me?.id ? 'you' : x.deliveryPersonName ?? 'the delivery person')).join(' or ');
+  const canDeliver = o.status === 'DISPATCHED' && (drops.length ? me?.role === 'OWNER' || drops.some((x) => x.deliveryPersonId === me?.id) : canStatus);
   const canInvoice = can('CREATE_TAX_INVOICE');
   const canSource = isOpen && backorder > 0 && !!sq.data && can('CREATE_PURCHASE_ORDERS');
-  const canAssign = isOpen && (can('CREATE_ORDERS') || canStatus);
+  // Once it is out the delivery is with whoever took it (a later dispatch can hand it to someone else).
+  const canAssign = isOpen && o.status !== 'DISPATCHED' && (can('CREATE_ORDERS') || canStatus);
   const handlerId = o.assignedTo?.id ?? null;
   const busy = setStatus.isPending;
   // Invoiced goods are packed: an invoiced order resumes as Invoiced, otherwise as New, the way it was.
@@ -128,9 +132,11 @@ export default function StaffOrder() {
 
   if (view === 'dispatch') {
     const method = d.method || (o.suggestedDispatch as DispatchMethod);
-    const other = d.personId === 'OTHER';
+    // Starts with the person chosen on the order; picking someone else makes them the delivery person.
+    const personId = d.personId || handlerId || '';
+    const other = personId === 'OTHER';
     const missing = [
-      method === 'OWN_DELIVERY' && !d.personId && 'choose who is delivering it',
+      method === 'OWN_DELIVERY' && !personId && 'choose who is delivering it',
       method === 'OWN_DELIVERY' && other && !d.personName.trim() && 'write the delivery person’s name',
       method === 'COURIER' && !d.courier.trim() && 'write the courier company',
       method === 'TRANSPORT' && !d.courier.trim() && 'write the transporter',
@@ -139,7 +145,7 @@ export default function StaffOrder() {
     const save = () => setStatus.mutate({ id: o.id, status: 'DISPATCHED', dispatch: {
       method, dispatchDate: d.dispatchDate.trim(), invoiceId: toSend?.id, vehicleNo: method === 'OWN_DELIVERY' ? d.vehicleNo.trim() || null : null,
       courier: method === 'COURIER' || method === 'TRANSPORT' ? d.courier.trim() : null, docketNo: method === 'COURIER' || method === 'TRANSPORT' ? d.docketNo.trim() || null : null,
-      deliveryPersonId: method === 'OWN_DELIVERY' && !other ? d.personId : null,
+      deliveryPersonId: method === 'OWN_DELIVERY' && !other ? personId : null,
       deliveryPersonName: method === 'OWN_DELIVERY' && other ? d.personName.trim() : null, deliveryPersonMobile: method === 'OWN_DELIVERY' && other ? d.personMobile.trim() || null : null,
     } }, { onSuccess: () => finish(method === 'PICKUP' ? 'Ready for pickup ✓ Next: mark it delivered when the customer collects it.' : 'Dispatched ✓ Next: mark it delivered when it reaches the customer.') });
     return (
@@ -167,9 +173,10 @@ export default function StaffOrder() {
         {method === 'OWN_DELIVERY' && (
           <Card>
             <H2>Who is delivering it?</H2>
+            <Small>Only this person (or the owner) can mark it delivered.</Small>
             {[...(staff.data ?? []).map((u) => ({ id: u.id, label: `${u.name}${u.mobile ? ` · ${u.mobile}` : ''}` })), { id: 'OTHER', label: 'Someone else' }].map((u) => (
-              <Pressable key={u.id} accessibilityRole="radio" accessibilityState={{ selected: d.personId === u.id }} accessibilityLabel={u.label} onPress={() => setD({ ...d, personId: u.id })} style={{ flexDirection: 'row', gap: 10, alignItems: 'center', minHeight: 44 }}>
-                <Ionicons name={d.personId === u.id ? 'radio-button-on' : 'radio-button-off'} size={22} color={C.teal700} /><P>{u.label}</P>
+              <Pressable key={u.id} accessibilityRole="radio" accessibilityState={{ selected: personId === u.id }} accessibilityLabel={u.label} onPress={() => setD({ ...d, personId: u.id })} style={{ flexDirection: 'row', gap: 10, alignItems: 'center', minHeight: 44 }}>
+                <Ionicons name={personId === u.id ? 'radio-button-on' : 'radio-button-off'} size={22} color={C.teal700} /><P>{u.label}</P>
               </Pressable>
             ))}
             {other && <><Field label="Name" value={d.personName} onChangeText={(v) => setD({ ...d, personName: v })} maxLength={80} /><Field label="Mobile (optional)" keyboardType="phone-pad" value={d.personMobile} onChangeText={(v) => setD({ ...d, personMobile: v })} maxLength={20} /></>}
@@ -243,7 +250,7 @@ export default function StaffOrder() {
     o.status === 'PLACED' || o.status === 'CONFIRMED' ? (canInvoice ? { hint: 'Next: make the invoice.', title: 'Make invoice', onPress: goInvoice } : { hint: `Next: make the invoice. ${ask}` })
       : o.status === 'PACKED' ? (canDispatch ? { hint: 'Next: send it out.', title: 'Dispatch order', onPress: () => setMode('dispatch') } : { hint: `Next: send it out. ${ask}` })
         : o.status === 'DISPATCHED' && toSend && canDispatch ? { hint: `Next: send out invoice ${toSend.number}.`, title: `Dispatch invoice ${toSend.number}`, onPress: () => setMode('dispatch') }
-          : o.status === 'DISPATCHED' ? (canDeliver ? { hint: 'Next: mark it delivered when it reaches the customer.', title: 'Mark delivered', onPress: openDeliver } : { hint: 'On its way. The person delivering it marks it delivered.' })
+          : o.status === 'DISPATCHED' ? (canDeliver ? { hint: 'Next: mark it delivered when it reaches the customer.', title: 'Mark delivered', onPress: openDeliver } : { hint: drops.length ? `On its way with ${dropNames}. Only ${dropNames} can mark it delivered.` : 'On its way. Ask the owner to mark it delivered when it arrives.' })
             : o.status === 'ON_HOLD' ? (canStatus && resumeTo ? { hint: 'On hold. Next: resume it when it can go ahead.', title: 'Resume order', onPress: () => setStatus.mutate({ id: o.id, status: resumeTo }, { onSuccess: () => finish('Order resumed ✓') }) } : { hint: `On hold. ${ask}` })
               : delivered ? { hint: 'Delivered ✓ Nothing more to do.' } : null;
   const invoiceRest = isOpen && hasInvoice && backorder > 0 && ['PACKED', 'DISPATCHED'].includes(o.status) && canInvoice;
@@ -323,18 +330,18 @@ export default function StaffOrder() {
         <Row style={{ justifyContent: 'space-between', minHeight: 44 }}>
           <Row style={{ flex: 1 }}>
             <Ionicons name="person-circle-outline" size={22} color={o.assignedTo ? C.teal700 : C.warn} />
-            {o.assignedTo ? <P style={{ flex: 1 }}>Handled by <Text style={{ fontWeight: '700' }}>{o.assignedTo.id === me?.id ? 'you' : o.assignedTo.name}</Text></P> : <P style={{ color: C.warn, fontWeight: '700' }}>Not assigned</P>}
+            {o.assignedTo ? <P style={{ flex: 1 }}>Delivery by <Text style={{ fontWeight: '700' }}>{o.assignedTo.id === me?.id ? 'you' : o.assignedTo.name}</Text></P> : <P style={{ color: C.warn, fontWeight: '700' }}>Not assigned</P>}
           </Row>
           {canAssign && <LinkButton title={o.assignedTo ? 'Change' : 'Assign'} onPress={() => { assign.reset(); setFlash(null); setAssigning(true); }} />}
         </Row>
       )}
       {canAssign && assigning && (
         <Card>
-          <H2>Who will handle it?</H2>
-          <Small>They make the invoice, send it out and mark it delivered.</Small>
+          <H2>Who will deliver it?</H2>
+          <Small>Only they can mark it delivered. Anyone can make the invoice and pack it meanwhile.</Small>
           <HandlerPicker value={handlerId} noneLabel="Not assigned" disabled={assign.isPending}
             onChange={(v) => (v === handlerId ? setAssigning(false) : assign.mutate({ id: o.id, assignedToId: v }, {
-              onSuccess: () => { setAssigning(false); setFlash(v ? `Now handled by ${staff.data?.find((u) => u.id === v)?.name ?? 'them'} ✓` : 'Set to not assigned.'); },
+              onSuccess: () => { setAssigning(false); setFlash(v ? `${staff.data?.find((u) => u.id === v)?.name ?? 'They'} will deliver it ✓` : 'Set to not assigned.'); },
             }))} />
           {assign.isPending && <Small>Saving…</Small>}
           {assign.error && <Alert>{readableError(assign.error)}</Alert>}

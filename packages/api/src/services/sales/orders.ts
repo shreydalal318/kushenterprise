@@ -55,7 +55,7 @@ export async function createOrder(tx: Tx, input: OrderInput, actor: { id: string
   const summary = `${doc.customer.name}${doc.doctor ? ` for ${doc.doctor.name}` : ''}: ${units} unit(s)${input.surgeryDate ? `, surgery ${input.surgeryDate}` : ''}`;
   const team = (await orderStaffIds(tx)).filter((id) => id !== actor.id && id !== assignedToId);
   await notify(tx, { userIds: team, title: `New order ${number}`, body: assignedToId ? summary : `${summary} · not assigned yet`, link: `/app/orders/${o.id}`, channels: ['PUSH'] });
-  if (assignedToId && assignedToId !== actor.id) await notify(tx, { userIds: [assignedToId], title: `You're handling ${number}`, body: summary, link: `/app/orders/${o.id}`, channels: ['PUSH'] });
+  if (assignedToId && assignedToId !== actor.id) await notify(tx, { userIds: [assignedToId], title: `You'll deliver ${number}`, body: summary, link: `/app/orders/${o.id}`, channels: ['PUSH'] });
   if (input.source !== 'STAFF') {
     await notifyCustomer(tx, doc.customer.id, { title: `Order ${number} received`, body: `We have your order for ${units} unit(s). We will message you when it is invoiced, dispatched and delivered.`, link: `/portal/orders/${o.id}` });
   }
@@ -81,13 +81,16 @@ function dispatchedThrough(method: DispatchMethod, d: { courier?: string | null;
   return [d.courier, d.vehicleNo].filter(Boolean).join(', ') || null;
 }
 
-/** Move an order along New → Invoiced (Packed) → Dispatched → Delivered (hold / cancel aside). Placed → Confirmed stays allowed for old clients. */
-/** Orders are handled by employees (the owner oversees them all). */
+/**
+ * The person chosen on an order delivers it: an employee (the owner oversees them all). Anyone with the
+ * permission may invoice, pack and dispatch it, so nothing waits for that one person; only the delivery is theirs.
+ */
 export async function assertHandler(tx: Tx, userId: string) {
   const u = await tx.user.findFirst({ where: { id: userId, role: 'EMPLOYEE', isActive: true }, select: { id: true } });
-  if (!u) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose an active employee to handle the order' });
+  if (!u) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose an active employee to deliver the order' });
 }
 
+/** Move an order along New → Invoiced (Packed) → Dispatched → Delivered (hold / cancel aside). Placed → Confirmed stays allowed for old clients. */
 export async function changeOrderStatus(tx: Tx, input: StatusInput, actor: { id: string }, ip?: string | null) {
   const o = await tx.salesOrder.findUnique({ where: { id: input.id }, include: { lines: true, invoices: { where: { status: 'ISSUED' }, select: { id: true } } } });
   if (!o) throw new TRPCError({ code: 'NOT_FOUND' });
@@ -98,6 +101,14 @@ export async function changeOrderStatus(tx: Tx, input: StatusInput, actor: { id:
   if (!redispatch && !canMoveTo(o.status, input.status)) throw new TRPCError({ code: 'BAD_REQUEST', message: `An order that is ${ORDER_STATUS_LABEL[o.status].toLowerCase()} cannot be marked ${ORDER_STATUS_LABEL[input.status].toLowerCase()}` });
   if (input.status === 'CANCELLED' && o.invoices.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'This order has invoices; cancel those first' });
   let deliveredWith: string | null = null; // "Ramesh (98250 12345)" for the customer's message
+  if (input.status === 'DELIVERED') {
+    // Strict: something handed to one of our staff to deliver is marked delivered by that person (the owner can step in).
+    const drops = await tx.dispatch.findMany({ where: { orderId: o.id, deliveredAt: null, deliveryPersonId: { not: null } }, select: { deliveryPersonId: true, deliveryPersonName: true } });
+    if (drops.length && !drops.some((d) => d.deliveryPersonId === actor.id)) {
+      const me = await tx.user.findUnique({ where: { id: actor.id }, select: { role: true } });
+      if (me?.role !== 'OWNER') throw new TRPCError({ code: 'FORBIDDEN', message: `Only ${drops.map((d) => d.deliveryPersonName ?? 'the delivery person').join(' or ')} can mark this delivered: it was given to them to deliver` });
+    }
+  }
   if (input.status === 'DISPATCHED') {
     if (!o.invoices.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Raise a tax invoice before dispatching' });
     if (!input.dispatch?.dispatchDate) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Enter the dispatch date' });
@@ -107,9 +118,11 @@ export async function changeOrderStatus(tx: Tx, input: StatusInput, actor: { id:
     let person: { id: string | null; name: string; mobile: string | null } | null = null;
     if (method === 'OWN_DELIVERY') {
       if (dsp.deliveryPersonId) {
-        const u = await tx.user.findFirst({ where: { id: dsp.deliveryPersonId, isActive: true, role: { in: ['OWNER', 'EMPLOYEE'] } }, select: { id: true, name: true, mobile: true } });
+        const u = await tx.user.findFirst({ where: { id: dsp.deliveryPersonId, isActive: true, role: { in: ['OWNER', 'EMPLOYEE'] } }, select: { id: true, name: true, mobile: true, role: true } });
         if (!u) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose an active staff member for the delivery' });
         person = { id: u.id, name: u.name, mobile: u.mobile };
+        // Whoever takes it out is now the order's delivery person (the owner never is: they oversee).
+        if (u.role === 'EMPLOYEE' && o.assignedToId !== u.id) await tx.salesOrder.update({ where: { id: o.id }, data: { assignedToId: u.id } });
       } else if (dsp.deliveryPersonName) person = { id: null, name: dsp.deliveryPersonName, mobile: dsp.deliveryPersonMobile ?? null };
       else throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose who is delivering it' });
     }

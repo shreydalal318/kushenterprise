@@ -84,7 +84,7 @@ test.describe.serial('Phase 4 sales', () => {
     await page.getByLabel('Patient name (optional)').fill('Mr. R. Shah');
     // The handler must be chosen on purpose (the owner is never one); Place order stays off until then.
     await expect(page.getByRole('button', { name: /Place order/ })).toBeDisabled();
-    await selectByText(page, 'Who will handle it', 'Not assigned yet');
+    await selectByText(page, 'Who will deliver it', 'Not assigned yet');
     await page.getByRole('button', { name: /Place order/ }).click();
     await page.waitForURL(/\/app\/orders\/[^/]+\?new=1/);
     const orderPath = new URL(page.url()).pathname;

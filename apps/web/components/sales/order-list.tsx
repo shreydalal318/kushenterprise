@@ -44,7 +44,7 @@ export function OrderList() {
         <select aria-label="Status" className={sel} value={status} onChange={(e) => setStatus(e.target.value)}>
           <option value="">Any status</option>{FILTERS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
-        <select aria-label="Handled by" className={sel} value={assigned} onChange={(e) => setAssigned(e.target.value)}>
+        <select aria-label="Delivery by" className={sel} value={assigned} onChange={(e) => setAssigned(e.target.value)}>
           <option value="">Anyone</option><option value={NOBODY}>Not assigned</option>
           {staff.data?.filter((s) => s.role === 'EMPLOYEE').map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
@@ -71,7 +71,7 @@ export function OrderList() {
                 </div>
               </div>
               <p className="mt-2 flex justify-between text-xs text-muted"><span>{o.units} unit{o.units === 1 ? '' : 's'} · <span className="font-medium text-ink">{rupees(o.value)}</span></span><span>{formatDateTime(o.createdAt)}</span></p>
-              <p className="mt-1 flex items-center gap-1.5 text-xs text-muted">Handled by {o.assignedTo ? <span className="font-medium text-ink">{o.assignedTo}</span> : <NotAssigned status={o.status} />}</p>
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-muted">Delivery by {o.assignedTo ? <span className="font-medium text-ink">{o.assignedTo}</span> : <NotAssigned status={o.status} />}</p>
             </Link>
           </li>
         ))}
@@ -79,7 +79,7 @@ export function OrderList() {
 
       <Card className="hidden overflow-hidden sm:block">
         <Table minWidth={860}>
-          <THead><tr><Th>Order</Th><Th>Customer</Th><Th>Status</Th><Th className="text-right">Units</Th><Th className="text-right">Value</Th><Th>Handled by</Th><Th>Source</Th></tr></THead>
+          <THead><tr><Th>Order</Th><Th>Customer</Th><Th>Status</Th><Th className="text-right">Units</Th><Th className="text-right">Value</Th><Th>Delivery by</Th><Th>Source</Th></tr></THead>
           <tbody>
             {!list.data && <LoadingRow cols={7} error={list.error} />}{list.data?.length === 0 && <EmptyRow cols={7}>No orders.</EmptyRow>}
             {list.data?.map((o) => (

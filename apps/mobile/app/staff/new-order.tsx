@@ -17,7 +17,7 @@ const int = (v: string) => (/^\d+$/.test(v.trim()) ? Number(v.trim()) : 0);
 /** A real calendar day as YYYY-MM-DD (2026-02-30 is not). */
 const isDay = (v: string) => { const d = new Date(`${v}T00:00:00Z`); return /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v); };
 
-/** An order taken on a call or WhatsApp: customer, items found by name, and who will handle it. */
+/** An order taken on a call or WhatsApp: customer, items found by name, and who will deliver it. */
 export default function NewOrder() {
   const can = useCan();
   const utils = trpc.useUtils();
@@ -42,7 +42,7 @@ export default function NewOrder() {
   const cityOf = (c: { addresses: { kind: string; isDefault: boolean; city: string | null }[] }) => (c.addresses.find((a) => a.kind === 'BILLING' && a.isDefault) ?? c.addresses.find((a) => a.kind === 'BILLING'))?.city;
   const badQty = lines.some((l) => int(l.qty) < 1 || int(l.qty) > 10000);
   const surgeryOk = !surgery.trim() || isDay(surgery.trim());
-  const missing = [!customer && 'choose the customer', !lines.length && 'add an item', handler === undefined && 'choose who will handle it'].filter(Boolean);
+  const missing = [!customer && 'choose the customer', !lines.length && 'add an item', handler === undefined && 'choose who will deliver it'].filter(Boolean);
   const ready = !missing.length && !badQty && surgeryOk;
 
   function onPick(p: Picked) {
@@ -137,8 +137,8 @@ export default function NewOrder() {
       </Card>
 
       <Card>
-        <H2>Who will handle it?</H2>
-        <Small>They make the invoice, send it out and mark it delivered.</Small>
+        <H2>Who will deliver it?</H2>
+        <Small>Only they can mark it delivered. Anyone can make the invoice and pack it meanwhile.</Small>
         <HandlerPicker value={handler} onChange={setHandler} disabled={create.isPending} />
       </Card>
     </Screen>

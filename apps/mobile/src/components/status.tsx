@@ -61,7 +61,7 @@ export function SurgeryChip({ date, done }: { date: string | null; done?: boolea
 }
 
 /** Who handles an order. Only an open order with nobody on it is a warning; a closed one simply shows nothing. */
-export const HandlerTag = ({ name, open = true, you = false }: { name: string | null; open?: boolean; you?: boolean }) => (name ? <Small>Handled by {you ? 'you' : name}</Small> : open ? <Badge label="Not assigned" tone="warn" /> : null);
+export const HandlerTag = ({ name, open = true, you = false }: { name: string | null; open?: boolean; you?: boolean }) => (name ? <Small>Delivery by {you ? 'you' : name}</Small> : open ? <Badge label="Not assigned" tone="warn" /> : null);
 const STOCK: Record<string, [string, 'ok' | 'warn' | 'neutral']> = { AVAILABLE: ['Available', 'ok'], LIMITED: ['Limited', 'warn'], ON_REQUEST: ['On request', 'neutral'] };
 export const StockBadge = ({ stock }: { stock: string }) => <Badge label={(STOCK[stock] ?? STOCK.ON_REQUEST!)[0]} tone={(STOCK[stock] ?? STOCK.ON_REQUEST!)[1]} />;
 const PAY: Record<string, [string, 'ok' | 'warn' | 'danger' | 'neutral']> = { PAID: ['Paid', 'ok'], PARTLY_PAID: ['Part paid', 'warn'], UNPAID: ['Unpaid', 'neutral'], OVERDUE: ['Overdue', 'danger'], CANCELLED: ['Cancelled', 'neutral'] };

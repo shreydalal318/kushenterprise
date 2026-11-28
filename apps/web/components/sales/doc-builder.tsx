@@ -200,8 +200,8 @@ export function DocBuilder({ mode, prefill }: { mode: BuilderMode; prefill?: Bui
             {shippingOptions.map((a) => <option key={a.id} value={a.id}>{a.label ?? (a.kind === 'BILLING' ? 'Billing address' : 'Shipping')} · {a.city} ({stateByCode(a.stateCode)?.shortCode})</option>)}
           </SelectField>
           {mode !== 'order' ? <TextField label={mode === 'invoice' ? 'Invoice date' : 'Date'} type="date" value={date} onChange={(e) => setDate(e.target.value)} /> : (
-            <SelectField label="Who will handle it" required value={handler} onChange={(e) => setHandler(e.target.value)} error={fe.assignedToId}
-              hint={staff.error ? errorMessage(staff.error) : 'They make the invoice, pack, dispatch and deliver it.'}>
+            <SelectField label="Who will deliver it" required value={handler} onChange={(e) => setHandler(e.target.value)} error={fe.assignedToId}
+              hint={staff.error ? errorMessage(staff.error) : 'They get the delivery. Anyone can make the invoice and pack it meanwhile.'}>
               <option value="" disabled>Choose…</option>
               {handlers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               <option value={NOBODY}>Not assigned yet</option>
@@ -299,7 +299,7 @@ export function DocBuilder({ mode, prefill }: { mode: BuilderMode; prefill?: Bui
         {shortSerials.map((l) => { const n = Math.max(1, l.wanted ?? 0) - l.serials.length; return <span key={l.key} className="text-sm text-warn">Tick {n} serial{n === 1 ? '' : 's'} for {l.name}{l.label ? ` ${l.label}` : ''}{l.serials.length === 0 ? ' (or remove the line)' : ''}</span>; })}
         {lines.some((l) => l.qty < 1 && !(mode === 'invoice' && l.trackSerial)) && <span className="text-sm text-warn">Each line needs a quantity of at least 1.</span>}
         {serialProblems && <span className="text-sm text-warn">Each serial-tracked item needs one serial per unit.</span>}
-        {noHandler && <span className="text-sm text-warn">Choose who will handle this order (or “Not assigned yet”).</span>}
+        {noHandler && <span className="text-sm text-warn">Choose who will deliver this order (or “Not assigned yet”).</span>}
         {/* Stays disabled after saving until the new page opens (proformas have no idempotency key, so a second click would save twice). */}
         <Button size="lg" disabled={!customerId || !lines.length || serialProblems || zeroQty || noHandler || m.isSuccess} loading={m.isPending || m.isSuccess} onClick={submit}>{TITLES[mode]}{total != null ? ` · ${rupees(total)}` : ''}</Button>
       </div>

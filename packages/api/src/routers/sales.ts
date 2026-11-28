@@ -110,12 +110,16 @@ export const ordersRouter = router({
   setStatus: permissionProcedure('UPDATE_ORDER_STATUS').input(orderStatusInput).mutation(({ ctx, input }) =>
     ctx.db.$transaction((tx) => changeOrderStatus(tx, input, ctx.user, ctx.ip))),
 
-  /** Choose (or change) who handles the order: whoever can enter orders or move them along. */
+  /** Choose (or change) who delivers the order: whoever can enter orders or move them along. */
   assign: anyPermissionProcedure('CREATE_ORDERS', 'UPDATE_ORDER_STATUS').input(z.object({ id: z.string(), assignedToId: z.string().nullable() })).mutation(async ({ ctx, input }) => {
     if (input.assignedToId) await assertHandler(ctx.db, input.assignedToId);
+    // Once it is out, the delivery is with whoever took it; a later dispatch can hand it to someone else.
+    const cur = await ctx.db.salesOrder.findUnique({ where: { id: input.id }, select: { status: true } });
+    if (!cur) throw new TRPCError({ code: 'NOT_FOUND' });
+    if (['DISPATCHED', 'DELIVERED', 'CANCELLED'].includes(cur.status)) throw new TRPCError({ code: 'BAD_REQUEST', message: cur.status === 'DISPATCHED' ? 'This order is already out for delivery' : 'This order is closed' });
     const o = await ctx.db.salesOrder.update({ where: { id: input.id }, data: { assignedToId: input.assignedToId }, include: { assignedTo: { select: { name: true } }, customer: { select: { name: true } } } });
     if (input.assignedToId && input.assignedToId !== ctx.user.id) {
-      await notify(ctx.db, { userIds: [input.assignedToId], title: `You're handling ${o.number}`, body: `${o.customer.name} · assigned by ${ctx.user.name}`, link: `/app/orders/${o.id}`, channels: ['PUSH'] });
+      await notify(ctx.db, { userIds: [input.assignedToId], title: `You'll deliver ${o.number}`, body: `${o.customer.name} · assigned by ${ctx.user.name}`, link: `/app/orders/${o.id}`, channels: ['PUSH'] });
     }
     await logActivity(ctx.db, { actorId: ctx.user.id, action: 'order.assign', entityType: 'SalesOrder', entityId: o.id, ip: ctx.ip, summary: `${o.number} assigned to ${o.assignedTo?.name ?? 'nobody'}` });
     return { ok: true };
@@ -123,7 +127,8 @@ export const ordersRouter = router({
 
   /**
    * Proof of delivery. The delivery person the order was handed to can mark it delivered (from the
-   * app) even without the order-status permission; anyone with that permission can too.
+   * app) even without the order-status permission. When it went with one of our staff, only they (or
+   * the owner) may; a courier, transport or pickup can be marked by anyone with that permission.
    */
   markDelivered: staffProcedure.input(z.object({ id: z.string(), receivedBy: z.string().trim().min(2, 'Who received it?').max(80), note: z.string().trim().max(300).optional().nullable() })).mutation(async ({ ctx, input }) => {
     const mine = await ctx.db.dispatch.count({ where: { orderId: input.id, deliveryPersonId: ctx.user.id, deliveredAt: null } });

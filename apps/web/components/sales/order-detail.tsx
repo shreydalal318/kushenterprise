@@ -35,7 +35,7 @@ function useRefreshAfterStatus() {
 }
 
 export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; isNew: boolean; openDispatch?: boolean }) {
-  const { can, me, loading: meLoading } = useMe();
+  const { can, me, isOwner, loading: meLoading } = useMe();
   const router = useRouter();
   const refresh = useRefreshAfterStatus();
   // Always refetch on arrival: coming back from raising an invoice, the cached order doesn't have it yet.
@@ -60,8 +60,10 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
   const backorder = o.lines.reduce((t, l) => t + l.backorder, 0);
   const hasInvoice = o.invoices.some((i) => i.status === 'ISSUED');
   const canDispatch = dispatchable(o);
-  // The person the order was handed to may mark it delivered without the order-status permission.
-  const canDeliver = can('UPDATE_ORDER_STATUS') || (!!me && o.dispatches.some((d) => d.deliveryPersonId === me.id && !d.deliveredAt));
+  // Strict: once it is with one of our staff, only that person (or the owner) marks it delivered, even without
+  // the order-status permission. A courier, transport or pickup can be marked by anyone with that permission.
+  const drops = o.dispatches.filter((d) => !d.deliveredAt && d.deliveryPersonId);
+  const canDeliver = drops.length ? !!me && (isOwner || drops.some((d) => d.deliveryPersonId === me.id)) : can('UPDATE_ORDER_STATUS');
   const stock = new Map((sq.data?.lines ?? []).map((l) => [l.variantId, l]));
   const toOrder = (sq.data?.lines ?? []).reduce((t, l) => t + l.toOrder, 0);
   const linkedPos = [...new Map((sq.data?.lines ?? []).flatMap((l) => l.purchaseOrders).map((p) => [p.id, p])).values()];
@@ -102,6 +104,7 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
             )}
             {can('UPDATE_ORDER_STATUS') && canDispatch && <Button size="sm" onClick={() => go('DISPATCHED')}><Truck className="size-4" aria-hidden /> Dispatch</Button>}
             {canDeliver && o.status === 'DISPATCHED' && <Button size="sm" variant={canDispatch ? 'secondary' : 'primary'} onClick={() => go('DELIVERED')}>Mark delivered</Button>}
+            {!canDeliver && o.status === 'DISPATCHED' && drops.length > 0 && <span className="self-center text-sm text-muted">{drops.map((d) => d.deliveryPersonName).join(' or ')} marks it delivered</span>}
             {/* Back to where it was: Invoiced if it has an invoice (the goods are already picked), else New. */}
             {can('UPDATE_ORDER_STATUS') && o.status === 'ON_HOLD' && <Button size="sm" variant="secondary" loading={setStatus.isPending} onClick={() => go(resumeTo)}>Resume ({ORDER_STATUS_LABEL[resumeTo].toLowerCase()})</Button>}
             {can('UPDATE_ORDER_STATUS') && next.includes('ON_HOLD') && <Button size="sm" variant="secondary" onClick={() => go('ON_HOLD')}>Put on hold</Button>}
@@ -223,11 +226,12 @@ export function OrderDetail({ id, isNew, openDispatch = false }: { id: string; i
   );
 }
 
-/** The one employee who invoices (which packs), dispatches and delivers the order. */
+/** The employee who delivers the order. Anyone with the permission can invoice and dispatch it meanwhile. */
 function HandledBy({ o, open }: { o: Order; open: boolean }) {
   const { can } = useMe();
   const utils = trpc.useUtils();
-  const canAssign = can('CREATE_ORDERS') || can('UPDATE_ORDER_STATUS');
+  // Once it is out the delivery is with whoever took it (a later dispatch can hand it to someone else).
+  const canAssign = open && o.status !== 'DISPATCHED' && (can('CREATE_ORDERS') || can('UPDATE_ORDER_STATUS'));
   const staff = trpc.orders.staff.useQuery(undefined, { enabled: canAssign });
   // Awaiting the refetch keeps the new choice showing (and the spinner) until the page has it; the dashboard counts follow the handler too.
   const m = trpc.orders.assign.useMutation({ onSuccess: () => Promise.all([utils.orders.invalidate(), utils.analytics.invalidate()]) });
@@ -238,7 +242,7 @@ function HandledBy({ o, open }: { o: Order; open: boolean }) {
     <span className="flex flex-wrap items-center gap-2 text-ink">
       <UserRound className="size-4 text-muted" aria-hidden />
       {canAssign ? (
-        <label className="flex items-center gap-2"><span className="text-muted">Handled by</span>
+        <label className="flex items-center gap-2"><span className="text-muted">Delivery by</span>
           <select value={m.isPending ? (m.variables.assignedToId ?? '') : (current?.id ?? '')} disabled={m.isPending} onChange={(e) => m.mutate({ id: o.id, assignedToId: e.target.value || null })}
             className="h-8 max-w-56 rounded-md border border-line bg-white px-2 text-sm font-semibold text-ink disabled:opacity-60">
             <option value="">Not assigned</option>
@@ -247,7 +251,7 @@ function HandledBy({ o, open }: { o: Order; open: boolean }) {
             {handlers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
         </label>
-      ) : <><span className="text-muted">Handled by:</span>{current && <strong className="font-semibold">{current.name}</strong>}</>}
+      ) : <><span className="text-muted">Delivery by:</span>{current && <strong className="font-semibold">{current.name}</strong>}</>}
       {!current && !m.isPending && none}
       {m.isPending && <Loader2 className="size-4 animate-spin text-muted" aria-label="Saving" />}
       {(m.error ?? staff.error) && <span role="alert" className="text-danger">{errorMessage(m.error ?? staff.error)}</span>}
@@ -261,7 +265,7 @@ function DispatchDialog({ o, refreshing, onClose }: { o: Order; refreshing: bool
   const staff = trpc.orders.staff.useQuery();
   const invoices = o.invoices.filter((i) => i.status === 'ISSUED');
   const sent = new Set(o.dispatches.map((d) => d.invoiceId));
-  const [v, setV] = useState({ method: o.suggestedDispatch as DispatchMethod, courier: '', docketNo: '', vehicleNo: '', dispatchDate: istDateString(), invoiceId: '', deliveryPersonId: '', deliveryPersonName: '', deliveryPersonMobile: '' });
+  const [v, setV] = useState({ method: o.suggestedDispatch as DispatchMethod, courier: '', docketNo: '', vehicleNo: '', dispatchDate: istDateString(), invoiceId: '', deliveryPersonId: o.assignedTo?.id ?? '', deliveryPersonName: '', deliveryPersonMobile: '' });
   // Defaults to the newest invoice not dispatched yet, including one that arrives after the dialog opened.
   const invoiceId = v.invoiceId || invoices.filter((i) => !sent.has(i.id)).at(-1)?.id || invoices.at(-1)?.id || '';
   const m = trpc.orders.setStatus.useMutation({ onSuccess: async () => { await refresh(); onClose(); } });
@@ -297,7 +301,7 @@ function DispatchDialog({ o, refreshing, onClose }: { o: Order; refreshing: bool
         {invoices.length > 1 && <SelectField label="Invoice" value={invoiceId} onChange={(e) => setV({ ...v, invoiceId: e.target.value })}>{invoices.map((i) => <option key={i.id} value={i.id}>{i.number}{sent.has(i.id) ? ' (already dispatched)' : ''}</option>)}</SelectField>}
         {v.method === 'OWN_DELIVERY' && (
           <>
-            <SelectField label="Delivered by" value={v.deliveryPersonId} onChange={(e) => setV({ ...v, deliveryPersonId: e.target.value })} hint="Staff in the list see this delivery in their app and mark it delivered there.">
+            <SelectField label="Delivered by" value={v.deliveryPersonId} onChange={(e) => setV({ ...v, deliveryPersonId: e.target.value })} hint={other ? 'Anyone who can update orders marks it delivered.' : 'Starts with the person chosen on the order. They see it in their app, and only they (or the owner) can mark it delivered.'}>
               <option value="">Choose…</option>
               {staff.data?.map((u) => <option key={u.id} value={u.id}>{u.name}{u.mobile ? ` · ${u.mobile}` : ''}</option>)}
               <option value="OTHER">Someone else (enter name)</option>

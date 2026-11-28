@@ -7,6 +7,7 @@ const today = istDateString();
 let owner: Awaited<ReturnType<typeof makeUser>>;
 let rider: Awaited<ReturnType<typeof makeUser>>; // delivery boy: a staff login with no permissions
 let clerk: Awaited<ReturnType<typeof makeUser>>;
+let packer: Awaited<ReturnType<typeof makeUser>>; // can invoice and dispatch anything, but not deliver someone else's
 let gel: string;
 let cust: string;
 let custUser: Awaited<ReturnType<typeof makeUser>>;
@@ -15,7 +16,6 @@ const api = async (u = owner) => (await callerFor(u.id)).api;
 async function invoicedOrder(qty = 2) {
   const a = await api();
   const o = await a.orders.create({ customerId: cust, lines: [{ variantId: gel, qty }] });
-  await a.orders.setStatus({ id: o.id, status: 'CONFIRMED' });
   await a.invoices.create({ customerId: cust, orderId: o.id, date: today, lines: [{ variantId: gel, qty }] });
   return o.id;
 }
@@ -25,6 +25,7 @@ beforeAll(async () => {
   owner = await makeUser('OWNER');
   rider = await makeUser('EMPLOYEE', { mobile: randomMobile() });
   clerk = await makeUser('EMPLOYEE', { permissions: ['VIEW_ORDERS'] });
+  packer = await makeUser('EMPLOYEE', { permissions: ['VIEW_ORDERS', 'CREATE_TAX_INVOICE', 'UPDATE_ORDER_STATUS'] });
   const a = await api();
   const s = await a.settings.get();
   await a.settings.updateCompany({ legalName: s.legalName, addressLine1: 'Race Course Road', addressLine2: '', city: 'Vadodara', pincode: '390007', stateCode: '24', phone: '', email: '', gstin: s.gstin, pan: s.pan, drugLicenceNo: 'DL-1', jurisdictionCity: 'Vadodara' });
@@ -48,6 +49,7 @@ describe('local delivery by our own staff', () => {
     expect((await prisma.invoice.findUniqueOrThrow({ where: { id: inv.id } })).dispatchedThrough).toBe(`By hand (${rider.name}), GJ06AB1234`);
     expect(await prisma.notification.count({ where: { userId: rider.id, title: { startsWith: 'Delivery:' }, channel: 'IN_APP' } })).toBe(1);
     expect((await a.deliveries.board()).find((d) => d.orderId === id)).toMatchObject({ person: rider.name, personId: rider.id });
+    expect((await a.orders.get({ id })).assignedTo?.id).toBe(rider.id); // whoever takes it out is the order's delivery person
     const told = await prisma.notification.findFirstOrThrow({ where: { userId: custUser.id, title: { endsWith: 'On the way' }, channel: 'IN_APP' }, orderBy: { createdAt: 'desc' } });
     expect(told.body).toContain(`Out for delivery today with ${rider.name}`);
 
@@ -65,6 +67,34 @@ describe('local delivery by our own staff', () => {
     expect((await r.deliveries.mine()).map((d) => d.orderId)).not.toContain(id);
     const portal = await (await api(custUser)).portal.order({ id });
     expect(portal.dispatches[0]).toMatchObject({ method: 'OWN_DELIVERY', person: rider.name, receivedBy: 'Sister Mary (OT store)' });
+  });
+
+  it('anyone with the permission invoices and dispatches; only the delivery person (or the owner) marks it delivered', async () => {
+    const a = await api();
+    const p = await api(packer);
+    // Assigned to the rider, yet someone else invoices and dispatches it: nothing waits for the rider.
+    const o = await a.orders.create({ customerId: cust, assignedToId: rider.id, lines: [{ variantId: gel, qty: 1 }] });
+    await p.invoices.create({ customerId: cust, orderId: o.id, date: today, lines: [{ variantId: gel, qty: 1 }] });
+    await p.orders.setStatus({ id: o.id, status: 'DISPATCHED', dispatch: { method: 'OWN_DELIVERY', dispatchDate: today, deliveryPersonId: rider.id } });
+    await expect(p.orders.markDelivered({ id: o.id, receivedBy: 'Sister Mary' })).rejects.toThrow(new RegExp(`Only ${rider.name} can mark this delivered`));
+    await expect(p.orders.setStatus({ id: o.id, status: 'DELIVERED' })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await a.orders.markDelivered({ id: o.id, receivedBy: 'Sister Mary' }); // the owner can step in
+    expect((await a.orders.get({ id: o.id })).status).toBe('DELIVERED');
+
+    // Handing it to someone else at dispatch makes them the delivery person.
+    const o2 = await a.orders.create({ customerId: cust, assignedToId: rider.id, lines: [{ variantId: gel, qty: 1 }] });
+    await p.invoices.create({ customerId: cust, orderId: o2.id, date: today, lines: [{ variantId: gel, qty: 1 }] });
+    await p.orders.setStatus({ id: o2.id, status: 'DISPATCHED', dispatch: { method: 'OWN_DELIVERY', dispatchDate: today, deliveryPersonId: packer.id } });
+    expect((await a.orders.get({ id: o2.id })).assignedTo?.id).toBe(packer.id);
+    await expect(a.orders.assign({ id: o2.id, assignedToId: rider.id })).rejects.toThrow(/already out for delivery/);
+    await expect((await api(rider)).orders.markDelivered({ id: o2.id, receivedBy: 'Sister Mary' })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await p.orders.markDelivered({ id: o2.id, receivedBy: 'Sister Mary' });
+
+    // A courier has no delivery person: anyone with the permission marks it.
+    const o3 = await invoicedOrder(1);
+    await a.orders.setStatus({ id: o3, status: 'DISPATCHED', dispatch: { method: 'COURIER', courier: 'DTDC', dispatchDate: today } });
+    await p.orders.markDelivered({ id: o3, receivedBy: 'Reception' });
+    expect((await a.orders.get({ id: o3 })).status).toBe('DELIVERED');
   });
 
   it('supports someone outside the system, courier (company required), transport and customer pickup', async () => {
