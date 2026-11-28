@@ -96,8 +96,10 @@ export function CreditNoteForm({ inv, onDone, onBack }: { inv: Inv; onDone: (r: 
             {l.serialNos.length > 0 && n(l.id) > 0 && n(l.id) <= left && (
               <View style={{ gap: 6 }}>
                 <Muted>{`Tick the ${n(l.id)} serial number${n(l.id) === 1 ? '' : 's'} that came back (${chosen.length} ticked)`}</Muted>
+                {/* Lenses that already came back on an earlier credit note aren't offered again. */}
+                {l.returnedSerials.length > 0 && <Muted>{`Already returned: ${l.returnedSerials.join(', ')}`}</Muted>}
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                  {l.serialNos.map((s) => <Pick key={s} multi label={s} selected={chosen.includes(s)} onPress={() => toggleSerial(l.id, s, n(l.id))} />)}
+                  {l.serialNos.filter((s) => !l.returnedSerials.includes(s)).map((s) => <Pick key={s} multi label={s} selected={chosen.includes(s)} onPress={() => toggleSerial(l.id, s, n(l.id))} />)}
                 </View>
               </View>
             )}

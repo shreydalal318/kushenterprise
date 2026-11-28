@@ -15,6 +15,14 @@ export interface CreditNoteInput {
   lines: { invoiceLineId: string; qty: number; serialNos?: string[] }[];
 }
 
+/** Serial numbers already credited (returned) per invoice line. */
+export async function returnedSerials(tx: Pick<Tx, 'creditNoteLine'>, invoiceId: string) {
+  const rows = await tx.creditNoteLine.findMany({ where: { creditNote: { invoiceId } }, select: { invoiceLineId: true, serialNos: true } });
+  const m = new Map<string, Set<string>>();
+  for (const r of rows) if (r.invoiceLineId) { const s = m.get(r.invoiceLineId) ?? new Set<string>(); r.serialNos.forEach((x) => s.add(x)); m.set(r.invoiceLineId, s); }
+  return m;
+}
+
 /**
  * Credit note for goods returned against an invoice: same rates, discount and GST treatment as
  * the invoice; quantities can't exceed what is left to credit; restocking puts units (and serials)
@@ -26,6 +34,8 @@ export async function createCreditNote(tx: Tx, input: CreditNoteInput, actor: { 
   if (inv.status === 'CANCELLED') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cancelled invoices cannot be credited' });
   const credited = await tx.creditNoteLine.groupBy({ by: ['invoiceLineId'], where: { creditNote: { invoiceId: inv.id } }, _sum: { qty: true } });
   const done = new Map(credited.map((c) => [c.invoiceLineId!, c._sum.qty ?? 0]));
+  // A lens that already came back on an earlier credit note can't come back again (5 sold, 3 back, then the other 2).
+  const back = await returnedSerials(tx, inv.id);
   const rows = input.lines.filter((l) => l.qty > 0).map((l) => {
     const il = inv.lines.find((x) => x.id === l.invoiceLineId);
     if (!il) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Line is not on this invoice' });
@@ -36,6 +46,8 @@ export async function createCreditNote(tx: Tx, input: CreditNoteInput, actor: { 
       if (serials.length !== l.qty) throw new TRPCError({ code: 'BAD_REQUEST', message: `${il.description}: choose ${l.qty} serial number(s) being returned` });
       const bad = serials.filter((s) => !il.serialNos.includes(s));
       if (bad.length) throw new TRPCError({ code: 'BAD_REQUEST', message: `Serial ${bad.join(', ')} was not sold on this invoice` });
+      const again = serials.filter((s) => back.get(il.id)?.has(s));
+      if (again.length) throw new TRPCError({ code: 'BAD_REQUEST', message: `Serial ${again.join(', ')} already came back on an earlier credit note` });
     }
     return { il, qty: l.qty, serials };
   });

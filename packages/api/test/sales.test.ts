@@ -317,6 +317,12 @@ describe('payments, credit notes and the customer ledger', () => {
     expect(after.credited).toBe(cn.total);
     expect(after.due).toBe(Math.round((after.grandTotal - cn.total) * 100) / 100);
     expect(after.lines[0]!.creditedQty).toBe(1);
+    expect(after.lines[0]!.returnedSerials).toEqual([sn[0]]);
+    // The other one comes back later: the first serial can't be returned twice, the second can.
+    await expect(a.creditNotes.create({ invoiceId: r.id, date: today, reason: 'Second one back', restock: false, lines: [{ invoiceLineId: line.id, qty: 1, serialNos: [sn[0]!] }] })).rejects.toThrow(/already came back/);
+    await a.creditNotes.create({ invoiceId: r.id, date: today, reason: 'Second one back', restock: false, lines: [{ invoiceLineId: line.id, qty: 1, serialNos: [sn[1]!] }] });
+    expect((await a.invoices.get({ id: r.id })).lines[0]!.returnedSerials.sort()).toEqual([...sn].sort());
+    await expect(a.creditNotes.create({ invoiceId: r.id, date: today, reason: 'Again', restock: false, lines: [{ invoiceLineId: line.id, qty: 1, serialNos: [sn[1]!] }] })).rejects.toThrow(/only 0 left/);
     const { pdf } = await renderDocument(prisma, 'credit-note', cn.id);
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
   }, 30_000);

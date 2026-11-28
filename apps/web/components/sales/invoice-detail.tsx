@@ -134,12 +134,13 @@ function CreditNoteDialog({ inv, onClose }: { inv: Inv; onClose: () => void }) {
                   <Td><div className="font-medium">{l.description}</div><div className="text-xs text-muted">{l.powerLabel ?? ''}{l.batchNo && l.batchNo !== 'NA' ? ` · batch ${l.batchNo}` : ''}</div>
                     {l.serialNos.length > 0 && (qty[l.id] ?? 0) > 0 && (
                       <div className="mt-1 flex flex-wrap gap-1">
-                        {l.serialNos.map((s) => { const on = (serials[l.id] ?? []).includes(s); return <button key={s} type="button" onClick={() => setSerials({ ...serials, [l.id]: on ? (serials[l.id] ?? []).filter((x) => x !== s) : [...(serials[l.id] ?? []), s] })} className={cn('rounded-full border px-2 py-0.5 font-mono text-[11px]', on ? 'border-teal bg-aqua-100' : 'border-line text-muted')}>{s}</button>; })}
+                        {/* Lenses that already came back on an earlier credit note aren't offered again. */}
+                        {l.serialNos.filter((s) => !l.returnedSerials.includes(s)).map((s) => { const on = (serials[l.id] ?? []).includes(s); return <button key={s} type="button" onClick={() => setSerials({ ...serials, [l.id]: on ? (serials[l.id] ?? []).filter((x) => x !== s) : [...(serials[l.id] ?? []), s] })} className={cn('rounded-full border px-2 py-0.5 font-mono text-[11px]', on ? 'border-teal bg-aqua-100' : 'border-line text-muted')}>{s}</button>; })}
                       </div>
                     )}
                   </Td>
                   <Td className="num">{l.qty}</Td>
-                  <Td className="num text-muted">{l.creditedQty}</Td>
+                  <Td className="num text-muted">{l.creditedQty}{l.returnedSerials.length > 0 && <div className="font-mono text-[11px]">{l.returnedSerials.join(', ')}</div>}</Td>
                   <Td><input aria-label={`Return quantity for ${l.description}`} type="number" min={0} max={left} disabled={left === 0} value={qty[l.id] ?? 0} onChange={(e) => setQty({ ...qty, [l.id]: Math.min(left, Math.max(0, Number(e.target.value))) })} className="h-9 w-20 rounded-md border border-line px-2 text-sm" /></Td>
                 </Tr>
               );

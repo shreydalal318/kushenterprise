@@ -11,7 +11,7 @@ import { dayToDate, isoDay, num } from '../services/num';
 import { resolveCustomerPrices } from '../services/pricing';
 import { orderShortfall } from '../services/purchasing';
 import { getSettings } from '../services/settings';
-import { createCreditNote } from '../services/sales/credit-notes';
+import { createCreditNote, returnedSerials } from '../services/sales/credit-notes';
 import { cancelInvoice, createInvoice } from '../services/sales/invoices';
 import { customerLedger, receivables } from '../services/sales/ledger';
 import { assertHandler, changeOrderStatus, createOrder, verifyPacked } from '../services/sales/orders';
@@ -212,6 +212,7 @@ export const invoicesRouter = router({
     const credited = i.creditNotes.reduce((t, c) => t + num(c.grandTotal), 0);
     const settled = round2(num(i.amountPaid) + credited);
     const creditedQty = await ctx.db.creditNoteLine.groupBy({ by: ['invoiceLineId'], where: { creditNote: { invoiceId: i.id } }, _sum: { qty: true } });
+    const back = await returnedSerials(ctx.db, i.id);
     return {
       id: i.id, number: i.number, date: isoDay(i.date), dueDate: isoDay(i.dueDate), status: i.status, taxType: i.taxType, customer: i.customer, order: i.order, proforma: i.proforma,
       buyer: i.buyerSnapshot as { name: string; addressLines: string[]; gstin: string | null; stateName: string }, consignee: i.consigneeSnapshot as { name: string; attn: string | null; addressLines: string[]; stateName: string },
@@ -220,7 +221,7 @@ export const invoicesRouter = router({
       amountPaid: num(i.amountPaid), credited: round2(credited), due: i.status === 'CANCELLED' ? 0 : round2(num(i.grandTotal) - settled),
       paymentStatus: paymentStatus({ total: num(i.grandTotal), settled, dueDate: isoDay(i.dueDate)!, cancelled: i.status === 'CANCELLED' }, istDateString()),
       cancelReason: i.cancelReason, cancelledAt: i.cancelledAt, cancelledBy: i.cancelledBy?.name ?? null, createdBy: i.createdBy.name, createdAt: i.createdAt,
-      lines: i.lines.map((l) => ({ id: l.id, sl: l.sl, variantId: l.variantId, description: l.description, powerLabel: l.powerLabel, hsnCode: l.hsnCode, batchNo: l.batchNo, expiryDate: isoDay(l.expiryDate), serialNos: l.serialNos, qty: l.qty, unit: l.unit, rate: num(l.rate), discPct: num(l.discPct), amount: num(l.amount), gstRate: num(l.gstRate), creditedQty: creditedQty.find((c) => c.invoiceLineId === l.id)?._sum.qty ?? 0 })),
+      lines: i.lines.map((l) => ({ id: l.id, sl: l.sl, variantId: l.variantId, description: l.description, powerLabel: l.powerLabel, hsnCode: l.hsnCode, batchNo: l.batchNo, expiryDate: isoDay(l.expiryDate), serialNos: l.serialNos, qty: l.qty, unit: l.unit, rate: num(l.rate), discPct: num(l.discPct), amount: num(l.amount), gstRate: num(l.gstRate), creditedQty: creditedQty.find((c) => c.invoiceLineId === l.id)?._sum.qty ?? 0, returnedSerials: [...(back.get(l.id) ?? [])] })),
       payments: i.allocations.map((a) => ({ id: a.payment.id, number: a.payment.number, date: isoDay(a.payment.date), mode: a.payment.mode, amount: num(a.amount) })),
       creditNotes: i.creditNotes.map((c) => ({ ...c, date: isoDay(c.date), grandTotal: num(c.grandTotal) })),
       dispatch: i.dispatch ? { ...i.dispatch, dispatchDate: isoDay(i.dispatch.dispatchDate) } : null,
