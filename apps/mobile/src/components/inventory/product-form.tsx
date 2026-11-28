@@ -9,6 +9,7 @@ import { C } from '@/lib/theme';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
 import { Check, decimalText, Failed, flashNext, Note, PickList, Pills } from './common';
 import { emptyRange, PowerRangeFields, rangePreview, toRangeInput, type PowerRange } from './power-range';
+import { Done } from '@/components/done';
 
 type Product = RouterOutputs['products']['get'];
 const str = (n: number | null | undefined) => (n == null ? '' : String(n));
@@ -120,7 +121,7 @@ export function ProductForm({ product }: { product?: Product }) {
         <PickList label="Brand / manufacturer" value={v.brandId} none="No brand" items={(brands.data ?? []).map((b) => ({ id: b.id, label: b.name, hint: b.manufacturer ?? undefined }))} onChange={(id) => set('brandId', id)} />
         {!brandForm ? (
           <>
-            {!!brandAdded && <Alert tone="ok">{brandAdded}</Alert>}
+            <Done message={brandAdded} onShown={() => setBrandAdded(null)} />
             <View style={{ alignItems: 'flex-start' }}><LinkButton title="Add a new brand" onPress={() => { addBrand.reset(); setBrandAdded(null); setBrandForm({ name: '', manufacturer: '' }); }} /></View>
           </>
         ) : (

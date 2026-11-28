@@ -9,6 +9,7 @@ import { Scanner } from '@/components/scanner';
 import { Alert, Button, Card, Field, H2, Loading, P, Row, s, Screen, Small } from '@/components/ui';
 import { C } from '@/lib/theme';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 type PoLine = RouterOutputs['purchaseOrders']['open'][number]['lines'][number];
 interface Item { variantId: string; name: string; label: string | null; trackBatch: boolean; trackExpiry: boolean; trackSerial: boolean }
@@ -122,7 +123,7 @@ export default function Receive() {
   const units = lines.reduce((t, l) => t + sentQty(l), 0);
   return (
     <Screen>
-      {grn.data && !lines.length && <Alert tone="ok">Saved {grn.data.number}: {grn.data.units} unit(s){grn.data.po ? ` against ${grn.data.po.number}` : ''}. Stock is updated.</Alert>}
+      <Done message={grn.data && !lines.length ? `Goods received ✓ ${grn.data.number}: ${grn.data.units} unit(s)${grn.data.po ? ` against ${grn.data.po.number}` : ''}. Stock is updated.` : null} />
       {!sup ? (
         <Card><H2>Supplier</H2>{suppliers.data.map((x) => <Pressable key={x.id} accessibilityRole="button" onPress={() => setSupplierId(x.id)} style={{ paddingVertical: 8 }}><P>{x.name}</P></Pressable>)}</Card>
       ) : (

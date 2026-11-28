@@ -3,7 +3,7 @@ import { ToastProvider } from '@/customer/toast';
 import { useAuth } from '@/lib/auth';
 import { CartProvider } from '@/lib/cart';
 import { useOutbox } from '@/lib/outbox';
-import { usePushRegistration } from '@/lib/push';
+import { useInAppAlerts, usePushRegistration } from '@/lib/push';
 import { C } from '@/lib/theme';
 
 /** Customer mode: tabs, with product / order / messages pushed on top (back button). */
@@ -11,6 +11,7 @@ export default function CustomerLayout() {
   const { ready, me } = useAuth();
   useOutbox(); // sends orders saved while offline as soon as the phone is back online
   usePushRegistration();
+  useInAppAlerts();
   if (ready && (!me || me.role !== 'CUSTOMER')) return <Redirect href="/" />;
   // Always render the navigator (even while the session loads) so deep links land on the right screen.
   return (

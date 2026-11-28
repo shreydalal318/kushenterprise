@@ -12,6 +12,7 @@ import { errorText, newRequestId, rupees } from '@/lib/format';
 import { enqueue, isNetworkError } from '@/lib/outbox';
 import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
+import { SuccessScreen } from '@/components/done';
 
 interface Line { key: string; variantId: string; productId: string; name: string; label: string | null; hsn: string; gstRate: number; trackSerial: boolean; qty: number; serials: string[]; batchId: string | null }
 const BAD: Record<string, string> = { EXPIRED: 'batch expired', OUT_OF_STOCK: 'out of stock', SERIAL_NOT_IN_STOCK: 'serial not in stock', BATCH_NOT_IN_STOCK: 'that batch is not in stock', INACTIVE: 'inactive item' };
@@ -177,19 +178,20 @@ export function BillForm({ orderId, onDone }: { orderId?: string; onDone?: () =>
   function newBill() { setDone(null); setLines([]); setMsg(null); setCustomerId(null); setPdf({ busy: false, error: null }); create.reset(); }
 
   if (done) return (
-    <Screen footer={orderId ? (
-      <>
-        {!!done.id && <Text style={{ fontSize: 15, fontWeight: '600', color: C.navy, textAlign: 'center' }}>Next: send it out.</Text>}
-        <Button title={done.id ? 'Send it out (dispatch)' : 'Back to the order'} onPress={() => { if (done.id) dispatchNext.add(orderId); void utils.orders.invalidate(); onDone?.(); }} />
-      </>
-    ) : undefined}>
-      {done.queued ? <Alert tone="warn">No connection. The invoice is saved on this phone and will be made by itself when you are back online.</Alert> : <Alert tone="ok">Invoice {done.number} made ✓ Stock is updated.</Alert>}
-      {/* See it as it prints before sending it; Share PDF is on that screen. */}
-      {!!done.id && <Button title="View invoice" variant={orderId ? 'secondary' : 'primary'} icon={<Ionicons name="eye-outline" size={18} color={orderId ? C.ink : C.white} />} onPress={() => router.push(previewHref('invoice', done.id!, done.number ?? ''))} />}
-      {!!done.id && <Button title="Share / print PDF" variant="secondary" icon={<Ionicons name="share-outline" size={18} color={C.ink} />} loading={pdf.busy} onPress={() => void sharePdf(done.id!, done.number)} />}
-      {!!pdf.error && <Alert>{pdf.error}</Alert>}
-      {!orderId && <Button variant="secondary" title="New bill" onPress={newBill} />}
-    </Screen>
+    <SuccessScreen waiting={done.queued} title={done.queued ? 'Saved on this phone' : 'Invoice made'}
+      lines={done.queued
+        ? ['No connection right now.', 'The invoice will be made by itself when you are back online.']
+        : [done.number ? `Invoice ${done.number}` : 'Invoice made', 'Stock is updated.', !!orderId && 'Next: send it out.']}
+      footer={<>
+        {!!pdf.error && <Alert>{pdf.error}</Alert>}
+        {orderId
+          ? <Button title={done.id ? 'Send it out (dispatch)' : 'Back to the order'} onPress={() => { if (done.id) dispatchNext.add(orderId); void utils.orders.invalidate(); onDone?.(); }} />
+          : done.id ? <Button title="View invoice" icon={<Ionicons name="eye-outline" size={18} color={C.white} />} onPress={() => router.push(previewHref('invoice', done.id!, done.number ?? ''))} /> : null}
+        {/* See it as it prints before sending it; Share PDF is on that screen too. */}
+        {!!orderId && !!done.id && <Button title="View invoice" variant="secondary" icon={<Ionicons name="eye-outline" size={18} color={C.ink} />} onPress={() => router.push(previewHref('invoice', done.id!, done.number ?? ''))} />}
+        {!!done.id && <Button title="Share / print PDF" variant="secondary" icon={<Ionicons name="share-outline" size={18} color={C.ink} />} loading={pdf.busy} onPress={() => void sharePdf(done.id!, done.number)} />}
+        {!orderId && <Button variant="secondary" title="New bill" onPress={newBill} />}
+      </>} />
   );
   if (!customers.data) return customers.error ? <Screen><Alert>{readableError(customers.error)}</Alert></Screen> : <Loading />;
   return (

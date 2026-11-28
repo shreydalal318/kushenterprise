@@ -8,13 +8,14 @@ import { EmptyCard, Failed, ListScreen, NoAccess, Note, SearchBox, TapCard, useF
 import { useCan } from '@/lib/auth';
 import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 /** Goods sent back to suppliers, each with its debit note number (web: Stock → Returns to supplier). */
 export default function Returns() {
   const can = useCan();
   const [search, setSearch] = useState('');
   const [pulling, setPulling] = useState(false);
-  const [flash] = useFlash('supplier-returns');
+  const [flash, setFlash] = useFlash('supplier-returns');
   const q = trpc.inventory.supplierReturns.useQuery(undefined, { enabled: can('MANAGE_STOCK') });
   if (!can('MANAGE_STOCK')) return <NoAccess title="Returns to supplier">Returns to supplier need the “Manage stock” permission. Ask the owner.</NoAccess>;
   const term = search.trim().toLowerCase();
@@ -24,7 +25,7 @@ export default function Returns() {
       top={
         <>
           <Stack.Screen options={{ title: 'Returns to supplier' }} />
-          {!!flash && <Alert tone="ok">{flash}</Alert>}
+          <Done message={flash} onShown={() => setFlash(null)} />
           <SearchBox value={search} onChange={setSearch} placeholder="Debit note no., supplier or reason" />
           {q.error && <Failed error={q.error} busy={q.isFetching} onRetry={() => void q.refetch()} />}
           {!q.data && !q.error && <Loading />}

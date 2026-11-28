@@ -10,6 +10,7 @@ import { useCan } from '@/lib/auth';
 import { rupees } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 /** One supplier (web: Suppliers → supplier): contact, terms, products they supply, recent POs and deliveries. */
 export default function SupplierDetail() {
@@ -55,7 +56,7 @@ export default function SupplierDetail() {
       </>
     )}>
       <Stack.Screen options={{ title: s.code }} />
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
       <Card>
         <Row style={{ alignItems: 'flex-start' }}>
           <Text style={{ flex: 1, fontSize: 20, fontWeight: '700', color: C.navy }}>{s.name}</Text>

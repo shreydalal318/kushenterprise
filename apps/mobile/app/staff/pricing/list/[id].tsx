@@ -14,6 +14,7 @@ import { useAuth, useCan } from '@/lib/auth';
 import { errorText, rupees } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 type List = RouterOutputs['priceLists']['get'];
 interface Draft { productId: string; code: string; name: string; rate: string; validFrom: string; validTo: string; defaultRate: number; mrp: number; purchaseCost: number | null; isNew: boolean }
@@ -72,7 +73,7 @@ export default function PriceList() {
       <FlatList data={items} keyExtractor={(i) => i.productId} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 12, gap: 10 }}
         ListHeaderComponent={
           <View style={{ gap: 8 }}>
-            {!!flash && <Alert tone="ok">{flash}</Alert>}
+            <Done message={flash} onShown={() => setFlash(null)} />
             <Heading>{l.name}</Heading>
             <Tag label={l.isActive ? 'In use' : 'Not in use'} tone={l.isActive ? 'ok' : 'neutral'} />
             {!!l.description && <Note>{l.description}</Note>}

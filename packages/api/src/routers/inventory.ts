@@ -8,10 +8,10 @@ import {
   adjustInput, grnCreateInput, ledgerInput, locationInput, openingStockInput, stockOverviewInput, supplierReturnInput,
 } from '../schemas';
 import { logActivity } from '../services/activity';
-import { nextDocNumber } from '../services/numbering';
 import { dayToDate, isoDay, num } from '../services/num';
 import { createReceipt } from '../services/receipts';
 import { getSettings } from '../services/settings';
+import { createSupplierReturn } from '../services/supplier-returns';
 import { costOf, defaultLocationId, ensureBatch, fefoPick, loadVariant, postMovement, reorderLevelOf, variantStock } from '../services/stock';
 import { ownerProcedure, permissionProcedure, router, staffProcedure } from '../trpc';
 
@@ -258,24 +258,11 @@ export const inventoryRouter = router({
     })),
 
   /** Return goods to a supplier (debit note number); reduces stock and marks serials returned. */
-  returnToSupplier: manage.input(supplierReturnInput).mutation(({ ctx, input }) =>
-    ctx.db.$transaction(async (tx) => {
-      const sup = await tx.supplier.findUnique({ where: { id: input.supplierId } });
-      if (!sup) throw new TRPCError({ code: 'NOT_FOUND', message: 'Supplier not found' });
-      const number = await nextDocNumber(tx, 'DEBIT_NOTE', input.date);
-      const ret = await tx.supplierReturn.create({ data: { number, date: dayToDate(input.date)!, supplierId: sup.id, reason: input.reason, note: input.note, createdById: ctx.user.id } });
-      const loc = await defaultLocationId(tx);
-      for (const l of input.lines) {
-        const v = await loadVariant(tx, l.variantId);
-        const b = await tx.batch.findUnique({ where: { id: l.batchId } });
-        if (!b || b.variantId !== v.id) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Batch does not belong to this item' });
-        const locationId = l.locationId ?? loc;
-        await tx.supplierReturnLine.create({ data: { returnId: ret.id, variantId: v.id, batchId: b.id, locationId, qty: l.qty, serialNos: l.serialNos.map((x) => x.toUpperCase()) } });
-        await postMovement(tx, { type: 'PURCHASE_RETURN', variant: v, batchId: b.id, locationId, qty: -l.qty, serialNos: l.serialNos, refType: 'SupplierReturn', refId: ret.id, note: number, actorId: ctx.user.id });
-      }
-      await logActivity(tx, { actorId: ctx.user.id, action: 'stock.supplier_return', entityType: 'SupplierReturn', entityId: ret.id, summary: `${number}: returned ${input.lines.reduce((t, l) => t + l.qty, 0)} unit(s) to ${sup.name} (${input.reason})`, ip: ctx.ip });
-      return { id: ret.id, number };
-    })),
+  returnToSupplier: manage.input(supplierReturnInput).mutation(async ({ ctx, input }) => {
+    const r = await ctx.db.$transaction((tx) => createSupplierReturn(tx, input, ctx.user, ctx.ip), { timeout: 60_000 });
+    // The debit note is valued at cost: only for those who may see costs.
+    return { ...r, total: seeCost(ctx.user) || can(ctx.user, 'CREATE_PURCHASE_ORDERS') ? r.total : null };
+  }),
 
   supplierReturns: manage.query(async ({ ctx }) => {
     const rows = await ctx.db.supplierReturn.findMany({ orderBy: { createdAt: 'desc' }, take: 100, include: { supplier: { select: { name: true } }, lines: { select: { qty: true } } } });

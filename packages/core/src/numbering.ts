@@ -1,5 +1,6 @@
 export const DOC_TYPES = [
   'TAX_INVOICE', 'PROFORMA', 'PURCHASE_ORDER', 'CREDIT_NOTE', 'GRN', 'SALES_ORDER', 'PAYMENT_RECEIPT', 'DEBIT_NOTE',
+  'PURCHASE_BILL', 'PAYMENT_VOUCHER', 'CONTRA_VOUCHER', 'JOURNAL_VOUCHER',
 ] as const;
 export type DocType = (typeof DOC_TYPES)[number];
 
@@ -13,6 +14,10 @@ export const DEFAULT_PREFIXES: Record<DocType, string> = {
   SALES_ORDER: 'KE/SO/',
   PAYMENT_RECEIPT: 'KE/RC/',
   DEBIT_NOTE: 'KE/DN/',
+  PURCHASE_BILL: 'KE/PB/',
+  PAYMENT_VOUCHER: 'KE/PV/',
+  CONTRA_VOUCHER: 'KE/CV/',
+  JOURNAL_VOUCHER: 'KE/JV/',
 };
 
 export const DOC_TYPE_LABELS: Record<DocType, string> = {
@@ -24,6 +29,10 @@ export const DOC_TYPE_LABELS: Record<DocType, string> = {
   SALES_ORDER: 'Sales order',
   PAYMENT_RECEIPT: 'Payment receipt',
   DEBIT_NOTE: 'Debit note',
+  PURCHASE_BILL: 'Purchase bill',
+  PAYMENT_VOUCHER: 'Payment voucher',
+  CONTRA_VOUCHER: 'Contra voucher',
+  JOURNAL_VOUCHER: 'Journal voucher',
 };
 
 /** ("KE/PI/", "2026-27", 1, 4) -> "KE/PI/2026-27/0001" */

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "627366218448",
+    "project_id": "kush-enter",
+    "storage_bucket": "kush-enter.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:627366218448:android:66a004a51b6ea6e4966cd5",
+        "android_client_info": {
+          "package_name": "com.kushenterprise.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAx8Dyns6xxbxG557WPrbD0MVRHnOgv_Kk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -7,6 +7,7 @@ import { focusManager, QueryClient } from '@tanstack/react-query';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { DoneHost } from '@/components/done';
 import { IntroSplash } from '@/components/intro-splash';
 import { AuthProvider } from '@/lib/auth';
 import { C } from '@/lib/theme';
@@ -48,6 +49,8 @@ export default function RootLayout() {
           </AuthProvider>
         </PersistQueryClientProvider>
       </trpc.Provider>
+      {/* Every "done" confirmation shows in the middle of the screen, above all screens. */}
+      <DoneHost />
       {intro && <IntroSplash onDone={() => setIntro(false)} />}
     </SafeAreaProvider>
   );

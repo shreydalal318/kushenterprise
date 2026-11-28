@@ -6,6 +6,7 @@ import {
   customerAddressAddInput, customerAddressUpdateInput, customerCreateInput, customerListInput, customerLoginInput, customerUpdateInput,
 } from '../schemas';
 import { smsProvider } from '../notify/sms';
+import { renamePartyLedger } from '../services/accounts/ledgers';
 import { diff, logActivity } from '../services/activity';
 import { nextCustomerCode } from '../services/counters';
 import { numOrNull } from '../services/num';
@@ -124,6 +125,7 @@ export const customersRouter = router({
       await checkAssignee(tx, data.assignedEmployeeId);
       const patch = { ...data, pan: data.pan ?? (data.gstin ? panFromGstin(data.gstin) : null) };
       const after = await tx.customer.update({ where: { id }, data: patch });
+      if (after.name !== before.name) await renamePartyLedger(tx, { customerId: id });
       const d = diff({ ...before, creditLimit: numOrNull(before.creditLimit) } as unknown as Record<string, unknown>, { ...patch, creditLimit: patch.creditLimit ?? null });
       if (d.changed.length) await logActivity(tx, { actorId: ctx.user.id, action: 'customer.update', entityType: 'Customer', entityId: id, summary: `Updated ${after.code}: ${d.changed.join(', ')}`, before: d.before, after: d.after, ip: ctx.ip });
       return { id };

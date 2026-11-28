@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Bell } from '@/components/bell';
 import { useAuth, useCan } from '@/lib/auth';
 import { trpc } from '@/lib/trpc';
 import { C } from '@/lib/theme';
@@ -17,7 +18,8 @@ export default function StaffTabs() {
   const unread = trpc.notifications.unreadCount.useQuery(undefined, { refetchInterval: 120_000 });
   const icon = (name: keyof typeof Ionicons.glyphMap) => ({ color, size }: { color: unknown; size: number }) => <Ionicons name={name} color={color as string} size={size} />;
   return (
-    <Tabs screenOptions={{ tabBarActiveTintColor: C.teal700, tabBarLabelStyle: { fontSize: 12, fontWeight: '600' }, headerTintColor: C.navy, headerTitleStyle: { fontWeight: '700' }, sceneStyle: { backgroundColor: C.canvas } }}>
+    // The bell sits at the top of every tab, so a new order is seen wherever you are.
+    <Tabs screenOptions={{ tabBarActiveTintColor: C.teal700, tabBarLabelStyle: { fontSize: 12, fontWeight: '600' }, headerTintColor: C.navy, headerTitleStyle: { fontWeight: '700' }, sceneStyle: { backgroundColor: C.canvas }, headerRight: () => <Bell /> }}>
       <Tabs.Screen name="index" options={owner && seesOrders
         ? { title: 'Home', tabBarIcon: icon('home-outline') }
         : seesOrders

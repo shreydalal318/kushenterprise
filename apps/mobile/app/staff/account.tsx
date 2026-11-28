@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth';
 import { errorText } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 /** A readable name for a signed-in device, from its browser / app details. */
 function device(ua: string | null, client: string) {
@@ -48,7 +49,7 @@ export default function Account() {
       </>
     }>
       <Stack.Screen options={{ title: 'My account' }} />
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
       <View style={{ gap: 4 }}>
         <Heading>{me?.name ?? 'My account'}</Heading>
         <Note>{[me?.role === 'OWNER' ? 'Owner' : 'Employee', me?.email, me?.mobile].filter(Boolean).join(' · ')}</Note>

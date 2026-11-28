@@ -3,6 +3,7 @@ import { Check, fieldErrors, Input, Note } from '@/components/admin/bits';
 import { SaveBar, useForm, WithSettings, type Settings } from '@/components/admin/settings-bits';
 import { Alert, Card, H2, Screen } from '@/components/ui';
 import { trpc } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 const COPIES = [['ORIGINAL', 'Original for Recipient'], ['DUPLICATE', 'Duplicate for Transporter'], ['TRIPLICATE', 'Triplicate for Supplier']] as const;
 type Copy = (typeof COPIES)[number][0];
@@ -26,7 +27,7 @@ function DocumentsForm({ s }: { s: Settings }) {
   const toggle = (c: Copy) => set('defaultInvoiceCopies', v.defaultInvoiceCopies.includes(c) ? v.defaultInvoiceCopies.filter((x) => x !== c) : COPIES.map(([k]) => k).filter((k) => k === c || v.defaultInvoiceCopies.includes(k)));
   return (
     <Screen footer={<SaveBar error={save.error} saving={save.isPending} dirty={f.dirty} onSave={() => save.mutate(v)} />}>
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
       <Note>Default text printed on documents. Each document can still be changed before it is issued.</Note>
       <Card>
         <Input label="Invoice declaration" multiline value={v.invoiceDeclaration} onChangeText={(x) => set('invoiceDeclaration', x)} error={fe.invoiceDeclaration} maxLength={1000} />

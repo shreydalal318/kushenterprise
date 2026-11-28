@@ -96,7 +96,6 @@ export default function AccountScreen() {
           <Note>We keep your address, GSTIN and contact details. Tell us what to change and we'll do it.</Note>
           <Input label="What should we change?" value={msg} onChangeText={(t) => { setMsg(t); if (req.isSuccess) req.reset(); }} multiline placeholder="For example: our new delivery address is …"
             error={msg.trim() && msg.trim().length < 10 ? 'Write a little more (at least 10 letters).' : null} />
-          {req.isSuccess && <Notice tone="ok">Request sent ✓ We'll update your details and let you know.</Notice>}
           {req.error && <ErrorBox text={`Not sent. ${errorText(req.error)}`} onRetry={send} busy={req.isPending} />}
           <Button title="Send request" loading={req.isPending} disabled={msg.trim().length < 10} onPress={send} />
         </>

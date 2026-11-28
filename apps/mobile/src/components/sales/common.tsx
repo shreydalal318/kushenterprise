@@ -8,6 +8,7 @@ import { openPdf } from '@/lib/documents';
 import { errorText, rupees } from '@/lib/format';
 import { C, R } from '@/lib/theme';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
+import { showDone } from '@/components/done';
 
 type Icon = keyof typeof Ionicons.glyphMap;
 export type Customer = RouterOutputs['sales']['customers'][number];
@@ -171,7 +172,7 @@ export function ShareLink({ kind, id }: { kind: 'invoice' | 'proforma' | 'credit
   const m = trpc.integrations.shareLink.useMutation();
   const [openError, setOpenError] = useState<string | null>(null);
   const d = m.data;
-  const make = () => { setOpenError(null); m.mutate({ kind, id }); };
+  const make = () => { setOpenError(null); m.mutate({ kind, id }, { onSuccess: () => showDone('Link ready', 'Send it by WhatsApp, email or any app below.') }); };
   if (m.isIdle) return <LinkButton title="Send a link (WhatsApp, email)" icon={<Ionicons name="link-outline" size={18} color={C.teal700} />} onPress={make} />;
   if (m.isPending) return <Loading />;
   if (m.error || !d) return <View style={{ gap: 8 }}><Alert>{errorText(m.error)}</Alert><Button variant="secondary" title="Try again" onPress={make} /></View>;
@@ -181,7 +182,7 @@ export function ShareLink({ kind, id }: { kind: 'invoice' | 'proforma' | 'credit
   const mail = `mailto:${d.contact?.email ?? ''}?subject=${encodeURIComponent(d.title)}&body=${encodeURIComponent(`Dear ${d.contact?.name ?? 'Sir/Madam'},\n\nPlease find ${d.title} here:\n${d.url}\n\nThe link is valid for ${d.expiresInDays} days.\n\nRegards,\nKush Enterprise`)}`;
   return (
     <View style={{ gap: 8 }}>
-      <Alert tone="ok">{`Link ready ✓ Anyone with it can open this one PDF for ${d.expiresInDays} days.`}</Alert>
+      <Muted>{`Anyone with this link can open this one PDF for ${d.expiresInDays} days.`}</Muted>
       <Text selectable style={{ fontSize: 15, color: C.navy, backgroundColor: C.canvas, borderRadius: R.md, padding: 10 }}>{d.url}</Text>
       <Button variant="secondary" title={`WhatsApp${d.contact?.mobile ? ` ${d.contact.mobile}` : ''}`} icon={<Ionicons name="logo-whatsapp" size={20} color={C.ok} />}
         onPress={() => go(`https://wa.me/${mobile}?text=${encodeURIComponent(message)}`)} />

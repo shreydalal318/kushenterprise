@@ -242,6 +242,10 @@ async function main() {
 
   console.log(`Demo masters ready: ${SUPPLIERS.length} suppliers, ${PRODUCTS.length} products (${variants} new variants), ${CUSTOMERS.length} customers, 2 price lists.`);
   console.log(`Demo staff: ravi.counter@demo.local / sunita.store@demo.local / ramesh.delivery@demo.local (password: ${process.env.DEMO_STAFF_PASSWORD ? 'DEMO_STAFF_PASSWORD' : 'DemoStaff2026'}). Demo customer OTP logins: ${demoLogin}, +919000030001 to +919000030003.`);
+
+  // Accounts: ledgers for the demo customers and suppliers (idempotent; posting rules live in the API package).
+  const { describeSync, syncAccounts } = await import('../../api/src/services/accounts/sync');
+  console.log(describeSync(await syncAccounts(prisma)));
 }
 
 

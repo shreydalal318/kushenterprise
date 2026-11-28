@@ -10,6 +10,7 @@ import { docPath, previewHref } from '@/lib/documents';
 import { errorText, rupees } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 type Pf = RouterOutputs['proformas']['get'];
 type Line = Pf['lines'][number];
@@ -130,8 +131,8 @@ export default function ProformaScreen() {
       </>
     )}>
       <Stack.Screen options={{ title: p.number }} />
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
-      {converted && <Alert tone="ok">{`Made into tax invoice ${p.invoice!.number} ✓`}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
+      {converted && <Alert tone="info">{`Tax invoice ${p.invoice!.number} was made from this proforma.`}</Alert>}
       {converted && <LinkButton title={`Open invoice ${p.invoice!.number}`} icon={<Ionicons name="receipt-outline" size={18} color={C.teal700} />} onPress={() => router.push(`/staff/invoices/${p.invoice!.id}`)} />}
       {isCancelled && <Alert>This proforma is cancelled.</Alert>}
 

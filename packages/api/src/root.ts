@@ -1,3 +1,4 @@
+import { accountsRouter } from './routers/accounts';
 import { activityRouter } from './routers/activity';
 import { analyticsRouter } from './routers/analytics';
 import { authRouter } from './routers/auth';
@@ -46,6 +47,7 @@ export const appRouter = router({
   leads: leadsRouter,
   integrations: integrationsRouter,
   deliveries: deliveriesRouter,
+  accounts: accountsRouter,
 });
 
 export type AppRouter = typeof appRouter;

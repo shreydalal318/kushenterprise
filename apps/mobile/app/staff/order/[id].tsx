@@ -14,6 +14,7 @@ import { previewHref } from '@/lib/documents';
 import { errorText, rupees } from '@/lib/format';
 import { C, R } from '@/lib/theme';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 type Order = RouterOutputs['orders']['get'];
 type Icon = keyof typeof Ionicons.glyphMap;
@@ -267,7 +268,7 @@ export default function StaffOrder() {
       </>
     )}>
       <Stack.Screen options={{ title: o.number }} />
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
       {stopped && <Alert tone={o.status === 'CANCELLED' ? 'danger' : 'warn'}>{o.status === 'CANCELLED' ? 'Cancelled' : 'On hold'}{stopped.note ? `: ${stopped.note}` : ''} ({stopped.by}, {formatDate(stopped.at)})</Alert>}
       <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View style={{ flex: 1 }}>

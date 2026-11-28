@@ -9,6 +9,7 @@ import { useCan } from '@/lib/auth';
 import { errorText, rupees } from '@/lib/format';
 import { C, R } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
+import { SuccessScreen } from '@/components/done';
 
 interface Done { number: string; customer: string; amount: number; allocated: number; onAccount: number }
 
@@ -95,16 +96,20 @@ export default function RecordPayment() {
   const title = <Stack.Screen options={{ title: 'Record payment' }} />;
   if (!can('RECORD_PAYMENTS')) return <Screen>{title}<Alert tone="warn">You can’t record payments. Ask the owner to give you that permission.</Alert></Screen>;
   if (done) return (
-    <Screen footer={
-      <>
-        <Button title="Done" onPress={() => (router.canGoBack() ? router.back() : router.replace('/staff/payments'))} />
-        <LinkButton title="Record another payment" onPress={another} />
-      </>
-    }>
+    <>
       {title}
-      <Alert tone="ok">{`Receipt ${done.number} saved ✓ ${rupees(done.amount)} from ${done.customer}.`}</Alert>
-      <P>{done.allocated > 0 ? `${rupees(done.allocated)} applied to invoices.` : 'Not applied to any invoice.'}{done.onAccount > 0 ? ` ${rupees(done.onAccount)} kept on the customer’s account.` : ''}</P>
-    </Screen>
+      <SuccessScreen title="Payment recorded"
+        lines={[
+          `${rupees(done.amount)} received from ${done.customer.replace(/[.s]+$/, '')}`,
+          `Receipt ${done.number}`,
+          done.allocated > 0 ? `${rupees(done.allocated)} applied to invoices` : 'Not applied to any invoice',
+          done.onAccount > 0 && `${rupees(done.onAccount)} kept on the customer’s account`,
+        ]}
+        footer={<>
+          <Button title="Done" onPress={() => (router.canGoBack() ? router.back() : router.replace('/staff/payments'))} />
+          <LinkButton title="Record another payment" onPress={another} />
+        </>} />
+    </>
   );
   if (!customers.data) return customers.error ? <Screen>{title}<Failed error={customers.error} busy={customers.isFetching} onRetry={() => void customers.refetch()} /></Screen> : <>{title}<Loading /></>;
 

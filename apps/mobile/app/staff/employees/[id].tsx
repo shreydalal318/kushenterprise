@@ -9,6 +9,7 @@ import { Alert, Button, Card, H2, LinkButton, Screen } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { errorText } from '@/lib/format';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 type Emp = RouterOutputs['employees']['get'];
 
@@ -50,7 +51,7 @@ export default function Employee() {
       </>
     )}>
       {title}
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
       <View style={{ gap: 6 }}>
         <Heading>{e.name}</Heading>
         <Tag label={word} tone={tone} />

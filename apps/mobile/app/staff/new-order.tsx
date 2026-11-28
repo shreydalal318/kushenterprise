@@ -10,6 +10,7 @@ import { useCan } from '@/lib/auth';
 import { errorText, newRequestId } from '@/lib/format';
 import { C, R } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
+import { Done, SuccessScreen } from '@/components/done';
 
 /** `qty` stays as typed (backspace mustn't snap it to 1) and is checked before saving. */
 interface Line { variantId: string; name: string; label: string | null; qty: string }
@@ -77,7 +78,7 @@ export default function NewOrder() {
   }
 
   if (!can('CREATE_ORDERS')) return <Screen><Alert tone="warn">You can’t enter orders. Ask the owner to give you that permission.</Alert></Screen>;
-  if (saved) return <Screen><Alert tone="ok">Order {saved} saved ✓</Alert><Button title="Done" onPress={() => (router.canGoBack() ? router.back() : router.replace('/staff'))} /></Screen>;
+  if (saved) return <SuccessScreen title="Order saved" lines={[`Order ${saved}`, 'The team has been told. It is in the Orders list.']} footer={<Button title="Done" onPress={() => (router.canGoBack() ? router.back() : router.replace('/staff'))} />} />;
   if (!customers.data) return customers.error ? <Screen><Alert>{readableError(customers.error)}</Alert></Screen> : <Loading />;
   return (
     <Screen footer={
@@ -112,7 +113,7 @@ export default function NewOrder() {
         <H2>Items</H2>
         <ProductPicker onPick={onPick} allSizes />
       </Card>
-      {!!added && <Alert tone="ok">{added}</Alert>}
+      <Done message={added} onShown={() => setAdded(null)} />
       {lines.length > 0 && (
         <Card>
           {lines.map((l) => (

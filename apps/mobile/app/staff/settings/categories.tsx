@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth';
 import { errorText } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 /** Product categories group the catalogue and the reports. One in use can be renamed but not deleted. */
 export default function Categories() {
@@ -31,7 +32,7 @@ export default function Categories() {
           <Button title="Add category" loading={create.isPending} disabled={name.trim().length < 2} onPress={() => create.mutate({ name })} />
         </>
       }>
-        {!!flash && <Alert tone="ok">{flash}</Alert>}
+        <Done message={flash} onShown={() => setFlash(null)} />
         <Note>Categories group the catalogue and the reports. A category with products in it can be renamed but not deleted.</Note>
         {!list.data && <Waiting q={list} />}
         {list.data?.length === 0 && <Note>No categories yet.</Note>}

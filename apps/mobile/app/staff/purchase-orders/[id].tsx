@@ -11,6 +11,7 @@ import { openPdf } from '@/lib/documents';
 import { errorText, rupees } from '@/lib/format';
 import { C, R } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 /** The website's PDF route for a purchase order (apps/web/app/api/documents/[kind]/[id]). */
 const poPdfPath = (id: string) => `/api/documents/purchase-order/${id}`;
@@ -106,7 +107,7 @@ export default function PurchaseOrder() {
       </>
     )}>
       <Stack.Screen options={{ title: p.number }} />
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
       {p.status === 'CANCELLED' && <Alert>Cancelled{p.cancelledAt ? ` on ${formatDateTime(p.cancelledAt)}` : ''}: {p.cancelReason}</Alert>}
       {p.status === 'CLOSED' && <Alert tone="info">Short-closed{p.closedAt ? ` on ${formatDateTime(p.closedAt)}` : ''}: {p.closeReason}. Nothing more is expected.</Alert>}
       {forOrders.length > 0 && (

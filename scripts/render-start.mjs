@@ -27,6 +27,14 @@ if (demo && !demoLoaded) {
   run('pnpm --filter @kush/api seed:demo-activity', seedEnv);
 }
 
+// Accounts: post any document that has no voucher yet (e.g. from before accounts existed). Idempotent
+// and quick when nothing is missing; if it fails the app still starts (the owner can re-run it from Accounts).
+try {
+  run('pnpm --filter @kush/api accounts:sync');
+} catch {
+  console.error('Accounts sync failed; starting the app anyway.');
+}
+
 const web = spawn('pnpm', ['--filter', '@kush/web', 'start'], { stdio: 'inherit', shell: process.platform === 'win32' });
 for (const sig of ['SIGTERM', 'SIGINT']) process.on(sig, () => web.kill(sig));
 web.on('exit', (code) => process.exit(code ?? 0));

@@ -6,6 +6,7 @@ import { Alert, Button, Card, Field, H2, P, Row, Small } from '@/components/ui';
 import { errorText } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
+import { showDone } from '@/components/done';
 
 type Shortfall = RouterOutputs['orders']['shortfall'];
 const PO_LABEL: Record<string, string> = { DRAFT: 'Draft', SENT: 'Sent', PARTIALLY_RECEIVED: 'Partly received', RECEIVED: 'Received', CLOSED: 'Closed', CANCELLED: 'Cancelled' };
@@ -58,7 +59,13 @@ export function OrderFromSupplier({ s, onClose }: { s: Shortfall; onClose: () =>
   const [expected, setExpected] = useState('');
   const [send, setSend] = useState(true);
   const [tell, setTell] = useState(true);
-  const create = trpc.purchaseOrders.createForOrder.useMutation({ onSuccess: () => { void utils.orders.invalidate(); void utils.purchaseOrders.invalidate(); } });
+  const create = trpc.purchaseOrders.createForOrder.useMutation({ onSuccess: (r, v) => {
+    void utils.orders.invalidate(); void utils.purchaseOrders.invalidate();
+    // Say it in the middle of the screen and go straight back to the order.
+    const n = r.purchaseOrders.length;
+    showDone(`${n === 1 ? 'Purchase order' : `${n} purchase orders`} ${v.send ? 'sent' : 'saved as draft'}`, `${r.purchaseOrders.map((p) => p.number).join(', ')}${v.tellCustomer ? ' · the customer has been told' : ''}`);
+    onClose();
+  } });
   const items = lines.map((l) => ({ variantId: l.variantId, qty: Math.floor(Number(rows[l.variantId]?.qty) || 0), supplierId: rows[l.variantId]?.supplierId ?? '' })).filter((i) => i.qty > 0);
   const missing = items.some((i) => !i.supplierId);
   const badDate = !!expected && !/^\d{4}-\d{2}-\d{2}$/.test(expected);

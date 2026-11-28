@@ -10,6 +10,7 @@ import { useCan } from '@/lib/auth';
 import { rupees } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 const SHOW = 60;
 
@@ -58,7 +59,7 @@ export default function ProductDetail() {
       </>
     )}>
       <Stack.Screen options={{ title: p.code }} />
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
       <Card>
         <Text style={{ fontSize: 20, fontWeight: '700', color: C.navy }}>{p.name}</Text>
         <Note>{p.code} · {p.category.name}{p.brand ? ` · ${p.brand.name}` : ''}{p.model ? ` · model ${p.model}` : ''}</Note>

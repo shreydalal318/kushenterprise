@@ -10,6 +10,7 @@ import { useCan } from '@/lib/auth';
 import { rupees } from '@/lib/format';
 import { C, R } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 type Ask = { kind: 'unlink'; gtin?: boolean; code?: string; shown: string } | { kind: 'delete' };
 const str = (n: number | null | undefined) => (n == null ? '' : String(n));
@@ -91,7 +92,7 @@ export default function Power() {
       </>
     )}>
       <Stack.Screen options={{ title: v.label ?? p.code }} />
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
       <Card>
         <Text style={{ fontSize: 20, fontWeight: '700', color: C.navy }}>{v.label ?? 'Standard'}</Text>
         <Note>{p.name}</Note>

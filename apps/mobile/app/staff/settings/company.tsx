@@ -4,6 +4,7 @@ import { StatePicker } from '@/components/admin/pickers';
 import { SaveBar, useForm, WithSettings, type Settings } from '@/components/admin/settings-bits';
 import { Alert, Card, H2, Screen } from '@/components/ui';
 import { trpc } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 export default function CompanySettings() {
   return <WithSettings title="Company details">{(s) => <CompanyForm s={s} />}</WithSettings>;
@@ -25,7 +26,7 @@ function CompanyForm({ s }: { s: Settings }) {
   );
   return (
     <Screen footer={<SaveBar error={save.error} saving={save.isPending} dirty={f.dirty} onSave={() => save.mutate(v)} />}>
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
       <Note>Printed on every invoice, proforma and purchase order. The state decides CGST + SGST (same state) or IGST (another state).</Note>
       <Card>
         <H2>Name and address</H2>

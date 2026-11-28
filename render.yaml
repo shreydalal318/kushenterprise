@@ -34,8 +34,10 @@ services:
         value: "true"
       - key: SMS_PROVIDER
         value: console
-      - key: PUSH_PROVIDER
-        value: console
+      - key: PUSH_PROVIDER # real pushes to phones; "off" only logs them
+        value: auto
+      - key: FCM_SERVICE_ACCOUNT # Firebase service-account JSON for Android push; paste it in the Render dashboard
+        sync: false
       - key: STORAGE_DRIVER # files are lost on redeploy on the free plan; use s3 for real use
         value: local
 

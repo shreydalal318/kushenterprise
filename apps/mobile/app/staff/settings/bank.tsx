@@ -3,6 +3,7 @@ import { Action, Confirm, fieldErrors, Input, Line, Note } from '@/components/ad
 import { SaveBar, useForm, WithSettings, type Settings } from '@/components/admin/settings-bits';
 import { Alert, Card, H2, Screen } from '@/components/ui';
 import { trpc } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 export default function BankSettings() {
   return <WithSettings title="Bank, UPI and signature">{(s) => <BankForm s={s} />}</WithSettings>;
@@ -24,7 +25,7 @@ function BankForm({ s }: { s: Settings }) {
       <Confirm question="Remove the signature / stamp?" detail="New invoices print without it until you upload one again on the website." yes="Yes, remove it" no="No, keep it"
         busy={clear.isPending} error={clear.error} onYes={() => clear.mutate()} onNo={() => { clear.reset(); setConfirm(false); }} />
     ) : <SaveBar error={save.error} saving={save.isPending} dirty={f.dirty} onSave={() => save.mutate(v)} />}>
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
       <Note>Shown at the bottom of invoices. The UPI ID also makes the “Scan to pay” QR code.</Note>
       <Card>
         <H2>Bank and UPI</H2>

@@ -45,6 +45,8 @@ enum Permission {
   VIEW_ANALYTICS
   RECORD_PAYMENTS
   MANAGE_PRODUCTS
+  VIEW_ACCOUNTS // ledgers, day book, trial balance
+  MANAGE_ACCOUNTS // vouchers, purchase bills, supplier payments
 }
 
 model User {
@@ -185,6 +187,8 @@ model CompanySettings {
   notificationConfig   Json? // channel toggles; API secrets live in env/secret store, not here
   /// Tally ledger names, e-invoice / e-way bill switches (no secrets).
   integrationConfig    Json?
+  /// Accounts: the date opening balances are as on (start of the books kept in this app).
+  booksFrom            DateTime? @db.Date
   updatedAt            DateTime  @updatedAt
 }
 
@@ -205,6 +209,10 @@ enum DocType {
   SALES_ORDER
   PAYMENT_RECEIPT
   DEBIT_NOTE
+  PURCHASE_BILL
+  PAYMENT_VOUCHER
+  CONTRA_VOUCHER
+  JOURNAL_VOUCHER
 }
 
 /// Per-financial-year numbering, e.g. KE/2026-27/0001. Allocated with SELECT ... FOR UPDATE.
@@ -279,6 +287,7 @@ model Customer {
   invoices       Invoice[]
   creditNotes    CreditNote[]
   payments       Payment[]
+  ledger         Ledger?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -331,6 +340,9 @@ model Supplier {
   purchaseOrders PurchaseOrder[]
   grns           Grn[]
   returns        SupplierReturn[]
+  ledger         Ledger?
+  purchaseBills  PurchaseBill[]
+  payments       SupplierPayment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -456,6 +468,7 @@ model ProductVariant {
   grnLines            GrnLine[]
   creditNoteLines     CreditNoteLine[]
   supplierReturnLines SupplierReturnLine[]
+  purchaseBillLines   PurchaseBillLine[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -1014,6 +1027,9 @@ model Payment {
   mode        PaymentMode
   reference   String? // UTR / cheque no.
   note        String?
+  /// Cash / bank ledger the money went into; null = Cash for cash receipts, else the default bank.
+  ledgerId    String?
+  ledger      Ledger?             @relation(fields: [ledgerId], references: [id])
   allocations PaymentAllocation[]
   createdById String
   createdAt   DateTime            @default(now())
@@ -1121,6 +1137,7 @@ model Grn {
   supplierInvoiceNo   String?
   supplierInvoiceDate DateTime?      @db.Date
   lines               GrnLine[]
+  purchaseBills       PurchaseBill[]
   createdById         String
   createdAt           DateTime       @default(now())
 }
@@ -1145,16 +1162,25 @@ model GrnLine {
 
 /// Goods sent back to a supplier (damaged, near-expiry, wrong item). Posts PURCHASE_RETURN movements.
 model SupplierReturn {
-  id          String               @id @default(cuid())
-  number      String               @unique // KE/DN/2026-27/0001 (debit note series)
-  date        DateTime             @db.Date
-  supplierId  String
-  supplier    Supplier             @relation(fields: [supplierId], references: [id])
-  reason      String
-  note        String?
-  lines       SupplierReturnLine[]
-  createdById String
-  createdAt   DateTime             @default(now())
+  id           String               @id @default(cuid())
+  number       String               @unique // KE/DN/2026-27/0001 (debit note series)
+  date         DateTime             @db.Date
+  supplierId   String
+  supplier     Supplier             @relation(fields: [supplierId], references: [id])
+  reason       String
+  note         String?
+  /// Debit note value: qty × the batch unit cost, GST at the product rate (CGST+SGST or IGST by supplier state).
+  taxType      TaxType              @default(INTRA_STATE)
+  taxableTotal Decimal              @default(0) @db.Decimal(14, 2)
+  cgstTotal    Decimal              @default(0) @db.Decimal(14, 2)
+  sgstTotal    Decimal              @default(0) @db.Decimal(14, 2)
+  igstTotal    Decimal              @default(0) @db.Decimal(14, 2)
+  taxTotal     Decimal              @default(0) @db.Decimal(14, 2)
+  roundOff     Decimal              @default(0) @db.Decimal(14, 2)
+  grandTotal   Decimal              @default(0) @db.Decimal(14, 2)
+  lines        SupplierReturnLine[]
+  createdById  String
+  createdAt    DateTime             @default(now())
 }
 
 model SupplierReturnLine {
@@ -1238,4 +1264,182 @@ model Lead {
 model Counter {
   key   String @id // "barcode" | "customer" | "supplier"
   value Int    @default(0)
+}
+
+// =====================================================================
+// 11. Accounts — double entry, Tally conventions
+// =====================================================================
+// Every money document (invoice, credit note, receipt, purchase bill, debit note, supplier payment)
+// posts one Voucher in the same transaction. Amounts are signed: + Debit, − Credit; a voucher's
+// entries always sum to zero. Groups and posting rules live in @kush/core (accounts.ts).
+
+enum VoucherType {
+  SALES
+  CREDIT_NOTE
+  RECEIPT
+  PURCHASE
+  DEBIT_NOTE
+  PAYMENT
+  CONTRA
+  JOURNAL
+}
+
+model Ledger {
+  id             String    @id @default(cuid())
+  name           String    @unique
+  group          String // ACCOUNT_GROUPS key, e.g. SUNDRY_DEBTORS
+  /// Ledgers the app posts to by key: CASH, BANK, ROUND_OFF, OUTPUT_CGST, SALES_5, PURCHASE_12, ...
+  systemKey      String?   @unique
+  /// Party ledgers are created on demand and renamed with their customer / supplier.
+  customerId     String?   @unique
+  customer       Customer? @relation(fields: [customerId], references: [id])
+  supplierId     String?   @unique
+  supplier       Supplier? @relation(fields: [supplierId], references: [id])
+  openingBalance Decimal   @default(0) @db.Decimal(14, 2) // +Dr / −Cr as on CompanySettings.booksFrom
+  bankAccountNo  String?
+  bankIfsc       String?
+  note           String?
+  isActive       Boolean   @default(true)
+
+  entries           VoucherEntry[]
+  partyVouchers     Voucher[]          @relation("VoucherParty")
+  payments          Payment[]
+  supplierPayments  SupplierPayment[]
+  purchaseBillLines PurchaseBillLine[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([group])
+}
+
+model Voucher {
+  id            String         @id @default(cuid())
+  type          VoucherType
+  number        String // the source document's number, or the voucher series for manual entries
+  date          DateTime       @db.Date
+  narration     String?
+  /// Auto-posted vouchers: Invoice | CreditNote | Payment | PurchaseBill | SupplierReturn | SupplierPayment.
+  /// They change only through their document. Null for manual vouchers.
+  sourceType    String?
+  sourceId      String?
+  /// The party (or main other ledger) for lists.
+  partyLedgerId String?
+  partyLedger   Ledger?        @relation("VoucherParty", fields: [partyLedgerId], references: [id])
+  amount        Decimal        @db.Decimal(14, 2) // sum of debits
+  /// Cancelled vouchers stay for the record but are left out of every balance.
+  cancelled     Boolean        @default(false)
+  cancelReason  String?
+  cancelledAt   DateTime?
+  createdById   String?
+  entries       VoucherEntry[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([sourceType, sourceId])
+  @@index([date])
+  @@index([type, date])
+  @@index([number])
+}
+
+model VoucherEntry {
+  id        String  @id @default(cuid())
+  voucherId String
+  voucher   Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  ledgerId  String
+  ledger    Ledger  @relation(fields: [ledgerId], references: [id])
+  amount    Decimal @db.Decimal(14, 2) // +Dr / −Cr
+  billRef   String? // bill-wise reference on party lines (invoice / supplier bill number)
+  sl        Int
+
+  @@index([ledgerId])
+  @@index([voucherId])
+}
+
+/// A supplier's tax invoice as entered in our books (Tally purchase voucher).
+model PurchaseBill {
+  id           String                      @id @default(cuid())
+  number       String                      @unique // KE/PB/2026-27/0001
+  supplierId   String
+  supplier     Supplier                    @relation(fields: [supplierId], references: [id])
+  billNo       String // the supplier's invoice number
+  billDate     DateTime                    @db.Date
+  dueDate      DateTime                    @db.Date
+  grnId        String?
+  grn          Grn?                        @relation(fields: [grnId], references: [id])
+  taxType      TaxType
+  taxableTotal Decimal                     @db.Decimal(14, 2)
+  cgstTotal    Decimal                     @default(0) @db.Decimal(14, 2)
+  sgstTotal    Decimal                     @default(0) @db.Decimal(14, 2)
+  igstTotal    Decimal                     @default(0) @db.Decimal(14, 2)
+  roundOff     Decimal                     @default(0) @db.Decimal(14, 2)
+  grandTotal   Decimal                     @db.Decimal(14, 2)
+  amountPaid   Decimal                     @default(0) @db.Decimal(14, 2) // maintained from SupplierPaymentAllocation
+  status       InvoiceStatus               @default(ISSUED)
+  cancelReason String?
+  cancelledAt  DateTime?
+  note         String?
+  createdById  String
+  lines        PurchaseBillLine[]
+  allocations  SupplierPaymentAllocation[]
+  createdAt    DateTime                    @default(now())
+  updatedAt    DateTime                    @updatedAt
+
+  @@unique([supplierId, billNo])
+  @@index([billDate])
+}
+
+model PurchaseBillLine {
+  id          String          @id @default(cuid())
+  billId      String
+  bill        PurchaseBill    @relation(fields: [billId], references: [id], onDelete: Cascade)
+  sl          Int
+  /// Stock items post to Purchase GST r%; other lines (courier, rent, equipment) post to their own ledger.
+  variantId   String?
+  variant     ProductVariant? @relation(fields: [variantId], references: [id])
+  ledgerId    String?
+  ledger      Ledger?         @relation(fields: [ledgerId], references: [id])
+  description String
+  hsnCode     String?
+  qty         Decimal?        @db.Decimal(14, 3)
+  unit        String?
+  rate        Decimal         @db.Decimal(14, 2)
+  discPct     Decimal         @default(0) @db.Decimal(5, 2)
+  amount      Decimal         @db.Decimal(14, 2) // taxable value
+  gstRate     Decimal         @db.Decimal(5, 2)
+  cgstAmount  Decimal         @default(0) @db.Decimal(14, 2)
+  sgstAmount  Decimal         @default(0) @db.Decimal(14, 2)
+  igstAmount  Decimal         @default(0) @db.Decimal(14, 2)
+
+  @@index([billId])
+}
+
+/// Money paid to a supplier (Tally payment voucher), applied to their bills.
+model SupplierPayment {
+  id          String                      @id @default(cuid())
+  number      String                      @unique // KE/PV/2026-27/0001 (payment voucher series)
+  supplierId  String
+  supplier    Supplier                    @relation(fields: [supplierId], references: [id])
+  date        DateTime                    @db.Date
+  amount      Decimal                     @db.Decimal(14, 2)
+  mode        PaymentMode
+  ledgerId    String // the cash / bank ledger paid from
+  ledger      Ledger                      @relation(fields: [ledgerId], references: [id])
+  reference   String? // UTR / cheque no.
+  note        String?
+  createdById String
+  allocations SupplierPaymentAllocation[]
+  createdAt   DateTime                    @default(now())
+
+  @@index([supplierId, date])
+}
+
+model SupplierPaymentAllocation {
+  paymentId String
+  payment   SupplierPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  billId    String
+  bill      PurchaseBill    @relation(fields: [billId], references: [id])
+  amount    Decimal         @db.Decimal(14, 2)
+
+  @@id([paymentId, billId])
 }

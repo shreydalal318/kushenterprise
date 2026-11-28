@@ -2,6 +2,8 @@ import { TRPCError } from '@trpc/server';
 import { notifyCustomer } from '../../notify';
 import { round2 } from '@kush/core';
 import type { Tx } from '@kush/db';
+import { deleteVoucherFor, postReceipt } from '../accounts/posting';
+import { requireCashBankLedger } from '../accounts/ledgers';
 import { logActivity } from '../activity';
 import { dayToDate, num } from '../num';
 import { nextDocNumber } from '../numbering';
@@ -50,6 +52,8 @@ export interface PaymentInput {
   mode: 'CASH' | 'UPI' | 'NEFT_RTGS' | 'CHEQUE' | 'CARD' | 'OTHER';
   reference?: string | null;
   note?: string | null;
+  /** Cash / bank ledger the money went into; default Cash for cash, else the default bank. */
+  ledgerId?: string | null;
   allocations?: { invoiceId: string; amount: number }[];
   autoAllocate?: boolean;
 }
@@ -61,9 +65,11 @@ export async function recordPayment(tx: Tx, input: PaymentInput, actor: { id: st
   const allocations = input.autoAllocate ? await autoAllocations(tx, c.id, input.amount) : (input.allocations ?? []).filter((a) => a.amount > 0);
   const allocated = round2(allocations.reduce((t, a) => t + a.amount, 0));
   if (allocated > input.amount + 0.001) throw new TRPCError({ code: 'BAD_REQUEST', message: `Allocated ₹${allocated} is more than the ₹${input.amount} received` });
+  if (input.ledgerId) await requireCashBankLedger(tx, input.ledgerId);
   const number = await nextDocNumber(tx, 'PAYMENT_RECEIPT', input.date);
-  const p = await tx.payment.create({ data: { number, customerId: c.id, date: dayToDate(input.date)!, amount: input.amount, mode: input.mode, reference: input.reference ?? null, note: input.note ?? null, createdById: actor.id } });
+  const p = await tx.payment.create({ data: { number, customerId: c.id, date: dayToDate(input.date)!, amount: input.amount, mode: input.mode, reference: input.reference ?? null, note: input.note ?? null, ledgerId: input.ledgerId ?? null, createdById: actor.id } });
   for (const a of allocations) await applyAllocation(tx, p.id, c.id, a);
+  await postReceipt(tx, p.id);
   await logActivity(tx, { actorId: actor.id, action: 'payment.record', entityType: 'Payment', entityId: p.id, ip, summary: `${number}: ₹${input.amount} from ${c.name} by ${input.mode}${allocated < input.amount ? ` (₹${round2(input.amount - allocated)} on account)` : ''}` });
   await notifyCustomer(tx, c.id, { title: `Payment received: ₹${input.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`, body: `Thank you. Receipt ${number}${input.reference ? ` (${input.reference})` : ''}.`, link: '/portal/account' });
   return { id: p.id, number, allocated, onAccount: round2(input.amount - allocated) };
@@ -77,6 +83,7 @@ export async function allocatePayment(tx: Tx, paymentId: string, allocations: { 
   const want = round2(allocations.reduce((t, a) => t + a.amount, 0));
   if (want > free + 0.001) throw new TRPCError({ code: 'BAD_REQUEST', message: `Only ₹${free} of ${p.number} is unallocated` });
   for (const a of allocations.filter((x) => x.amount > 0)) await applyAllocation(tx, p.id, p.customerId, a);
+  await postReceipt(tx, p.id); // the narration lists the invoices it now settles
   await logActivity(tx, { actorId: actor.id, action: 'payment.allocate', entityType: 'Payment', entityId: p.id, ip, summary: `${p.number}: applied ₹${want}` });
   return { ok: true };
 }
@@ -86,6 +93,7 @@ export async function deletePayment(tx: Tx, paymentId: string, reason: string, a
   const p = await tx.payment.findUnique({ where: { id: paymentId }, include: { allocations: true, customer: { select: { name: true } } } });
   if (!p) throw new TRPCError({ code: 'NOT_FOUND' });
   for (const a of p.allocations) await tx.invoice.update({ where: { id: a.invoiceId }, data: { amountPaid: { decrement: num(a.amount) } } });
+  await deleteVoucherFor(tx, 'Payment', p.id);
   await tx.payment.delete({ where: { id: p.id } });
   await logActivity(tx, { actorId: actor.id, action: 'payment.delete', entityType: 'Payment', entityId: p.id, ip, summary: `Deleted ${p.number} (₹${num(p.amount)} from ${p.customer.name}): ${reason}`, before: { number: p.number, amount: num(p.amount), allocations: p.allocations.map((a) => ({ invoiceId: a.invoiceId, amount: num(a.amount) })) } });
   return { ok: true };

@@ -7,6 +7,7 @@ import { Alert, Button, Card, Field, LinkButton, Loading, P, Row, Small } from '
 import { errorText, rupees } from '@/lib/format';
 import { C, R } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 const openMaps = (address: string) => void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`);
 
@@ -27,9 +28,10 @@ export function MyDeliveries() {
     ? <View style={{ padding: 16, gap: 12 }}><Alert>{errorText(q.error)}</Alert><Button variant="secondary" title="Try again" loading={q.isFetching} onPress={() => void q.refetch()} /></View>
     : <Loading />;
   return (
+    <>
+    <Done message={done} onShown={() => setDone(null)} />
     <FlatList data={q.data} keyExtractor={(d) => d.dispatchId} style={{ backgroundColor: C.canvas }} contentContainerStyle={{ padding: 12, gap: 10 }} keyboardShouldPersistTaps="handled"
       refreshing={pulling} onRefresh={() => { setPulling(true); void q.refetch().finally(() => setPulling(false)); }}
-      ListHeaderComponent={done ? <Alert tone="ok">{done}</Alert> : undefined}
       ListEmptyComponent={
         <Card style={{ alignItems: 'center', paddingVertical: 28 }}>
           <Ionicons name="bicycle-outline" size={36} color={C.teal700} />
@@ -65,5 +67,6 @@ export function MyDeliveries() {
           ) : <Button title="Mark delivered" onPress={() => { setOpen(d.orderId); setReceivedBy(''); setDone(null); m.reset(); }} />}
         </Card>
       )} />
+    </>
   );
 }

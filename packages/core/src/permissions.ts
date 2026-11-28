@@ -21,6 +21,8 @@ export const PERMISSIONS = {
   MANAGE_CUSTOMERS: { label: 'Manage customers', group: 'Customers' },
   VIEW_PRICES_MARGINS: { label: 'View prices / margins (cost, price lists)', group: 'Sensitive' },
   VIEW_ANALYTICS: { label: 'View analytics', group: 'Sensitive' },
+  VIEW_ACCOUNTS: { label: 'View accounts & reports', group: 'Accounts' },
+  MANAGE_ACCOUNTS: { label: 'Record vouchers, bills & payments', group: 'Accounts' },
 } as const satisfies Record<string, { label: string; group: string }>;
 
 export type Permission = keyof typeof PERMISSIONS;

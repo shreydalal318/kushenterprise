@@ -3,6 +3,7 @@ import { Check, Note } from '@/components/admin/bits';
 import { SaveBar, useForm, WithSettings, type Settings } from '@/components/admin/settings-bits';
 import { Alert, Card, H2, Screen } from '@/components/ui';
 import { trpc } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 const CHANNELS = [
   ['inApp', 'In the app and website', 'The bell inbox on the website and in the apps'],
@@ -26,7 +27,7 @@ function NotificationsForm({ s }: { s: Settings }) {
   const set = <K extends keyof typeof v>(k: K, x: (typeof v)[K]) => { setFlash(null); f.set(k, x); };
   return (
     <Screen footer={<SaveBar error={save.error} saving={save.isPending} dirty={f.dirty} onSave={() => save.mutate(v)} />}>
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
       <Note>In-app and phone notifications work now. SMS, WhatsApp and email start once their accounts are set up on the server.</Note>
       <Card style={{ gap: 0 }}>
         <H2>Ways to send</H2>

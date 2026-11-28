@@ -70,6 +70,10 @@ async function main() {
     });
     console.log(`Created owner ${email}`);
   }
+  // Accounts: system ledgers, books start date, and vouchers for anything not posted yet (idempotent).
+  // The posting rules live in the API package, so they're loaded from there.
+  const { describeSync, syncAccounts } = await import('../../api/src/services/accounts/sync');
+  console.log(describeSync(await syncAccounts(prisma)));
   console.log(`Seed complete (FY ${fy}).`);
 }
 

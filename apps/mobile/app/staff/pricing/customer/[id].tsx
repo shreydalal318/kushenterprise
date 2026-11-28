@@ -14,6 +14,7 @@ import { useAuth, useCan } from '@/lib/auth';
 import { errorText, rupees } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 type Sheet = RouterOutputs['pricing']['customerSheet'];
 type Row = Sheet['rows'][number];
@@ -55,7 +56,7 @@ export default function CustomerPrices() {
   const top = (
     <View style={{ gap: 8 }}>
       {title}
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
       <Heading>{d.customer.name}</Heading>
       <Note>{`Price list: ${d.customer.priceList ? `${d.customer.priceList.name}${d.customer.priceList.isActive ? '' : ' (not in use)'}` : 'none'} · prices as on ${formatDate(d.onDate)}`}</Note>
       <Tabs big value={tab} onChange={setTab} options={[['prices', 'Prices'], ['history', 'Changes']]} />

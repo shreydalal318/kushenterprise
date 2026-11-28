@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth';
 import { errorText } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 type Row = RouterOutputs['settings']['numberSeries']['series'][number];
 const int = (v: string) => (/^\d+$/.test(v.trim()) ? Number(v.trim()) : 0);
@@ -48,7 +49,7 @@ function SeriesCard({ row, fy }: { row: Row; fy: string }) {
       <Input label="Digits" keyboardType="number-pad" value={v.padding} onChangeText={set('padding')} error={fe.padding} hint="How many digits, with zeros in front (4 makes 0001)." maxLength={1} />
       <Note>The next one will be</Note>
       <Text style={{ fontSize: 17, fontWeight: '700', color: C.navy }}>{formatDocNumber(v.prefix || '…', fy, int(v.nextNumber) || 1, Math.min(8, int(v.padding) || 4))}</Text>
-      {done && !dirty && <Alert tone="ok">{`${row.label} numbering saved ✓`}</Alert>}
+      <Done message={done && !dirty ? `${row.label} numbering saved ✓` : null} />
       {save.error && <Alert>{errorText(save.error)}</Alert>}
       {dirty && <SmallButton icon="save-outline" title={`Save ${row.label.toLowerCase()} numbering`} busy={save.isPending} disabled={bad}
         onPress={() => save.mutate({ docType: row.docType, financialYear: fy, prefix: v.prefix.trim(), nextNumber: int(v.nextNumber), padding: int(v.padding) })} />}

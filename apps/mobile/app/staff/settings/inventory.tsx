@@ -3,6 +3,7 @@ import { fieldErrors, Input, Note } from '@/components/admin/bits';
 import { ChipEditor, SaveBar, useForm, WithSettings, type Settings } from '@/components/admin/settings-bits';
 import { Alert, Card, Screen } from '@/components/ui';
 import { trpc } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 export default function InventorySettings() {
   return <WithSettings title="Stock alerts">{(s) => <InventoryForm s={s} />}</WithSettings>;
@@ -17,7 +18,7 @@ function InventoryForm({ s }: { s: Settings }) {
   const fe = fieldErrors(save.error);
   return (
     <Screen footer={<SaveBar error={save.error} saving={save.isPending} dirty={f.dirty} onSave={() => save.mutate(f.v)} />}>
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
       <Note>Used for the low-stock and expiry alerts. Each product can have its own reorder level.</Note>
       <Card>
         <Input label="Usual reorder level (units)" keyboardType="number-pad" value={f.v.defaultReorderLevel} onChangeText={(x) => { setFlash(null); f.set('defaultReorderLevel', x); }}

@@ -8,6 +8,7 @@ import { Alert, Button, Card, H2, P, Screen } from '@/components/ui';
 import { useCan } from '@/lib/auth';
 import { errorText } from '@/lib/format';
 import { trpc } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 /** One website enquiry: ring or WhatsApp them, write what happened, mark it, or make them a customer. */
 export default function Lead() {
@@ -38,7 +39,7 @@ export default function Lead() {
       ? <Button title="Open the customer" onPress={() => router.push(`/staff/customers/${l.convertedCustomerId}`)} />
       : <Button title="Make them a customer" onPress={() => router.push(`/staff/customers/new?fromLead=${l.id}`)} />}>
       {title}
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
       <View style={{ gap: 6 }}>
         <Heading>{l.organisation || l.name}</Heading>
         <Tag label={word} tone={tone} />

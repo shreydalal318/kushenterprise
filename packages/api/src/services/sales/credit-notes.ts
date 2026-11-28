@@ -1,6 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { computeGst, financialYear, round2 } from '@kush/core';
 import type { Tx } from '@kush/db';
+import { postCreditNote } from '../accounts/posting';
 import { logActivity } from '../activity';
 import { dayToDate, isoDay, num } from '../num';
 import { nextDocNumber } from '../numbering';
@@ -76,6 +77,7 @@ export async function createCreditNote(tx: Tx, input: CreditNoteInput, actor: { 
       }) },
     },
   });
+  await postCreditNote(tx, cn.id);
   if (input.restock) {
     for (const r of rows) {
       if (!r.il.batchId) continue;

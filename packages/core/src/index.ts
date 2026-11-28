@@ -11,3 +11,4 @@ export * from './gs1';
 export * from './stock';
 export * from './sales';
 export * from './notifications';
+export * from './accounts';

@@ -10,6 +10,7 @@ import { useAuth, useCan } from '@/lib/auth';
 import { errorText, rupees } from '@/lib/format';
 import { C, R } from '@/lib/theme';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 type Mine = RouterOutputs['deliveries']['mine'][number];
 interface Item {
@@ -95,7 +96,7 @@ export default function Deliveries() {
         contentContainerStyle={{ padding: 12, gap: 10 }} refreshing={pulling} onRefresh={refresh}
         ListHeaderComponent={
           <View style={{ gap: 10 }}>
-            {!!flash && <Alert tone="ok">{flash}</Alert>}
+            <Done message={flash} onShown={() => setFlash(null)} />
             {seesBoard && mine.error && <Alert>{`Couldn’t load what was given to you. ${errorText(mine.error)}`}</Alert>}
             <Muted>{seesBoard ? 'Orders out with our own delivery staff, and orders waiting for the customer to collect.' : 'Orders handed to you to deliver.'}</Muted>
           </View>

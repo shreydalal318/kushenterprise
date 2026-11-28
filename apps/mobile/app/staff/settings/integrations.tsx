@@ -4,6 +4,7 @@ import { OwnerOnly, SaveBar } from '@/components/admin/settings-bits';
 import { Alert, Card, H2, Screen } from '@/components/ui';
 import { useAuth } from '@/lib/auth';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 type Cfg = RouterOutputs['integrations']['settings'];
 const LEDGERS: [keyof Cfg['tally'], string, string?][] = [
@@ -36,7 +37,7 @@ export default function Integrations() {
     <OwnerOnly title="Tally and e-filing">
       {!v ? <Screen><Waiting q={q} /></Screen> : (
         <Screen footer={<SaveBar error={save.error} saving={save.isPending} dirty={dirty} onSave={() => save.mutate({ ...v, ewayBill: { thresholdValue: Number(threshold) || 0 } })} />}>
-          {!!flash && <Alert tone="ok">{flash}</Alert>}
+          <Done message={flash} onShown={() => setFlash(null)} />
           <Note>Ledger names must match your Tally company exactly. The Tally files are under Sales & reports → Downloads.</Note>
           <Card>
             <H2>Tally Prime</H2>

@@ -12,6 +12,7 @@ import { Bars, Columns, Grid, Line, Note, Pills, SmallButton, Stat, Tag, Waiting
 import { shareFile, type FileKind } from './files';
 import { pct } from './labels';
 import { rangeText, type Range } from './range';
+import { Done } from '@/components/done';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const dayLabel = (iso: string) => formatDate(iso).slice(0, 5);
@@ -291,7 +292,7 @@ export function FilesTab({ r }: { r: Range }) {
   const rows = reg.data ? (allRows ? reg.data.rows : reg.data.rows.slice(0, 30)) : [];
   return (
     <View style={{ gap: 12 }}>
-      {!!done && <Alert tone="ok">{done}</Alert>}
+      <Done message={done} onShown={() => setDone(null)} />
       {!!error && <Alert>{error}</Alert>}
       <Card><H2>Excel reports</H2><Note>Dated reports use the period chosen above. The file opens your share menu: WhatsApp, email, Drive or Files.</Note>{excel.map(item)}</Card>
       <Card><H2>Tally and GST e-filing</H2><Note>For the period chosen above. Ledger names are set in Settings → Tally and e-filing.</Note>{tally.map(item)}</Card>

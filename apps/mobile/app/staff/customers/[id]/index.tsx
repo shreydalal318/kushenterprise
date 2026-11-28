@@ -13,6 +13,7 @@ import { API_URL } from '@/lib/config';
 import { errorText, rupees } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 type Customer = RouterOutputs['customers']['get'];
 interface Draft { id?: string; kind: 'BILLING' | 'SHIPPING'; isDefault: boolean; value: AddressValue }
@@ -65,7 +66,7 @@ export default function CustomerDetail() {
       </>
     )}>
       {title}
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
       <View style={{ gap: 6 }}>
         <Heading>{c.name}</Heading>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
@@ -163,7 +164,7 @@ function PricesCard({ c }: { c: Customer }) {
     <Card>
       <H2>Prices</H2>
       <Note>They pay their special price if there is one, else their price list’s rate, else the normal rate.</Note>
-      {!!done && <Alert tone="ok">{done}</Alert>}
+      <Done message={done} onShown={() => setDone(null)} />
       {owner ? (
         <Picker label="Price list" value={c.priceListId ?? ''} disabled={assign.isPending}
           onChange={(v) => { setDone(null); assign.mutate({ customerId: c.id, priceListId: v || null }, { onSuccess: () => setDone(v ? `Price list changed to ${lists.data?.find((l) => l.id === v)?.name ?? 'the new list'} ✓` : 'Now on normal prices ✓') }); }}
@@ -191,7 +192,7 @@ function LoginsCard({ c, onAdd }: { c: Customer; onAdd: () => void }) {
     <Card>
       <H2>App and website logins</H2>
       <Note>They sign in with a one-time code sent to their mobile.</Note>
-      {!!done && <Alert tone="ok">{done}</Alert>}
+      <Done message={done} onShown={() => setDone(null)} />
       {(toggle.error || invite.error) && <Alert>{errorText(toggle.error ?? invite.error)}</Alert>}
       {!c.logins.length && <Note>No logins yet.</Note>}
       {c.logins.map((l) => (

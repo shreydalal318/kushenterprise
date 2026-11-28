@@ -10,6 +10,7 @@ import { Confirm, Failed, flashNext, int, isDay, nameOf, NoAccess, Note, PickLis
 import { useCan } from '@/lib/auth';
 import { C, R } from '@/lib/theme';
 import { trpc, type RouterOutputs } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 interface Line { key: string; productId: string; variantId: string; productName: string; label: string | null; trackSerial: boolean; batch: string; qty: string; serials: string[] }
 const keyOf = (b: { batchId: string; location: { id: string } }) => `${b.batchId}|${b.location.id}`;
@@ -95,7 +96,7 @@ export default function NewReturn() {
       <Card>
         <H2>Add items</H2>
         <ProductPicker allSizes onPick={onPick} />
-        {!!added && <Alert tone="ok">{added}</Alert>}
+        <Done message={added} onShown={() => setAdded(null)} />
       </Card>
       {lines.map((l, i) => <ReturnLine key={l.key} line={l} stock={stocks[i]} onChange={(p) => update(l.key, p)} onRemove={() => { setConfirm(false); setLines((cur) => cur.filter((x) => x.key !== l.key)); setAdded(null); }} />)}
     </Screen>

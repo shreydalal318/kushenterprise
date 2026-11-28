@@ -10,6 +10,7 @@ import { Confirm, Failed, int, isDay, NoAccess, Note, Pills } from '@/components
 import { useCan } from '@/lib/auth';
 import { C, R } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 const NEW = '__new';
 const keyOf = (b: { batchId: string; location: { id: string } }) => `${b.batchId}|${b.location.id}`;
@@ -103,7 +104,7 @@ export default function Adjust() {
       </>
     )}>
       <Stack.Screen options={{ title: 'Adjust stock' }} />
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
       <Card>
         <H2>Which item?</H2>
         {!item ? (

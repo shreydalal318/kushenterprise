@@ -3,6 +3,7 @@ import { fieldErrors, Note } from '@/components/admin/bits';
 import { ChipEditor, SaveBar, useForm, WithSettings, type Settings } from '@/components/admin/settings-bits';
 import { Alert, Card, Screen } from '@/components/ui';
 import { trpc } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 export default function MastersSettings() {
   return <WithSettings title="GST rates and units">{(s) => <MastersForm s={s} />}</WithSettings>;
@@ -17,7 +18,7 @@ function MastersForm({ s }: { s: Settings }) {
   const fe = fieldErrors(save.error);
   return (
     <Screen footer={<SaveBar error={save.error} saving={save.isPending} dirty={f.dirty} onSave={() => save.mutate(f.v)} />}>
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
       <Note>Choices offered when adding a product. Each product keeps its own HSN code and GST rate; check rates with your accountant.</Note>
       <Card>
         <ChipEditor label="GST rates (%)" numeric values={f.v.gstRates} format={(x) => `${x}%`} placeholder="e.g. 5" onChange={(x) => { setFlash(null); f.set('gstRates', x); }} />

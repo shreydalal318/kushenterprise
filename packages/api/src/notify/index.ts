@@ -86,18 +86,101 @@ const log = (channel: NotificationChannel, to: string, title: string) => {
   if (process.env.NODE_ENV !== 'test') console.info(`[notify:${channel.toLowerCase()}] to=${to} :: ${title}`);
 };
 
-/** Expo push service (no API key needed); console otherwise. */
-async function sendPush(messages: PushMessage[]) {
-  if ((process.env.PUSH_PROVIDER ?? 'console') !== 'expo') { for (const m of messages) log('PUSH', m.to, m.title); return; }
-  const res = await fetch('https://exp.host/--/api/v2/push/send', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify(messages) });
+/**
+ * Phone push. A phone registers either an Expo token ("ExponentPushToken[…]", apps built with an EAS project)
+ * or Google's own FCM token (the Android app built with google-services.json). Expo tokens go through Expo's
+ * free push service; FCM tokens straight to Google with the Firebase service account in FCM_SERVICE_ACCOUNT
+ * (the JSON, or base64 of it). Tests (and PUSH_PROVIDER=off) only log.
+ */
+const pushOff = () => process.env.NODE_ENV === 'test' || process.env.PUSH_PROVIDER === 'off';
+const isExpoToken = (t: string) => t.startsWith('ExponentPushToken[') || t.startsWith('ExpoPushToken[');
+
+async function sendExpoPush(messages: PushMessage[]) {
+  const res = await fetch('https://exp.host/--/api/v2/push/send', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify(messages.map((m) => ({ ...m, sound: 'default', channelId: 'orders', priority: 'high' }))) });
   if (!res.ok) throw new Error(`Expo push failed: ${res.status}`);
+}
+
+interface ServiceAccount { project_id: string; client_email: string; private_key: string }
+let serviceAccount: ServiceAccount | null | undefined;
+function fcmAccount(): ServiceAccount | null {
+  if (serviceAccount !== undefined) return serviceAccount;
+  const raw = process.env.FCM_SERVICE_ACCOUNT?.trim();
+  serviceAccount = null;
+  if (raw) {
+    try {
+      const sa = JSON.parse(raw.startsWith('{') ? raw : Buffer.from(raw, 'base64').toString('utf8')) as ServiceAccount;
+      if (sa.project_id && sa.client_email && sa.private_key) serviceAccount = sa;
+    } catch { console.error('[notify] FCM_SERVICE_ACCOUNT is not valid service-account JSON'); }
+  }
+  return serviceAccount;
+}
+
+/** OAuth access token for FCM: a JWT signed with the service account's key, exchanged at Google (cached ~55 min). */
+let fcmAccess: { token: string; until: number } | null = null;
+async function fcmAccessToken(sa: ServiceAccount) {
+  if (fcmAccess && fcmAccess.until > Date.now()) return fcmAccess.token;
+  const { createSign } = await import('node:crypto');
+  const b64 = (v: object | string) => Buffer.from(typeof v === 'string' ? v : JSON.stringify(v)).toString('base64url');
+  const now = Math.floor(Date.now() / 1000);
+  const unsigned = `${b64({ alg: 'RS256', typ: 'JWT' })}.${b64({ iss: sa.client_email, scope: 'https://www.googleapis.com/auth/firebase.messaging', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 })}`;
+  const jwt = `${unsigned}.${createSign('RSA-SHA256').update(unsigned).sign(sa.private_key).toString('base64url')}`;
+  const res = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: jwt }) });
+  if (!res.ok) throw new Error(`FCM auth failed: ${res.status}`);
+  const j = (await res.json()) as { access_token: string; expires_in: number };
+  fcmAccess = { token: j.access_token, until: Date.now() + (j.expires_in - 300) * 1000 };
+  return fcmAccess.token;
+}
+
+/** Google's FCM HTTP v1, one request per phone. Returns the tokens Google says are gone (app uninstalled). */
+async function sendFcmPush(sa: ServiceAccount, messages: PushMessage[]) {
+  const access = await fcmAccessToken(sa);
+  const dead: string[] = [];
+  let ok = 0;
+  for (const m of messages) {
+    const res = await fetch(`https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`, {
+      method: 'POST', headers: { authorization: `Bearer ${access}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ message: {
+        token: m.to, notification: { title: m.title, body: m.body }, data: m.data ?? {},
+        // High priority on the "orders" channel the app creates, so it rings and shows as a banner.
+        android: { priority: 'HIGH', notification: { channel_id: 'orders', sound: 'default', default_vibrate_timings: true } },
+      } }),
+    });
+    if (res.ok) { ok++; continue; }
+    const text = await res.text();
+    if (res.status === 404 || /UNREGISTERED|registration-token-not-registered|INVALID_ARGUMENT/.test(text)) dead.push(m.to);
+    else console.error(`[notify] FCM send failed: ${res.status} ${text.slice(0, 200)}`);
+  }
+  return { ok, dead };
+}
+
+/** For the Notifications screen: is phone push switched on, and is Google's (Firebase) key set on the server? */
+export async function pushStatus(db: Db) {
+  const sa = fcmAccount();
+  return { switchedOn: settingsView(await getSettings(db)).notificationConfig.channels.push, firebaseProject: sa?.project_id ?? null, off: pushOff() };
+}
+
+async function sendPush(messages: PushMessage[]): Promise<{ ok: number; dead: string[] }> {
+  if (pushOff()) { for (const m of messages) log('PUSH', m.to, m.title); return { ok: messages.length, dead: [] }; }
+  const expo = messages.filter((m) => isExpoToken(m.to));
+  const fcm = messages.filter((m) => !isExpoToken(m.to));
+  let ok = 0;
+  const dead: string[] = [];
+  if (expo.length) { await sendExpoPush(expo); ok += expo.length; }
+  if (fcm.length) {
+    const sa = fcmAccount();
+    if (!sa) { for (const m of fcm) log('PUSH', m.to, `${m.title} (not sent: FCM_SERVICE_ACCOUNT is not set)`); }
+    else { const r = await sendFcmPush(sa, fcm); ok += r.ok; dead.push(...r.dead); }
+  }
+  return { ok, dead };
 }
 
 const SENDERS: Partial<Record<NotificationChannel, Sender>> = {
   PUSH: async (n) => {
     if (!n.user.devices.length) return 'skipped';
-    await sendPush(n.user.devices.map((d) => ({ to: d.pushToken, title: n.title, body: n.body, data: n.link ? { link: n.link } : undefined })));
-    return 'sent';
+    const r = await sendPush(n.user.devices.map((d) => ({ to: d.pushToken, title: n.title, body: n.body, data: n.link ? { link: n.link } : undefined })));
+    // Phones that uninstalled the app stop being tried.
+    if (r.dead.length) await prisma.device.deleteMany({ where: { pushToken: { in: r.dead } } }).catch(() => {});
+    return r.ok ? 'sent' : 'skipped';
   },
   SMS: async (n) => {
     if (!n.user.mobile) return 'skipped';

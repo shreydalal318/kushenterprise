@@ -108,6 +108,8 @@ export const paymentCreateInput = z.object({
   mode: z.enum(PAYMENT_MODES),
   reference: optText(80),
   note: optText(300),
+  /** Cash / bank ledger it went into (accounts); default Cash for cash, else the default bank. */
+  ledgerId: id.nullable().optional(),
   autoAllocate: z.boolean().default(false),
   allocations: z.array(z.object({ invoiceId: id, amount: money })).max(200).optional(),
 });

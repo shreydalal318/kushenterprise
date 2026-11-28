@@ -1,6 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { computeGst, dueDateFor, financialYear, round2 } from '@kush/core';
 import type { Tx } from '@kush/db';
+import { postInvoice } from '../accounts/posting';
 import { logActivity } from '../activity';
 import { dayToDate, num } from '../num';
 import { nextDocNumber } from '../numbering';
@@ -113,6 +114,7 @@ export async function createInvoice(tx: Tx, input: InvoiceInput, actor: { id: st
 
   if (input.orderId) await applyToOrder(tx, input.orderId, built.map((b) => ({ variantId: b.variant.id, qty: b.alloc.qty })), +1, actor.id);
   if (input.proformaId) await tx.proforma.update({ where: { id: input.proformaId }, data: { status: 'CONVERTED' } });
+  await postInvoice(tx, invoice.id);
 
   await logActivity(tx, {
     actorId: actor.id, action: 'invoice.create', entityType: 'Invoice', entityId: invoice.id, ip: opts.ip,
@@ -159,6 +161,8 @@ export async function cancelInvoice(tx: Tx, id: string, reason: string, actor: {
   if (inv.allocations.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Payments are applied to this invoice; remove them first' });
   if (inv.creditNotes.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'A credit note exists for this invoice; it cannot be cancelled' });
   await tx.invoice.update({ where: { id }, data: { status: 'CANCELLED', cancelReason: reason, cancelledAt: new Date(), cancelledById: actor.id } });
+  // The Sales voucher stays on record, marked cancelled (out of every balance), as Tally does.
+  await postInvoice(tx, id);
   // The order's only invoice cancelled: it is no longer packed for dispatch.
   if (inv.orderId && !(await tx.invoice.count({ where: { orderId: inv.orderId, status: 'ISSUED' } }))) {
     const ord = await tx.salesOrder.findUnique({ where: { id: inv.orderId }, select: { status: true } });

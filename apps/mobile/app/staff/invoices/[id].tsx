@@ -12,6 +12,7 @@ import { docPath, previewHref } from '@/lib/documents';
 import { errorText, rupees } from '@/lib/format';
 import { C } from '@/lib/theme';
 import { trpc } from '@/lib/trpc';
+import { Done } from '@/components/done';
 
 const COPY: Record<InvoiceCopy, string> = { ORIGINAL: 'Original', DUPLICATE: 'Duplicate', TRIPLICATE: 'Triplicate' };
 
@@ -103,7 +104,7 @@ export default function InvoiceScreen() {
       </>
     }>
       <Stack.Screen options={{ title: i.number }} />
-      {!!flash && <Alert tone="ok">{flash}</Alert>}
+      <Done message={flash} onShown={() => setFlash(null)} />
       {credit && <Button variant="secondary" title={`Share credit note ${credit.number} PDF`} icon={<Ionicons name="document-text-outline" size={18} color={C.ink} />} loading={pdf.busy === docPath('credit-note', credit.id)} onPress={() => void pdf.open(docPath('credit-note', credit.id), `${credit.number}.pdf`)} />}
       {cancelled && <Alert>{`Cancelled${i.cancelledBy ? ` by ${i.cancelledBy}` : ''}${i.cancelledAt ? ` on ${formatDateTime(i.cancelledAt)}` : ''}: ${i.cancelReason ?? ''}. Stock was returned.`}</Alert>}
 

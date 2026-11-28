@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { can } from '@kush/core';
 import { z } from 'zod';
 import { supplierInput, supplierProductsInput, supplierUpdateInput } from '../schemas';
+import { renamePartyLedger } from '../services/accounts/ledgers';
 import { diff, logActivity } from '../services/activity';
 import { nextSupplierCode } from '../services/counters';
 import { numOrNull } from '../services/num';
@@ -48,6 +49,7 @@ export const suppliersRouter = router({
       const before = await tx.supplier.findUnique({ where: { id } });
       if (!before) throw new TRPCError({ code: 'NOT_FOUND' });
       const s = await tx.supplier.update({ where: { id }, data });
+      if (s.name !== before.name) await renamePartyLedger(tx, { supplierId: id });
       const d = diff(before as unknown as Record<string, unknown>, data);
       if (d.changed.length) await logActivity(tx, { actorId: ctx.user.id, action: 'supplier.update', entityType: 'Supplier', entityId: id, summary: `Updated ${s.code}: ${d.changed.join(', ')}`, before: d.before, after: d.after, ip: ctx.ip });
       return s;

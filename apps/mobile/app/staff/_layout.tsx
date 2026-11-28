@@ -1,7 +1,7 @@
 import { Redirect, Stack } from 'expo-router';
 import { useAuth } from '@/lib/auth';
 import { useOutbox } from '@/lib/outbox';
-import { usePushRegistration } from '@/lib/push';
+import { useInAppAlerts, usePushRegistration } from '@/lib/push';
 import { C } from '@/lib/theme';
 
 /** Staff mode, built for one hand: orders (home), stock, receiving, barcode lookup. */
@@ -9,6 +9,7 @@ export default function StaffLayout() {
   const { ready, me } = useAuth();
   useOutbox();
   usePushRegistration();
+  useInAppAlerts();
   if (ready && (!me || me.role === 'CUSTOMER')) return <Redirect href="/" />;
   return (
     <Stack screenOptions={{ headerTintColor: C.navy, headerTitleStyle: { fontWeight: '700' }, contentStyle: { backgroundColor: C.canvas } }}>
