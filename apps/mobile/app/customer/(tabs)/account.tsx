@@ -43,7 +43,7 @@ export default function AccountScreen() {
             {ledger.data.overdue > 0 && <Text style={{ fontSize: 15, color: C.danger, fontWeight: '600' }}>{rupees(ledger.data.overdue)} is past its due date. Please pay it soon.</Text>}
             <Note>You have {ledger.data.customer.paymentTermsDays} days to pay each invoice.</Note>
           </Card>
-          {statement && <Button title="Download statement (PDF)" icon={<Ionicons name="download-outline" size={20} color={C.white} />} loading={pdf.busy === statement} onPress={() => pdf.open(statement, 'Statement.pdf', 'Statement downloaded')} />}
+          {!!statement && <Button title="Download statement (PDF)" icon={<Ionicons name="download-outline" size={20} color={C.white} />} loading={pdf.busy === statement} onPress={() => pdf.open(statement, 'Statement.pdf', 'Statement downloaded')} />}
           {owed > 0 && (
             <Card>
               <H2>How old the unpaid amount is</H2>

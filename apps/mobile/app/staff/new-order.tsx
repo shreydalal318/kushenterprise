@@ -112,12 +112,12 @@ export default function NewOrder() {
         <H2>Items</H2>
         <ProductPicker onPick={onPick} allSizes />
       </Card>
-      {added && <Alert tone="ok">{added}</Alert>}
+      {!!added && <Alert tone="ok">{added}</Alert>}
       {lines.length > 0 && (
         <Card>
           {lines.map((l) => (
             <Row key={l.variantId} style={{ justifyContent: 'space-between' }}>
-              <View style={{ flex: 1 }}><P style={{ fontWeight: '600' }}>{l.name}</P>{l.label && <Small>{l.label}</Small>}</View>
+              <View style={{ flex: 1 }}><P style={{ fontWeight: '600' }}>{l.name}</P>{!!l.label && <Small>{l.label}</Small>}</View>
               <Pressable accessibilityRole="button" accessibilityLabel={`One less ${l.name}`} onPress={() => (int(l.qty) <= 1 ? remove(l.variantId) : setQty(l.variantId, String(int(l.qty) - 1)))} style={step}><Ionicons name="remove" size={16} color={C.teal700} /></Pressable>
               <TextInput accessibilityLabel={`Quantity of ${l.name}`} value={l.qty} onChangeText={(v) => setQty(l.variantId, v.replace(/\D/g, '').slice(0, 5))} keyboardType="number-pad" selectTextOnFocus
                 style={{ minWidth: 44, textAlign: 'center', fontWeight: '700', fontSize: 16, color: C.ink, borderWidth: 1, borderColor: int(l.qty) < 1 || int(l.qty) > 10000 ? C.danger : C.line, borderRadius: R.sm, paddingVertical: 4 }} />

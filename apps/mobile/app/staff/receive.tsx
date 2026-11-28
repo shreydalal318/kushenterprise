@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
+import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { formatDate, istDateString } from '@kush/core';
 import { readableError } from '@/components/errors';
@@ -18,12 +19,16 @@ const int = (v: string) => (/^\d+$/.test(v.trim()) ? Number(v.trim()) : 0);
 const sentQty = (l: Line) => (l.trackSerial ? l.serials.length : int(l.qty));
 const nameOf = (l: { name: string; label: string | null }) => `${l.name}${l.label ? ` ${l.label}` : ''}`;
 
-/** Receive goods: pick items by name or scan them (GS1 codes fill batch, expiry and serial), optionally against an open PO. */
+/**
+ * Receive goods: pick items by name or scan them (GS1 codes fill batch, expiry and serial), optionally against an open PO.
+ * ?supplierId=…&poId=… (from a purchase order's "Receive goods") opens with that supplier and PO chosen.
+ */
 export default function Receive() {
+  const params = useLocalSearchParams<{ supplierId?: string; poId?: string }>();
   const utils = trpc.useUtils();
   const suppliers = trpc.suppliers.list.useQuery();
-  const [supplierId, setSupplierId] = useState<string | null>(null);
-  const [poId, setPoId] = useState<string | null>(null);
+  const [supplierId, setSupplierId] = useState<string | null>(params.supplierId ?? null);
+  const [poId, setPoId] = useState<string | null>(params.supplierId ? params.poId ?? null : null);
   const [invNo, setInvNo] = useState('');
   const pos = trpc.purchaseOrders.open.useQuery({ supplierId: supplierId ?? '' }, { enabled: !!supplierId });
   const po = pos.data?.find((p) => p.id === poId);
@@ -186,7 +191,7 @@ export default function Receive() {
           )}
         </Card>
       ))}
-      {blocked && <Alert>{blocked}</Alert>}
+      {!!blocked && <Alert>{blocked}</Alert>}
       {grn.error && <Alert>{readableError(grn.error)}</Alert>}
       {lines.length > 0 && <Button title={`Save goods receipt (${units} unit${units === 1 ? '' : 's'})`} loading={grn.isPending} onPress={save} />}
     </Screen>

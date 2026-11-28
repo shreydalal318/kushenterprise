@@ -9,7 +9,7 @@ export function Screen({ children, scroll = true, padded = true, footer }: { chi
   return (
     <SafeAreaView edges={['bottom']} style={{ flex: 1, backgroundColor: C.canvas }}>
       {scroll ? <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">{inner}</ScrollView> : <View style={{ flex: 1 }}>{inner}</View>}
-      {footer && <View style={{ padding: 12, gap: 8, borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.white }}>{footer}</View>}
+      {!!footer && <View style={{ padding: 12, gap: 8, borderTopWidth: 1, borderTopColor: C.line, backgroundColor: C.white }}>{footer}</View>}
     </SafeAreaView>
   );
 }

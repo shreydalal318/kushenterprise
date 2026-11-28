@@ -43,7 +43,7 @@ export function MyDeliveries() {
             <P style={{ fontWeight: '700', color: C.navy, flex: 1 }}>{d.customer}</P>
             <Small>{d.orderNumber}</Small>
           </Row>
-          {d.contact && <Small>Ask for {d.contact}</Small>}
+          {!!d.contact && <Small>Ask for {d.contact}</Small>}
           <SurgeryChip date={d.surgeryDate} />
           {!!d.address && (
             <Pressable accessibilityRole="link" accessibilityLabel={`Open ${d.address} in Maps`} onPress={() => openMaps(d.address)}
@@ -53,8 +53,8 @@ export function MyDeliveries() {
             </Pressable>
           )}
           <P>{d.units} item{d.units === 1 ? '' : 's'}{d.invoice ? ` · ${d.invoice.due > 0 ? `amount due ${rupees(d.invoice.due)}` : 'paid'}` : ''}</P>
-          {d.note && <Small>Note: {d.note}</Small>}
-          {d.phone && <LinkButton title={`Call ${d.phone}`} icon={<Ionicons name="call-outline" size={18} color={C.teal700} />} onPress={() => void Linking.openURL(`tel:${d.phone}`)} />}
+          {!!d.note && <Small>Note: {d.note}</Small>}
+          {!!d.phone && <LinkButton title={`Call ${d.phone}`} icon={<Ionicons name="call-outline" size={18} color={C.teal700} />} onPress={() => void Linking.openURL(`tel:${d.phone}`)} />}
           {open === d.orderId ? (
             <View style={{ gap: 8 }}>
               <Field label="Received by (name)" placeholder="e.g. Sister Mary, OT store" value={receivedBy} onChangeText={setReceivedBy} maxLength={80} autoFocus />

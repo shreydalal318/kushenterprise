@@ -27,7 +27,7 @@ export default function ScanLookup() {
   return (
     <Screen>
       <Scanner onScan={onScan} height={240} />
-      {miss && <Alert>{miss}</Alert>}
+      {!!miss && <Alert>{miss}</Alert>}
       {hit && (
         <Card>
           <H2>{hit.product.name}</H2>

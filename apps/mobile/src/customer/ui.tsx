@@ -60,7 +60,7 @@ export function EmptyState({ icon, text, action }: { icon: ReactNode; text: stri
     <View style={{ alignItems: 'center', gap: 12, paddingVertical: 32, paddingHorizontal: 16 }}>
       {icon}
       <Text style={{ fontSize: 17, color: C.navy, fontWeight: '600', textAlign: 'center', lineHeight: 24 }}>{text}</Text>
-      {action && <View style={{ alignSelf: 'stretch' }}>{action}</View>}
+      {!!action && <View style={{ alignSelf: 'stretch' }}>{action}</View>}
     </View>
   );
 }

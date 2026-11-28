@@ -123,7 +123,7 @@ export default function CartScreen() {
       <Input label="Surgery date" value={surgery} onChangeText={setSurgery} placeholder="Like 2026-12-01 (year-month-day)" error={surgeryOk ? null : 'Write the date like 2026-12-01 (year-month-day)'} />
       <Input label="Note for us" value={note} onChangeText={setNote} multiline placeholder="Anything we should know" />
       {place.error && !isNetworkError(place.error) && <ErrorBox text={`Your order was not placed. ${errorText(place.error)}`} onRetry={() => void submit()} busy={place.isPending} />}
-      {saveErr && <ErrorBox text={`Your order was not placed or saved. ${saveErr}`} onRetry={() => void submit()} />}
+      {!!saveErr && <ErrorBox text={`Your order was not placed or saved. ${saveErr}`} onRetry={() => void submit()} />}
     </Screen>
   );
 }

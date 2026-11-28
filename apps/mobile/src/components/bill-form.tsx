@@ -178,13 +178,13 @@ export function BillForm({ orderId, onDone }: { orderId?: string; onDone?: () =>
   if (done) return (
     <Screen footer={orderId ? (
       <>
-        {done.id && <Text style={{ fontSize: 15, fontWeight: '600', color: C.navy, textAlign: 'center' }}>Next: send it out.</Text>}
+        {!!done.id && <Text style={{ fontSize: 15, fontWeight: '600', color: C.navy, textAlign: 'center' }}>Next: send it out.</Text>}
         <Button title={done.id ? 'Send it out (dispatch)' : 'Back to the order'} onPress={() => { if (done.id) dispatchNext.add(orderId); void utils.orders.invalidate(); onDone?.(); }} />
       </>
     ) : undefined}>
       {done.queued ? <Alert tone="warn">No connection. The invoice is saved on this phone and will be made by itself when you are back online.</Alert> : <Alert tone="ok">Invoice {done.number} made ✓ Stock is updated.</Alert>}
-      {done.id && <Button title="Share / print PDF" variant={orderId ? 'secondary' : 'primary'} icon={<Ionicons name="document-text-outline" size={18} color={orderId ? C.ink : C.white} />} loading={pdf.busy} onPress={() => void sharePdf(done.id!, done.number)} />}
-      {pdf.error && <Alert>{pdf.error}</Alert>}
+      {!!done.id && <Button title="Share / print PDF" variant={orderId ? 'secondary' : 'primary'} icon={<Ionicons name="document-text-outline" size={18} color={orderId ? C.ink : C.white} />} loading={pdf.busy} onPress={() => void sharePdf(done.id!, done.number)} />}
+      {!!pdf.error && <Alert>{pdf.error}</Alert>}
       {!orderId && <Button variant="secondary" title="New bill" onPress={newBill} />}
     </Screen>
   );
@@ -221,7 +221,7 @@ export function BillForm({ orderId, onDone }: { orderId?: string; onDone?: () =>
         </Card>
       )}
       {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
-      {prefill === 'failed' && orderId && <Button variant="secondary" title="Try again" onPress={() => void fromOrder(orderId)} />}
+      {!!(prefill === 'failed' && orderId) && <Button variant="secondary" title="Try again" onPress={() => void fromOrder(orderId)} />}
       {lines.map((l) => (
         <Card key={l.key}>
           <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>

@@ -64,10 +64,10 @@ export default function ProductScreen() {
       <H1>{p.name}</H1>
       <Text style={{ fontSize: 15, color: C.ink }}><Text style={{ fontWeight: '700', fontSize: 20 }}>{rupees(p.price)}</Text> per {p.unit} + GST {p.gstRate}%</Text>
       <Note>MRP {rupees(p.mrp)}{p.priceSource ? ' · this is your agreed rate' : ''}</Note>
-      {(p.lensType || p.material || p.aConstant) && (
+      {!!(p.lensType || p.material || p.aConstant) && (
         <Card>
           {p.lensType && <Line k="Type" v={LENS_TYPE_LABEL[p.lensType]} />}
-          {p.material && <Line k="Material" v={p.material} />}
+          {!!p.material && <Line k="Material" v={p.material} />}
           {p.aConstant != null && <Line k="A-constant" v={p.aConstant} />}
           {p.opticSizeMm != null && <Line k="Optic / overall" v={`${p.opticSizeMm} / ${p.overallLenMm ?? '—'} mm`} />}
           {p.preloaded != null && <Line k="Preloaded" v={p.preloaded ? 'Yes' : 'No'} />}

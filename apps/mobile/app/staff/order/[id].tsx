@@ -256,6 +256,8 @@ export default function StaffOrder() {
   const invoiceRest = isOpen && hasInvoice && backorder > 0 && ['PACKED', 'DISPATCHED'].includes(o.status) && canInvoice;
   const more: { icon: Icon; title: string; onPress: () => void; danger?: boolean }[] = [
     ...(canSource ? [{ icon: 'cart-outline' as Icon, title: 'Order from supplier', onPress: () => setMode('source') }] : []),
+    // A quote for the hospital while it waits (the website's "Proforma" on an order).
+    ...(isOpen && backorder > 0 && can('CREATE_PROFORMA') ? [{ icon: 'document-text-outline' as Icon, title: 'Make proforma', onPress: () => router.push(`/staff/proformas/new?orderId=${o.id}`) }] : []),
     // When a later invoice is waiting to go out, delivering what already went is the less likely step.
     ...(toSend && canDeliver ? [{ icon: 'checkmark-done-outline' as Icon, title: 'Mark delivered', onPress: openDeliver }] : []),
     ...(next.includes('ON_HOLD') && canStatus ? [{ icon: 'pause-circle-outline' as Icon, title: 'Put on hold', onPress: () => { setNote(''); setMode('hold'); } }] : []),
@@ -269,12 +271,12 @@ export default function StaffOrder() {
       <>
         {step && <Text style={{ fontSize: 15, fontWeight: '600', color: C.navy, textAlign: 'center' }}>{step.hint}</Text>}
         {setStatus.error && <Alert>{readableError(setStatus.error)}</Alert>}
-        {step?.title && step.onPress && <Button title={step.title} loading={busy} onPress={step.onPress} />}
+        {!!(step?.title && step.onPress) && <Button title={step.title} loading={busy} onPress={step.onPress} />}
         {invoiceRest && <LinkButton title="Invoice remaining items" icon={<Ionicons name="receipt-outline" size={18} color={C.teal700} />} onPress={goInvoice} />}
       </>
     )}>
       <Stack.Screen options={{ title: o.number }} />
-      {flash && <Alert tone="ok">{flash}</Alert>}
+      {!!flash && <Alert tone="ok">{flash}</Alert>}
       {stopped && <Alert tone={o.status === 'CANCELLED' ? 'danger' : 'warn'}>{o.status === 'CANCELLED' ? 'Cancelled' : 'On hold'}{stopped.note ? `: ${stopped.note}` : ''} ({stopped.by}, {formatDate(stopped.at)})</Alert>}
       <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View style={{ flex: 1 }}>
@@ -303,7 +305,7 @@ export default function StaffOrder() {
               )}
             </Row>
           ))}
-          {pdf.error && <Alert>{pdf.error}</Alert>}
+          {!!pdf.error && <Alert>{pdf.error}</Alert>}
         </Step>
         <Step n={3} title="Dispatched" done={sent} lineOn={delivered}>
           {!sent && <Small>Not yet</Small>}
@@ -318,13 +320,13 @@ export default function StaffOrder() {
         {pastHolds.map((e) => <Small key={e.id}>Was on hold {formatDate(e.at)} ({e.by}): {e.note}</Small>)}
       </Card>
 
-      {o.surgeryDate && (
+      {!!o.surgeryDate && (
         <Alert tone={tone === 'danger' ? 'danger' : tone === 'warn' ? 'warn' : 'info'}>
           {surgeryText(o.surgeryDate)}{surgeryIn(o.surgeryDate) >= 0 ? ` · ${formatDate(o.surgeryDate)}` : ''}{o.patientName ? ` · Patient: ${o.patientName}` : ''}
         </Alert>
       )}
-      {!o.surgeryDate && o.patientName && <Alert tone="info">Patient: {o.patientName}</Alert>}
-      {o.customerNote && <Alert tone="info">Note: {o.customerNote}</Alert>}
+      {!!(!o.surgeryDate && o.patientName) && <Alert tone="info">Patient: {o.patientName}</Alert>}
+      {!!o.customerNote && <Alert tone="info">Note: {o.customerNote}</Alert>}
 
       {(o.assignedTo || isOpen) && !assigning && (
         <Row style={{ justifyContent: 'space-between', minHeight: 44 }}>
